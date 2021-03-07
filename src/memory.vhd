@@ -1,6 +1,8 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
+use work.cpu_constants.all;
+
 entity memory is
    port (
       clk_i        : in  std_logic;
@@ -36,10 +38,6 @@ end entity memory;
 
 architecture synthesis of memory is
 
-   constant C_READ_SRC : integer := 2;
-   constant C_READ_DST : integer := 1;
-   constant C_WRITE    : integer := 0;
-
    signal osf_mem_in_valid  : std_logic;
    signal osf_mem_in_ready  : std_logic;
    signal osf_mem_out_valid : std_logic;
@@ -55,15 +53,15 @@ architecture synthesis of memory is
 
 begin
 
-   s_ready_o <= not (s_op_i(C_READ_SRC) and msrc_valid_o and not msrc_ready_i)
-            and not (s_op_i(C_READ_DST) and mdst_valid_o and not mdst_ready_i);
+   s_ready_o <= not (s_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i)
+            and not (s_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i);
 
 
    -- WISHBONE request interface is combinatorial
    wb_cyc_o  <= ((s_valid_i and s_ready_o) or wait_for_ack) and not rst_i;
    wb_stb_o  <= wb_cyc_o and s_valid_i and s_ready_o;
    wb_addr_o <= s_addr_i;
-   wb_we_o   <= s_op_i(C_WRITE);
+   wb_we_o   <= s_op_i(C_MEM_WRITE);
    wb_dat_o  <= s_data_i;
 
    p_wait_for_ack : process (clk_i)
@@ -88,7 +86,7 @@ begin
    -- Store the request
    ----------------------
 
-   osf_mem_in_valid <= s_valid_i and s_ready_o and (s_op_i(C_READ_SRC) or s_op_i(C_READ_DST));
+   osf_mem_in_valid <= s_valid_i and s_ready_o and (s_op_i(C_MEM_READ_SRC) or s_op_i(C_MEM_READ_DST));
 
    i_one_stage_fifo_mem : entity work.one_stage_fifo
       generic map (
@@ -99,7 +97,7 @@ begin
          rst_i       => rst_i,
          s_valid_i   => osf_mem_in_valid,
          s_ready_o   => osf_mem_in_ready,
-         s_data_i(0) => s_op_i(C_READ_SRC),
+         s_data_i(0) => s_op_i(C_MEM_READ_SRC),
          m_valid_o   => osf_mem_out_valid,
          m_ready_i   => wb_cyc_o and wb_ack_i,
          m_data_o(0) => osf_mem_out_data

@@ -2,139 +2,114 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std_unsigned.all;
 
--- address bitmap:
--- bit  5   : read from dst
--- bit  4   : write to dst
--- bit  3   : src mem
--- bit  2   : dst mem
--- bits 1-0 : count
---
--- value bitmap
--- bit 6 : last
--- bit 5 : mem to alu src
--- bit 4 : mem to alu dst
--- bit 3 : mem read to src
--- bit 2 : mem read to dst
--- bit 1 : mem write
--- bit 0 : reg write
+use work.cpu_constants.all;
 
 entity microcode is
    port (
-      addr_i  : in  std_logic_vector(5 downto 0);
-      value_o : out std_logic_vector(8 downto 0)
+      addr_i  : in  std_logic_vector(3 downto 0);
+      value_o : out std_logic_vector(23 downto 0)
    );
 end entity microcode;
 
 architecture synthesis of microcode is
 
-   constant C_LAST         : std_logic_vector(8 downto 0) := "100000000";
-   constant C_REG_MOD_SRC  : std_logic_vector(8 downto 0) := "010000000";
-   constant C_REG_MOD_DST  : std_logic_vector(8 downto 0) := "001000000";
-   constant C_MEM_ALU_SRC  : std_logic_vector(8 downto 0) := "000100000";
-   constant C_MEM_ALU_DST  : std_logic_vector(8 downto 0) := "000010000";
-   constant C_MEM_READ_SRC : std_logic_vector(8 downto 0) := "000001000";
-   constant C_MEM_READ_DST : std_logic_vector(8 downto 0) := "000000100";
-   constant C_MEM_WRITE    : std_logic_vector(8 downto 0) := "000000010";
-   constant C_REG_WRITE    : std_logic_vector(8 downto 0) := "000000001";
-
-   type microcode_t is array (0 to 63) of std_logic_vector(8 downto 0);
+   type microcode_t is array (0 to 15) of std_logic_vector(23 downto 0);
    constant C_MICROCODE : microcode_t := (
+      -- reads_from_dst = 0
+      -- writes_to_dst  = 0
+
       -- JMP R, R
-      C_LAST,
-      C_LAST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      C_VAL_LAST,
 
       -- JMP R, @R
-      C_LAST,
-      C_LAST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      C_VAL_LAST,
 
       -- JMP @R, R
-      C_MEM_READ_SRC or C_REG_MOD_SRC,
-      C_LAST or C_MEM_ALU_SRC,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC),
 
       -- JMP @R, @R
-      C_MEM_READ_SRC or C_REG_MOD_SRC,
-      C_LAST or C_MEM_ALU_SRC,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC),
+
+
+      -- reads_from_dst = 0
+      -- writes_to_dst  = 1
 
       -- MOVE R, R
-      C_LAST or C_REG_WRITE,
-      C_LAST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_REG_WRITE),
 
       -- MOVE R, @R
-      C_LAST or C_MEM_WRITE or C_REG_MOD_DST,
-      C_LAST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WRITE),
 
       -- MOVE @R, R
-      C_MEM_READ_SRC or C_REG_MOD_SRC,
-      C_LAST or C_MEM_ALU_SRC or C_REG_WRITE,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
+      (C_VAL_MEM_READ_SRC),
 
       -- MOVE @R, @R
-      C_MEM_READ_SRC or C_REG_MOD_SRC,
-      C_LAST or C_MEM_ALU_SRC or C_MEM_WRITE or C_REG_MOD_DST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WRITE),
+
+
+      -- reads_from_dst = 1
+      -- writes_to_dst  = 0
 
       -- CMP R, R
-      C_LAST,
-      C_LAST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      C_VAL_LAST,
 
       -- CMP R, @R
-      C_MEM_READ_DST or C_REG_MOD_DST,
-      C_LAST or C_MEM_ALU_DST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WAIT_DST) &
+      (C_VAL_MEM_READ_DST),
 
       -- CMP @R, R
-      C_MEM_READ_SRC or C_REG_MOD_SRC,
-      C_LAST or C_MEM_ALU_SRC,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC),
 
       -- CMP @R, @R
-      C_MEM_READ_SRC or C_REG_MOD_SRC,
-      C_MEM_READ_DST or C_REG_MOD_DST,
-      C_LAST or C_MEM_ALU_SRC or C_MEM_ALU_DST,
-      C_LAST,
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WAIT_DST) &
+      (C_VAL_MEM_READ_DST) &
+      (C_VAL_MEM_READ_SRC),
+
+
+      -- reads_from_dst = 1
+      -- writes_to_dst  = 1
 
       -- ADD R, R
-      C_LAST or C_REG_WRITE,
-      C_LAST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_REG_WRITE),
 
       -- ADD R, @R
-      C_MEM_READ_DST,
-      C_LAST or C_MEM_ALU_DST or C_MEM_WRITE or C_REG_MOD_DST,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WAIT_DST or C_VAL_MEM_WRITE) &
+      C_VAL_MEM_READ_DST,
 
       -- ADD @R, R
-      C_MEM_READ_SRC or C_REG_MOD_SRC,
-      C_LAST or C_MEM_ALU_SRC or C_REG_WRITE,
-      C_LAST,
-      C_LAST,
+      C_VAL_LAST &
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
+      (C_VAL_MEM_READ_SRC),
 
       -- ADD @R, @R
-      C_MEM_READ_SRC or C_REG_MOD_SRC,
-      C_MEM_READ_DST,
-      C_LAST or C_MEM_ALU_SRC or C_MEM_ALU_DST or C_MEM_WRITE or C_REG_MOD_DST,
-      C_LAST
-   ); --  constant C_MICROCODE : microcode_t := (
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WAIT_DST or C_VAL_MEM_WRITE) &
+      (C_VAL_MEM_READ_DST) &
+      (C_VAL_MEM_READ_SRC)
+   );
 
 begin
 

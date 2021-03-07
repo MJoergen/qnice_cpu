@@ -4,6 +4,7 @@ use ieee.std_logic_1164.all;
 package cpu_constants is
 
    -- Instruction format is as follows
+   subtype R_IMMEDIATE  is natural range 31 downto 16;
    subtype R_OPCODE     is natural range 15 downto 12;
    subtype R_SRC_REG    is natural range 11 downto  8;
    subtype R_SRC_MODE   is natural range  7 downto  6;
@@ -62,6 +63,30 @@ package cpu_constants is
    constant C_JMP_ASUB : integer := 1;
    constant C_JMP_RBRA : integer := 2;
    constant C_JMP_RSUB : integer := 3;
+
+   -- Microcode address
+   constant C_READ_DST    : integer := 3;   -- reads_from_dst
+   constant C_WRITE_DST   : integer := 2;   -- writes_to_dst
+   constant C_MEM_SRC     : integer := 1;   -- src_memory
+   constant C_MEM_DST     : integer := 0;   -- dst_memory
+
+   -- Microcode value
+   constant C_LAST         : integer := 7;
+   constant C_MEM_WAIT_SRC : integer := 5;   -- wait from source from memory
+   constant C_MEM_WAIT_DST : integer := 4;   -- wait from destination from memory
+   constant C_REG_WRITE    : integer := 3;   -- write to register
+   constant C_MEM_READ_SRC : integer := 2;   -- memory to source
+   constant C_MEM_READ_DST : integer := 1;   -- memory to destination
+   constant C_MEM_WRITE    : integer := 0;   -- write to memory
+
+   constant C_VAL_LAST         : std_logic_vector(7 downto 0) := (C_LAST         => '1', others => '0');
+   constant C_VAL_MEM_WAIT_SRC : std_logic_vector(7 downto 0) := (C_MEM_WAIT_SRC => '1', others => '0');
+   constant C_VAL_MEM_WAIT_DST : std_logic_vector(7 downto 0) := (C_MEM_WAIT_DST => '1', others => '0');
+   constant C_VAL_REG_WRITE    : std_logic_vector(7 downto 0) := (C_REG_WRITE    => '1', others => '0');
+   constant C_VAL_MEM_READ_SRC : std_logic_vector(7 downto 0) := (C_MEM_READ_SRC => '1', others => '0');
+   constant C_VAL_MEM_READ_DST : std_logic_vector(7 downto 0) := (C_MEM_READ_DST => '1', others => '0');
+   constant C_VAL_MEM_WRITE    : std_logic_vector(7 downto 0) := (C_MEM_WRITE    => '1', others => '0');
+
 
    procedure disassemble(pc : std_logic_vector; inst : std_logic_vector; operand : std_logic_vector);
 

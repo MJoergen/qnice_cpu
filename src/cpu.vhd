@@ -28,16 +28,25 @@ end entity cpu;
 
 architecture synthesis of cpu is
 
-   -- Fetch to decode
-   signal fetch2dec_valid     : std_logic;
-   signal fetch2dec_ready     : std_logic;
-   signal fetch2dec_addr      : std_logic_vector(15 downto 0);
-   signal fetch2dec_data      : std_logic_vector(15 downto 0);
+   -- Fetch to pause
+   signal fetch2pause_valid   : std_logic;
+   signal fetch2pause_ready   : std_logic;
+   signal fetch2pause_addr    : std_logic_vector(15 downto 0);
+   signal fetch2pause_data    : std_logic_vector(15 downto 0);
 
-   signal fetch2decp_valid    : std_logic;
-   signal fetch2decp_ready    : std_logic;
-   signal fetch2decp_addr     : std_logic_vector(15 downto 0);
-   signal fetch2decp_data     : std_logic_vector(15 downto 0);
+   -- Pause to sequencer
+   signal pause2seq_valid     : std_logic;
+   signal pause2seq_ready     : std_logic;
+   signal pause2seq_addr      : std_logic_vector(15 downto 0);
+   signal pause2seq_data      : std_logic_vector(15 downto 0);
+
+   -- Sequencer to decode
+   signal seq2decode_valid    : std_logic;
+   signal seq2decode_ready    : std_logic;
+   signal seq2decode_double_valid  : std_logic;
+   signal seq2decode_addr     : std_logic_vector(15 downto 0);
+   signal seq2decode_data     : std_logic_vector(31 downto 0);
+   signal seq2decode_double_consume  : std_logic;
 
    -- Decode to Register file
    signal dec2reg_src_reg     : std_logic_vector(3 downto 0);
@@ -46,24 +55,31 @@ architecture synthesis of cpu is
    signal dec2reg_dst_val     : std_logic_vector(15 downto 0);
    signal reg2dec_r14         : std_logic_vector(15 downto 0);
 
-   -- Decode to execute
-   signal dec2exe_valid       : std_logic;
-   signal dec2exe_ready       : std_logic;
-   signal dec2exe_microop     : std_logic_vector(7 downto 0);
-   signal dec2exe_opcode      : std_logic_vector(3 downto 0);
-   signal dec2exe_jmp_mode    : std_logic_vector(1 downto 0);
-   signal dec2exe_jmp_cond    : std_logic_vector(2 downto 0);
-   signal dec2exe_jmp_neg     : std_logic;
-   signal dec2exe_ctrl        : std_logic_vector(5 downto 0);
-   signal dec2exe_r14         : std_logic_vector(15 downto 0);
-   signal dec2exe_r14_we      : std_logic;
-   signal dec2exe_src_addr    : std_logic_vector(3 downto 0);
-   signal dec2exe_src_val     : std_logic_vector(15 downto 0);
-   signal dec2exe_src_mode    : std_logic_vector(1 downto 0);
-   signal dec2exe_dst_addr    : std_logic_vector(3 downto 0);
-   signal dec2exe_dst_val     : std_logic_vector(15 downto 0);
-   signal dec2exe_dst_mode    : std_logic_vector(1 downto 0);
-   signal dec2exe_reg_addr    : std_logic_vector(3 downto 0);
+   -- Decode to sequencer
+   signal decode2seq_valid      : std_logic;
+   signal decode2seq_ready      : std_logic;
+   signal decode2seq_microcodes : std_logic_vector(23 downto 0);
+   signal decode2seq_immediate  : std_logic_vector(15 downto 0);
+   signal decode2seq_oper       : std_logic_vector(3 downto 0);
+   signal decode2seq_src_addr   : std_logic_vector(3 downto 0);
+   signal decode2seq_src_val    : std_logic_vector(15 downto 0);
+   signal decode2seq_src_mode   : std_logic_vector(1 downto 0);
+   signal decode2seq_dst_addr   : std_logic_vector(3 downto 0);
+   signal decode2seq_dst_val    : std_logic_vector(15 downto 0);
+   signal decode2seq_dst_mode   : std_logic_vector(1 downto 0);
+
+   -- Sequencer to execute
+   signal seq2exe_valid       : std_logic;
+   signal seq2exe_ready       : std_logic;
+   signal seq2exe_microcodes  : std_logic_vector(7 downto 0);
+   signal seq2exe_immediate   : std_logic_vector(15 downto 0);
+   signal seq2exe_oper        : std_logic_vector(3 downto 0);
+   signal seq2exe_src_addr    : std_logic_vector(3 downto 0);
+   signal seq2exe_src_val     : std_logic_vector(15 downto 0);
+   signal seq2exe_src_mode    : std_logic_vector(1 downto 0);
+   signal seq2exe_dst_addr    : std_logic_vector(3 downto 0);
+   signal seq2exe_dst_val     : std_logic_vector(15 downto 0);
+   signal seq2exe_dst_mode    : std_logic_vector(1 downto 0);
 
    -- Execute to memory
    signal exe2mem_valid       : std_logic;
@@ -103,10 +119,10 @@ begin
          wb_addr_o  => wbi_addr_o,
          wb_ack_i   => wbi_ack_i,
          wb_data_i  => wbi_data_i,
-         dc_valid_o => fetch2dec_valid,
-         dc_ready_i => fetch2dec_ready,
-         dc_addr_o  => fetch2dec_addr,
-         dc_data_o  => fetch2dec_data,
+         dc_valid_o => fetch2pause_valid,
+         dc_ready_i => fetch2pause_ready,
+         dc_addr_o  => fetch2pause_addr,
+         dc_data_o  => fetch2pause_data,
          dc_valid_i => exe2fetch_valid,
          dc_addr_i  => exe2fetch_addr
       ); -- i_fetch
@@ -120,48 +136,89 @@ begin
       port map (
          clk_i      => clk_i,
          rst_i      => rst_i,
-         s_tvalid_i => fetch2dec_valid,
-         s_tready_o => fetch2dec_ready,
-         s_tdata_i(31 downto 16)  => fetch2dec_addr,
-         s_tdata_i(15 downto 0)   => fetch2dec_data,
-         m_tvalid_o => fetch2decp_valid,
-         m_tready_i => fetch2decp_ready,
-         m_tdata_o(31 downto 16)  => fetch2decp_addr,
-         m_tdata_o(15 downto 0)   => fetch2decp_data
+         s_tvalid_i => fetch2pause_valid,
+         s_tready_o => fetch2pause_ready,
+         s_tdata_i(31 downto 16)  => fetch2pause_addr,
+         s_tdata_i(15 downto 0)   => fetch2pause_data,
+         m_tvalid_o => pause2seq_valid,
+         m_tready_i => pause2seq_ready,
+         m_tdata_o(31 downto 16)  => pause2seq_addr,
+         m_tdata_o(15 downto 0)   => pause2seq_data
       ); -- i_axi_pause
+
+
+   i_sequencer_to_decode : entity work.sequencer_to_decode
+      port map (
+         clk_i           => clk_i,
+         rst_i           => rst_i,
+         fetch_valid_i   => pause2seq_valid,
+         fetch_ready_o   => pause2seq_ready,
+         fetch_addr_i    => pause2seq_addr,
+         fetch_data_i    => pause2seq_data,
+         decode_valid_o  => seq2decode_valid,
+         decode_ready_i  => seq2decode_ready,
+         decode_double_o => seq2decode_double_valid,
+         decode_addr_o   => seq2decode_addr,
+         decode_data_o   => seq2decode_data,
+         decode_double_i => seq2decode_double_consume
+      ); -- i_sequencer_to_decode
 
 
    i_decode : entity work.decode
       port map (
-         clk_i           => clk_i,
-         rst_i           => rst_i,
-         fetch_valid_i   => fetch2decp_valid,
-         fetch_ready_o   => fetch2decp_ready,
-         fetch_addr_i    => fetch2decp_addr,
-         fetch_data_i    => fetch2decp_data,
-         reg_src_addr_o  => dec2reg_src_reg,
-         reg_src_val_i   => dec2reg_src_val,
-         reg_dst_addr_o  => dec2reg_dst_reg,
-         reg_dst_val_i   => dec2reg_dst_val,
-         reg_r14_i       => reg2dec_r14,
-         exe_valid_o     => dec2exe_valid,
-         exe_ready_i     => dec2exe_ready,
-         exe_microop_o   => dec2exe_microop,
-         exe_opcode_o    => dec2exe_opcode,
-         exe_jmp_mode_o  => dec2exe_jmp_mode,
-         exe_jmp_cond_o  => dec2exe_jmp_cond,
-         exe_jmp_neg_o   => dec2exe_jmp_neg,
-         exe_ctrl_o      => dec2exe_ctrl,
-         exe_r14_o       => dec2exe_r14,
-         exe_r14_we_o    => dec2exe_r14_we,
-         exe_src_addr_o  => dec2exe_src_addr,
-         exe_src_val_o   => dec2exe_src_val,
-         exe_src_mode_o  => dec2exe_src_mode,
-         exe_dst_addr_o  => dec2exe_dst_addr,
-         exe_dst_val_o   => dec2exe_dst_val,
-         exe_dst_mode_o  => dec2exe_dst_mode,
-         exe_reg_addr_o  => dec2exe_reg_addr
+         clk_i            => clk_i,
+         rst_i            => rst_i,
+         fetch_valid_i    => seq2decode_valid,
+         fetch_ready_o    => seq2decode_ready,
+         fetch_double_i   => seq2decode_double_valid,
+         fetch_addr_i     => seq2decode_addr,
+         fetch_data_i     => seq2decode_data,
+         fetch_double_o   => seq2decode_double_consume,
+         reg_src_addr_o   => dec2reg_src_reg,
+         reg_src_val_i    => dec2reg_src_val,
+         reg_dst_addr_o   => dec2reg_dst_reg,
+         reg_dst_val_i    => dec2reg_dst_val,
+         reg_r14_i        => reg2dec_r14,
+         exe_valid_o      => decode2seq_valid,
+         exe_ready_i      => decode2seq_ready,
+         exe_microcodes_o => decode2seq_microcodes,
+         exe_immediate_o  => decode2seq_immediate,
+         exe_oper_o       => decode2seq_oper,
+         exe_src_addr_o   => decode2seq_src_addr,
+         exe_src_val_o    => decode2seq_src_val,
+         exe_src_mode_o   => decode2seq_src_mode,
+         exe_dst_addr_o   => decode2seq_dst_addr,
+         exe_dst_val_o    => decode2seq_dst_val,
+         exe_dst_mode_o   => decode2seq_dst_mode
       ); -- i_decode
+
+
+   i_sequencer_from_decode : entity work.sequencer_from_decode
+      port map (
+         clk_i               => clk_i,
+         rst_i               => rst_i,
+         decode_valid_i      => decode2seq_valid,
+         decode_ready_o      => decode2seq_ready,
+         decode_microcodes_i => decode2seq_microcodes,
+         decode_immediate_i  => decode2seq_immediate,
+         decode_oper_i       => decode2seq_oper,
+         decode_src_addr_i   => decode2seq_src_addr,
+         decode_src_val_i    => decode2seq_src_val,
+         decode_src_mode_i   => decode2seq_src_mode,
+         decode_dst_addr_i   => decode2seq_dst_addr,
+         decode_dst_val_i    => decode2seq_dst_val,
+         decode_dst_mode_i   => decode2seq_dst_mode,
+         exe_ready_i         => seq2exe_ready,
+         exe_microcodes_o    => seq2exe_microcodes,
+         exe_immediate_o     => seq2exe_immediate,
+         exe_oper_o          => seq2exe_oper,
+         exe_src_addr_o      => seq2exe_src_addr,
+         exe_src_val_o       => seq2exe_src_val,
+         exe_src_mode_o      => seq2exe_src_mode,
+         exe_dst_addr_o      => seq2exe_dst_addr,
+         exe_dst_val_o       => seq2exe_dst_val,
+         exe_dst_mode_o      => seq2exe_dst_mode
+      ); -- i_sequencer_from_decode
 
 
    i_registers : entity work.registers
@@ -180,6 +237,7 @@ begin
          reg_val_i     => exe2reg_val
       ); -- i_registers
 
+
    -- Writes to R15 are forwarded back to the fetch stage as well.
    exe2fetch_valid <= '1'             when rst_i else and(exe2reg_addr) and exe2reg_we;
    exe2fetch_addr  <= (others => '0') when rst_i else exe2reg_val;
@@ -188,23 +246,23 @@ begin
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i,
-         dec_valid_i     => dec2exe_valid,
-         dec_ready_o     => dec2exe_ready,
-         dec_microop_i   => dec2exe_microop,
-         dec_opcode_i    => dec2exe_opcode,
-         dec_jmp_mode_i  => dec2exe_jmp_mode,
-         dec_jmp_cond_i  => dec2exe_jmp_cond,
-         dec_jmp_neg_i   => dec2exe_jmp_neg,
-         dec_ctrl_i      => dec2exe_ctrl,
-         dec_r14_i       => dec2exe_r14,
-         dec_r14_we_i    => dec2exe_r14_we,
-         dec_src_addr_i  => dec2exe_src_addr,
-         dec_src_val_i   => dec2exe_src_val,
-         dec_src_mode_i  => dec2exe_src_mode,
-         dec_dst_addr_i  => dec2exe_dst_addr,
-         dec_dst_val_i   => dec2exe_dst_val,
-         dec_dst_mode_i  => dec2exe_dst_mode,
-         dec_reg_addr_i  => dec2exe_reg_addr,
+         dec_valid_i     => seq2exe_valid,
+         dec_ready_o     => seq2exe_ready,
+         dec_microop_i   => seq2exe_microop,
+         dec_opcode_i    => seq2exe_opcode,
+         dec_jmp_mode_i  => seq2exe_jmp_mode,
+         dec_jmp_cond_i  => seq2exe_jmp_cond,
+         dec_jmp_neg_i   => seq2exe_jmp_neg,
+         dec_ctrl_i      => seq2exe_ctrl,
+         dec_r14_i       => seq2exe_r14,
+         dec_r14_we_i    => seq2exe_r14_we,
+         dec_src_addr_i  => seq2exe_src_addr,
+         dec_src_val_i   => seq2exe_src_val,
+         dec_src_mode_i  => seq2exe_src_mode,
+         dec_dst_addr_i  => seq2exe_dst_addr,
+         dec_dst_val_i   => seq2exe_dst_val,
+         dec_dst_mode_i  => seq2exe_dst_mode,
+         dec_reg_addr_i  => seq2exe_reg_addr,
          mem_valid_o     => exe2mem_valid,
          mem_ready_i     => exe2mem_ready,
          mem_op_o        => exe2mem_op,

@@ -1155,109 +1155,109 @@ E_RB_R14_08     HALT
 L_RB_R14_01     MOVE    0, R14                  ; Reset register bank
 
 
-; ---------------------------------------------------------------------------
-; Test register banking
-
-; First do a quick-and-dirty test to verify
-; that R0-R7 are banked and R8-R15 are not.
-L_BANK_00       MOVE    0, R14                  ; Reset register bank
-                MOVE    L_STACK_TOP, R13        ; Reset stack pointer
-
-                MOVE    0x0123, R0              ; Stores values in R0 and R8
-                MOVE    0x4567, R8
-
-                INCRB                           ; Change register bank
-
-                MOVE    0x89AB, R0              ; Store new value in (banked) R0
-                CMP     0x4567, R8              ; Verify R8 is unchanged
-                RBRA    E_BANK_01, !Z           ; Jump if error
-                CMP     0x89AB, R0              ; Verify R0 new value
-                RBRA    E_BANK_02, !Z           ; Jump if error
-
-                DECRB                           ; Revert register bank
-
-                CMP     0x4567, R8              ; Verify R8 is unchanged
-                RBRA    E_BANK_03, !Z           ; Jump if error
-                CMP     0x0123, R0              ; Verify unbanked R0 is unchanged
-                RBRA    E_BANK_04, !Z           ; Jump if error
-
-; Fill all register banks
-                MOVE    0, R9                   ; Current value to write
-                MOVE    0, R14                  ; Reset register bank
-
-L_BANK_01       RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                MOVE    R9, R0
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                MOVE    R9, R1
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                MOVE    R9, R2
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                MOVE    R9, R3
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                MOVE    R9, R4
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                MOVE    R9, R5
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                MOVE    R9, R6
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                MOVE    R9, R7
-
-                INCRB
-                MOVE    R14, R10
-                AND     0xFF00, R10
-                RBRA    L_BANK_01, !Z
-
-; Verify all register banks
-                MOVE    0, R9                   ; Current value to write
-
-L_BANK_02       RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                CMP     R9, R0
-                RBRA    E_BANK_05, !Z           ; Jump if error
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                CMP     R9, R1
-                RBRA    E_BANK_05, !Z           ; Jump if error
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                CMP     R9, R2
-                RBRA    E_BANK_05, !Z           ; Jump if error
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                CMP     R9, R3
-                RBRA    E_BANK_05, !Z           ; Jump if error
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                CMP     R9, R4
-                RBRA    E_BANK_05, !Z           ; Jump if error
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                CMP     R9, R5
-                RBRA    E_BANK_05, !Z           ; Jump if error
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                CMP     R9, R6
-                RBRA    E_BANK_05, !Z           ; Jump if error
-                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
-                CMP     R9, R7
-                RBRA    E_BANK_05, !Z           ; Jump if error
-
-                INCRB
-                MOVE    R14, R10
-                AND     0xFF00, R10
-                RBRA    L_BANK_02, !Z
-
-                RBRA    L_BANK_10, 1
-
-E_BANK_01       HALT
-E_BANK_02       HALT
-E_BANK_03       HALT
-E_BANK_04       HALT
-E_BANK_05       HALT
-
-
-; Generate PRNG by calculating R9 := (3*R9+1) mod 65536
-; This generates more than 2100 different values
-L_BANK_PRNG     MOVE    R9, R10
-                ADD     R9, R10
-                ADD     R10, R9
-                ADD     1, R9
-                RET
-
-L_BANK_10
+;; ---------------------------------------------------------------------------
+;; Test register banking
+;
+;; First do a quick-and-dirty test to verify
+;; that R0-R7 are banked and R8-R15 are not.
+;L_BANK_00       MOVE    0, R14                  ; Reset register bank
+;                MOVE    L_STACK_TOP, R13        ; Reset stack pointer
+;
+;                MOVE    0x0123, R0              ; Stores values in R0 and R8
+;                MOVE    0x4567, R8
+;
+;                INCRB                           ; Change register bank
+;
+;                MOVE    0x89AB, R0              ; Store new value in (banked) R0
+;                CMP     0x4567, R8              ; Verify R8 is unchanged
+;                RBRA    E_BANK_01, !Z           ; Jump if error
+;                CMP     0x89AB, R0              ; Verify R0 new value
+;                RBRA    E_BANK_02, !Z           ; Jump if error
+;
+;                DECRB                           ; Revert register bank
+;
+;                CMP     0x4567, R8              ; Verify R8 is unchanged
+;                RBRA    E_BANK_03, !Z           ; Jump if error
+;                CMP     0x0123, R0              ; Verify unbanked R0 is unchanged
+;                RBRA    E_BANK_04, !Z           ; Jump if error
+;
+;; Fill all register banks
+;                MOVE    0, R9                   ; Current value to write
+;                MOVE    0, R14                  ; Reset register bank
+;
+;L_BANK_01       RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                MOVE    R9, R0
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                MOVE    R9, R1
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                MOVE    R9, R2
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                MOVE    R9, R3
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                MOVE    R9, R4
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                MOVE    R9, R5
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                MOVE    R9, R6
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                MOVE    R9, R7
+;
+;                INCRB
+;                MOVE    R14, R10
+;                AND     0xFF00, R10
+;                RBRA    L_BANK_01, !Z
+;
+;; Verify all register banks
+;                MOVE    0, R9                   ; Current value to write
+;
+;L_BANK_02       RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                CMP     R9, R0
+;                RBRA    E_BANK_05, !Z           ; Jump if error
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                CMP     R9, R1
+;                RBRA    E_BANK_05, !Z           ; Jump if error
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                CMP     R9, R2
+;                RBRA    E_BANK_05, !Z           ; Jump if error
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                CMP     R9, R3
+;                RBRA    E_BANK_05, !Z           ; Jump if error
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                CMP     R9, R4
+;                RBRA    E_BANK_05, !Z           ; Jump if error
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                CMP     R9, R5
+;                RBRA    E_BANK_05, !Z           ; Jump if error
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                CMP     R9, R6
+;                RBRA    E_BANK_05, !Z           ; Jump if error
+;                RSUB    L_BANK_PRNG, 1          ; Get new value of R9
+;                CMP     R9, R7
+;                RBRA    E_BANK_05, !Z           ; Jump if error
+;
+;                INCRB
+;                MOVE    R14, R10
+;                AND     0xFF00, R10
+;                RBRA    L_BANK_02, !Z
+;
+;                RBRA    L_BANK_10, 1
+;
+;E_BANK_01       HALT
+;E_BANK_02       HALT
+;E_BANK_03       HALT
+;E_BANK_04       HALT
+;E_BANK_05       HALT
+;
+;
+;; Generate PRNG by calculating R9 := (3*R9+1) mod 65536
+;; This generates more than 2100 different values
+;L_BANK_PRNG     MOVE    R9, R10
+;                ADD     R9, R10
+;                ADD     R10, R9
+;                ADD     1, R9
+;                RET
+;
+;L_BANK_10
 
 
 ; ---------------------------------------------------------------------------

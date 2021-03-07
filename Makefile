@@ -23,6 +23,8 @@ SOURCES += src/execute.vhd
 SOURCES += src/registers.vhd
 SOURCES += src/memory.vhd
 SOURCES += src/cpu.vhd
+SOURCES += src/sequencer_from_decode.vhd
+SOURCES += src/sequencer_to_decode.vhd
 
 TEST_SOURCES += test/tdp_ram.vhd
 TEST_SOURCES += test/wb_tdp_mem.vhd
