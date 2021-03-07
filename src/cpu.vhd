@@ -64,9 +64,13 @@ architecture synthesis of cpu is
    signal decode2seq_src_addr   : std_logic_vector(3 downto 0);
    signal decode2seq_src_val    : std_logic_vector(15 downto 0);
    signal decode2seq_src_mode   : std_logic_vector(1 downto 0);
+   signal decode2seq_src_imm    : std_logic;
    signal decode2seq_dst_addr   : std_logic_vector(3 downto 0);
    signal decode2seq_dst_val    : std_logic_vector(15 downto 0);
    signal decode2seq_dst_mode   : std_logic_vector(1 downto 0);
+   signal decode2seq_dst_imm    : std_logic;
+   signal decode2seq_res_reg    : std_logic_vector(3 downto 0);
+   signal decode2seq_r14        : std_logic_vector(15 downto 0);
 
    -- Sequencer to execute
    signal seq2exe_valid       : std_logic;
@@ -74,12 +78,17 @@ architecture synthesis of cpu is
    signal seq2exe_microcodes  : std_logic_vector(7 downto 0);
    signal seq2exe_immediate   : std_logic_vector(15 downto 0);
    signal seq2exe_oper        : std_logic_vector(3 downto 0);
+   signal seq2exe_ctrl        : std_logic_vector(5 downto 0);
    signal seq2exe_src_addr    : std_logic_vector(3 downto 0);
    signal seq2exe_src_val     : std_logic_vector(15 downto 0);
    signal seq2exe_src_mode    : std_logic_vector(1 downto 0);
+   signal seq2exe_src_imm     : std_logic;
    signal seq2exe_dst_addr    : std_logic_vector(3 downto 0);
    signal seq2exe_dst_val     : std_logic_vector(15 downto 0);
    signal seq2exe_dst_mode    : std_logic_vector(1 downto 0);
+   signal seq2exe_dst_imm     : std_logic;
+   signal seq2exe_res_reg     : std_logic_vector(3 downto 0);
+   signal seq2exe_r14         : std_logic_vector(15 downto 0);
 
    -- Execute to memory
    signal exe2mem_valid       : std_logic;
@@ -187,9 +196,11 @@ begin
          exe_src_addr_o   => decode2seq_src_addr,
          exe_src_val_o    => decode2seq_src_val,
          exe_src_mode_o   => decode2seq_src_mode,
+         exe_src_imm_o    => decode2seq_src_imm,
          exe_dst_addr_o   => decode2seq_dst_addr,
          exe_dst_val_o    => decode2seq_dst_val,
-         exe_dst_mode_o   => decode2seq_dst_mode
+         exe_dst_mode_o   => decode2seq_dst_mode,
+         exe_dst_imm_o    => decode2seq_dst_imm
       ); -- i_decode
 
 
@@ -205,9 +216,13 @@ begin
          decode_src_addr_i   => decode2seq_src_addr,
          decode_src_val_i    => decode2seq_src_val,
          decode_src_mode_i   => decode2seq_src_mode,
+         decode_src_imm_i    => decode2seq_src_imm,
          decode_dst_addr_i   => decode2seq_dst_addr,
          decode_dst_val_i    => decode2seq_dst_val,
          decode_dst_mode_i   => decode2seq_dst_mode,
+         decode_dst_imm_i    => decode2seq_dst_imm,
+         decode_res_reg_i    => decode2seq_res_reg,
+         decode_r14_i        => decode2seq_r14,
          exe_ready_i         => seq2exe_ready,
          exe_microcodes_o    => seq2exe_microcodes,
          exe_immediate_o     => seq2exe_immediate,
@@ -215,9 +230,13 @@ begin
          exe_src_addr_o      => seq2exe_src_addr,
          exe_src_val_o       => seq2exe_src_val,
          exe_src_mode_o      => seq2exe_src_mode,
+         exe_src_imm_o       => seq2exe_src_imm,
          exe_dst_addr_o      => seq2exe_dst_addr,
          exe_dst_val_o       => seq2exe_dst_val,
-         exe_dst_mode_o      => seq2exe_dst_mode
+         exe_dst_mode_o      => seq2exe_dst_mode,
+         exe_dst_imm_o       => seq2exe_dst_imm,
+         exe_res_reg_o       => seq2exe_res_reg,
+         exe_r14_o           => seq2exe_r14
       ); -- i_sequencer_from_decode
 
 
@@ -244,41 +263,40 @@ begin
 
    i_execute : entity work.execute
       port map (
-         clk_i           => clk_i,
-         rst_i           => rst_i,
-         dec_valid_i     => seq2exe_valid,
-         dec_ready_o     => seq2exe_ready,
-         dec_microop_i   => seq2exe_microop,
-         dec_opcode_i    => seq2exe_opcode,
-         dec_jmp_mode_i  => seq2exe_jmp_mode,
-         dec_jmp_cond_i  => seq2exe_jmp_cond,
-         dec_jmp_neg_i   => seq2exe_jmp_neg,
-         dec_ctrl_i      => seq2exe_ctrl,
-         dec_r14_i       => seq2exe_r14,
-         dec_r14_we_i    => seq2exe_r14_we,
-         dec_src_addr_i  => seq2exe_src_addr,
-         dec_src_val_i   => seq2exe_src_val,
-         dec_src_mode_i  => seq2exe_src_mode,
-         dec_dst_addr_i  => seq2exe_dst_addr,
-         dec_dst_val_i   => seq2exe_dst_val,
-         dec_dst_mode_i  => seq2exe_dst_mode,
-         dec_reg_addr_i  => seq2exe_reg_addr,
-         mem_valid_o     => exe2mem_valid,
-         mem_ready_i     => exe2mem_ready,
-         mem_op_o        => exe2mem_op,
-         mem_addr_o      => exe2mem_addr,
-         mem_wr_data_o   => exe2mem_wr_data,
-         mem_src_valid_i => mem2exe_src_valid,
-         mem_src_ready_o => mem2exe_src_ready,
-         mem_src_data_i  => mem2exe_src_data,
-         mem_dst_valid_i => mem2exe_dst_valid,
-         mem_dst_ready_o => mem2exe_dst_ready,
-         mem_dst_data_i  => mem2exe_dst_data,
-         reg_r14_we_o    => exe2reg_r14_we,
-         reg_r14_o       => exe2reg_r14,
-         reg_we_o        => exe2reg_we,
-         reg_addr_o      => exe2reg_addr,
-         reg_val_o       => exe2reg_val
+         clk_i            => clk_i,
+         rst_i            => rst_i,
+         dec_valid_i      => seq2exe_valid,
+         dec_ready_o      => seq2exe_ready,
+         dec_microcodes_i => seq2exe_microcodes,
+         dec_immediate_i  => seq2exe_immediate,
+         dec_oper_i       => seq2exe_oper,
+         dec_ctrl_i       => seq2exe_ctrl,
+         dec_src_addr_i   => seq2exe_src_addr,
+         dec_src_val_i    => seq2exe_src_val,
+         dec_src_mode_i   => seq2exe_src_mode,
+         dec_src_imm_i    => seq2exe_src_imm,
+         dec_dst_addr_i   => seq2exe_dst_addr,
+         dec_dst_val_i    => seq2exe_dst_val,
+         dec_dst_mode_i   => seq2exe_dst_mode,
+         dec_dst_imm_i    => seq2exe_dst_imm,
+         dec_res_reg_i    => seq2exe_res_reg,
+         dec_r14_i        => seq2exe_r14,
+         mem_valid_o      => exe2mem_valid,
+         mem_ready_i      => exe2mem_ready,
+         mem_op_o         => exe2mem_op,
+         mem_addr_o       => exe2mem_addr,
+         mem_wr_data_o    => exe2mem_wr_data,
+         mem_src_valid_i  => mem2exe_src_valid,
+         mem_src_ready_o  => mem2exe_src_ready,
+         mem_src_data_i   => mem2exe_src_data,
+         mem_dst_valid_i  => mem2exe_dst_valid,
+         mem_dst_ready_o  => mem2exe_dst_ready,
+         mem_dst_data_i   => mem2exe_dst_data,
+         reg_r14_we_o     => exe2reg_r14_we,
+         reg_r14_o        => exe2reg_r14,
+         reg_we_o         => exe2reg_we,
+         reg_addr_o       => exe2reg_addr,
+         reg_val_o        => exe2reg_val
       ); -- i_execute
 
 

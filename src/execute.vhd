@@ -24,6 +24,7 @@ entity execute is
       dec_dst_val_i    : in  std_logic_vector(15 downto 0);
       dec_dst_mode_i   : in  std_logic_vector(1 downto 0);
       dec_dst_imm_i    : in  std_logic;
+      dec_res_reg_i    : in  std_logic_vector(3 downto 0);
       dec_r14_i        : in  std_logic_vector(15 downto 0);
 
       -- Memory
@@ -50,10 +51,11 @@ end entity execute;
 
 architecture synthesis of execute is
 
-   signal wait_for_mem_src    : std_logic;
-   signal wait_for_mem_dst    : std_logic;
+   signal wait_for_mem_src : std_logic;
+   signal wait_for_mem_dst : std_logic;
 
    signal alu_oper      : std_logic_vector(3 downto 0);
+   signal alu_ctrl      : std_logic_vector(5 downto 0);
    signal alu_flags     : std_logic_vector(15 downto 0);
    signal alu_src_val   : std_logic_vector(15 downto 0);
    signal alu_dst_val   : std_logic_vector(15 downto 0);
@@ -62,8 +64,17 @@ architecture synthesis of execute is
 
 begin
 
+   ------------------------------------------------------------
+   -- Get values read from memory
+   ------------------------------------------------------------
+
    mem_src_ready_o <= dec_microcodes_i(C_MEM_WAIT_SRC);
    mem_dst_ready_o <= dec_microcodes_i(C_MEM_WAIT_DST);
+
+
+   ------------------------------------------------------------
+   -- Back-pressure
+   ------------------------------------------------------------
 
    wait_for_mem_src <= dec_valid_i and mem_src_ready_o and not mem_src_valid_i;
    wait_for_mem_dst <= dec_valid_i and mem_dst_ready_o and not mem_dst_valid_i;
@@ -76,6 +87,7 @@ begin
    ------------------------------------------------------------
 
    alu_oper    <= dec_oper_i;
+   alu_ctrl    <= dec_ctrl_i;
    alu_flags   <= dec_r14_i;
    alu_src_val <= dec_immediate_i when dec_src_imm_i else
                   mem_src_data_i when dec_microcodes_i(C_MEM_WAIT_SRC) = '1' else
@@ -118,7 +130,7 @@ begin
    ------------------------------------------------------------
 
    reg_r14_o    <= alu_res_flags;
-   reg_r14_we_o <= dec_r14_we_i and dec_valid_i and dec_ready_o;
+   reg_r14_we_o <= dec_valid_i and dec_ready_o;
 
 
    ------------------------------------------------------------
@@ -133,7 +145,7 @@ begin
 
       if dec_valid_i and dec_ready_o then
          -- Handle pre- and post increment here.
-         if dec_src_mode_i(1) and dec_microcodes_i(C_REG_MOD_SRC) then
+         if dec_src_mode_i = C_MODE_POST or dec_src_mode_i = C_MODE_PRE then
             reg_addr_o <= dec_src_addr_i;
             if dec_src_mode_i = C_MODE_POST then
                reg_val_o <= dec_src_val_i + 1;
@@ -143,7 +155,7 @@ begin
             reg_we_o   <= '1';
          end if;
 
-         if dec_dst_mode_i(1) and dec_microcodes_i(C_REG_MOD_DST) then
+         if dec_dst_mode_i = C_MODE_POST or dec_dst_mode_i = C_MODE_PRE then
             reg_addr_o <= dec_dst_addr_i;
             if dec_dst_mode_i = C_MODE_POST then
                reg_val_o <= dec_dst_val_i + 1;
@@ -155,7 +167,7 @@ begin
 
          -- Handle ordinary register writes here.
          if dec_microcodes_i(C_REG_WRITE) then
-            reg_addr_o <= dec_reg_addr_i;
+            reg_addr_o <= dec_res_reg_i;
             reg_val_o  <= alu_res_val(15 downto 0);
             reg_we_o   <= '1';
          end if;
@@ -171,7 +183,7 @@ begin
    mem_op_o       <= dec_microcodes_i(2 downto 0);
    mem_wr_data_o  <= alu_res_val(15 downto 0);
    mem_addr_o     <= dec_src_val_i-1 when dec_microcodes_i(2) = '1' and dec_src_mode_i = C_MODE_PRE else
-                     dec_src_val_i when dec_microcodes_i(2) = '1' else
+                     dec_src_val_i   when dec_microcodes_i(2) = '1' else
                      dec_dst_val_i-1 when dec_microcodes_i(2) = '0' and dec_dst_mode_i = C_MODE_PRE else
                      dec_dst_val_i;
 

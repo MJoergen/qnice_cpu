@@ -16,9 +16,13 @@ entity sequencer_from_decode is
       decode_src_addr_i   : in  std_logic_vector(3 downto 0);
       decode_src_val_i    : in  std_logic_vector(15 downto 0);
       decode_src_mode_i   : in  std_logic_vector(1 downto 0);
+      decode_src_imm_i    : in  std_logic;
       decode_dst_addr_i   : in  std_logic_vector(3 downto 0);
       decode_dst_val_i    : in  std_logic_vector(15 downto 0);
       decode_dst_mode_i   : in  std_logic_vector(1 downto 0);
+      decode_dst_imm_i    : in  std_logic;
+      decode_res_reg_i    : in  std_logic_vector(3 downto 0);
+      decode_r14_i        : in  std_logic_vector(15 downto 0);
 
       -- To Execute stage
       exe_valid_o         : out std_logic;
@@ -29,9 +33,13 @@ entity sequencer_from_decode is
       exe_src_addr_o      : out std_logic_vector(3 downto 0);
       exe_src_val_o       : out std_logic_vector(15 downto 0);
       exe_src_mode_o      : out std_logic_vector(1 downto 0);
+      exe_src_imm_o       : out std_logic;
       exe_dst_addr_o      : out std_logic_vector(3 downto 0);
       exe_dst_val_o       : out std_logic_vector(15 downto 0);
-      exe_dst_mode_o      : out std_logic_vector(1 downto 0)
+      exe_dst_mode_o      : out std_logic_vector(1 downto 0);
+      exe_dst_imm_o       : out std_logic;
+      exe_res_reg_o       : out std_logic_vector(3 downto 0);
+      exe_r14_o           : out std_logic_vector(15 downto 0)
    );
 end entity sequencer_from_decode;
 
@@ -63,9 +71,11 @@ begin
    exe_src_addr_o   <= decode_src_addr_i;
    exe_src_val_o    <= decode_src_val_i;
    exe_src_mode_o   <= decode_src_mode_i;
+   exe_src_imm_o    <= decode_src_imm_i;
    exe_dst_addr_o   <= decode_dst_addr_i;
    exe_dst_val_o    <= decode_dst_val_i;
    exe_dst_mode_o   <= decode_dst_mode_i;
+   exe_dst_imm_o    <= decode_dst_imm_i;
 
 end architecture synthesis;
 
