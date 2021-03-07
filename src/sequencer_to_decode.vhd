@@ -25,10 +25,8 @@ end entity sequencer_to_decode;
 
 architecture synthesis of sequencer_to_decode is
 
-   signal addr   : std_logic_vector(31 downto 0);
-   signal data   : std_logic_vector(31 downto 0);
-   signal valid  : std_logic;
-   signal double : std_logic;
+   signal addr : std_logic_vector(31 downto 0) := (others => '0');
+   signal data : std_logic_vector(31 downto 0) := (others => '0');
 
    type STATE_t is (ZERO_ST, ONE_ST, TWO_ST);
    signal state : STATE_t := ZERO_ST;

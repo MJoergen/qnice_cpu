@@ -38,7 +38,9 @@ entity decode is
       exe_dst_addr_o   : out std_logic_vector(3 downto 0);
       exe_dst_val_o    : out std_logic_vector(15 downto 0);
       exe_dst_mode_o   : out std_logic_vector(1 downto 0);
-      exe_dst_imm_o    : out std_logic
+      exe_dst_imm_o    : out std_logic;
+      exe_res_reg_o    : out std_logic_vector(3 downto 0);
+      exe_r14_o        : out std_logic_vector(15 downto 0)
    );
 end entity decode;
 
@@ -158,17 +160,21 @@ begin
             exe_valid_o <= '0';
          end if;
 
-         exe_valid_o      <= fetch_valid_i and fetch_ready_o;
-         exe_microcodes_o <= microcode_value;
-         exe_immediate_o  <= fetch_data_i(R_IMMEDIATE);
-         exe_oper_o       <= fetch_data_i(R_OPCODE);
-         exe_ctrl_o       <= fetch_data_i(R_CTRL_CMD);
-         exe_src_addr_o   <= reg_src_addr_o;
-         exe_src_mode_o   <= fetch_data_i(R_SRC_MODE);
-         exe_src_imm_o    <= immediate_src;
-         exe_dst_addr_o   <= reg_dst_addr_o;
-         exe_dst_mode_o   <= fetch_data_i(R_DST_MODE);
-         exe_dst_imm_o    <= immediate_dst;
+         if fetch_valid_i and fetch_ready_o then
+            exe_valid_o      <= '1';
+            exe_microcodes_o <= microcode_value;
+            exe_immediate_o  <= fetch_data_i(R_IMMEDIATE);
+            exe_oper_o       <= fetch_data_i(R_OPCODE);
+            exe_ctrl_o       <= fetch_data_i(R_CTRL_CMD);
+            exe_src_addr_o   <= reg_src_addr_o;
+            exe_src_mode_o   <= fetch_data_i(R_SRC_MODE);
+            exe_src_imm_o    <= immediate_src;
+            exe_dst_addr_o   <= reg_dst_addr_o;
+            exe_dst_mode_o   <= fetch_data_i(R_DST_MODE);
+            exe_dst_imm_o    <= immediate_dst;
+            exe_res_reg_o    <= reg_dst_addr_o;
+            exe_r14_o        <= reg_r14_i;
+         end if;
 
          if rst_i = '1' then
             exe_valid_o <= '0';
