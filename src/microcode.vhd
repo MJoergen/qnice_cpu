@@ -18,93 +18,109 @@ architecture synthesis of microcode is
       -- For control and jump instructions that neither reads from nor writes to destination:
 
       -- JMP R, R
+      std_logic_vector'(
       C_VAL_LAST &
       C_VAL_LAST &
-      C_VAL_LAST,
+      C_VAL_LAST),
 
       -- JMP R, @R
+      std_logic_vector'(
       C_VAL_LAST &
       C_VAL_LAST &
-      C_VAL_LAST,
+      C_VAL_LAST),
 
       -- JMP @R, R
+      std_logic_vector'(
       C_VAL_LAST &
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC) &
-      (C_VAL_MEM_READ_SRC),
+      (C_VAL_MEM_READ_SRC)),
 
       -- JMP @R, @R
+      std_logic_vector'(
       C_VAL_LAST &
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC) &
-      (C_VAL_MEM_READ_SRC),
+      (C_VAL_MEM_READ_SRC)),
 
 
       -- For `MOVE`-like instructions (that writes to but does not read from destination):
 
       -- MOVE R, R
+      std_logic_vector'(
       C_VAL_LAST &
       C_VAL_LAST &
-      (C_VAL_LAST or C_VAL_REG_WRITE),
+      (C_VAL_LAST or C_VAL_REG_WRITE)),
 
       -- MOVE R, @R
+      std_logic_vector'(
       C_VAL_LAST &
       C_VAL_LAST &
-      (C_VAL_LAST or C_VAL_MEM_WRITE),
+      (C_VAL_LAST or C_VAL_MEM_WRITE)),
 
       -- MOVE @R, R
+      std_logic_vector'(
       C_VAL_LAST &
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
-      (C_VAL_MEM_READ_SRC),
+      (C_VAL_MEM_READ_SRC)),
 
       -- MOVE @R, @R
+      std_logic_vector'(
       C_VAL_LAST &
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WRITE) &
-      (C_VAL_MEM_READ_SRC),
+      (C_VAL_MEM_READ_SRC)),
 
 
       -- For `CMP`-like instructions (that reads from but does not write to destination):
 
       -- CMP R, R
+      std_logic_vector'(
       C_VAL_LAST &
       C_VAL_LAST &
-      C_VAL_LAST,
+      C_VAL_LAST),
 
       -- CMP R, @R
+      std_logic_vector'(
       C_VAL_LAST &
       (C_VAL_LAST or C_VAL_MEM_WAIT_DST) &
-      (C_VAL_MEM_READ_DST),
+      (C_VAL_MEM_READ_DST)),
 
       -- CMP @R, R
+      std_logic_vector'(
       C_VAL_LAST &
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC) &
-      (C_VAL_MEM_READ_SRC),
+      (C_VAL_MEM_READ_SRC)),
 
       -- CMP @R, @R
+      std_logic_vector'(
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WAIT_DST) &
       (C_VAL_MEM_READ_DST) &
-      (C_VAL_MEM_READ_SRC),
+      (C_VAL_MEM_READ_SRC)),
 
 
       -- For `ADD`-like instructions (that reads from and writes to destination):
 
       -- ADD R, R
+      std_logic_vector'(
       C_VAL_LAST &
       C_VAL_LAST &
-      (C_VAL_LAST or C_VAL_REG_WRITE),
+      (C_VAL_LAST or C_VAL_REG_WRITE)),
 
       -- ADD R, @R
+      std_logic_vector'(
       C_VAL_LAST &
       (C_VAL_LAST or C_VAL_MEM_WAIT_DST or C_VAL_MEM_WRITE) &
-      C_VAL_MEM_READ_DST,
+      C_VAL_MEM_READ_DST),
 
       -- ADD @R, R
+      std_logic_vector'(
       C_VAL_LAST &
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
-      (C_VAL_MEM_READ_SRC),
+      (C_VAL_MEM_READ_SRC)),
 
       -- ADD @R, @R
+      std_logic_vector'(
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WAIT_DST or C_VAL_MEM_WRITE) &
       (C_VAL_MEM_READ_DST) &
-      (C_VAL_MEM_READ_SRC)
+      (C_VAL_MEM_READ_SRC))
    );
 
 begin
