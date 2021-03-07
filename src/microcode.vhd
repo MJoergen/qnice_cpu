@@ -15,8 +15,7 @@ architecture synthesis of microcode is
 
    type microcode_t is array (0 to 15) of std_logic_vector(23 downto 0);
    constant C_MICROCODE : microcode_t := (
-      -- reads_from_dst = 0
-      -- writes_to_dst  = 0
+      -- For control and jump instructions that neither reads from nor writes to destination:
 
       -- JMP R, R
       C_VAL_LAST &
@@ -30,17 +29,16 @@ architecture synthesis of microcode is
 
       -- JMP @R, R
       C_VAL_LAST &
-      C_VAL_LAST &
-      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC),
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC) &
+      (C_VAL_MEM_READ_SRC),
 
       -- JMP @R, @R
       C_VAL_LAST &
-      C_VAL_LAST &
-      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC),
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC) &
+      (C_VAL_MEM_READ_SRC),
 
 
-      -- reads_from_dst = 0
-      -- writes_to_dst  = 1
+      -- For `MOVE`-like instructions (that writes to but does not read from destination):
 
       -- MOVE R, R
       C_VAL_LAST &
@@ -59,12 +57,11 @@ architecture synthesis of microcode is
 
       -- MOVE @R, @R
       C_VAL_LAST &
-      C_VAL_LAST &
-      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WRITE),
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WRITE) &
+      (C_VAL_MEM_READ_SRC),
 
 
-      -- reads_from_dst = 1
-      -- writes_to_dst  = 0
+      -- For `CMP`-like instructions (that reads from but does not write to destination):
 
       -- CMP R, R
       C_VAL_LAST &
@@ -78,8 +75,8 @@ architecture synthesis of microcode is
 
       -- CMP @R, R
       C_VAL_LAST &
-      C_VAL_LAST &
-      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC),
+      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC) &
+      (C_VAL_MEM_READ_SRC),
 
       -- CMP @R, @R
       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_MEM_WAIT_DST) &
@@ -87,8 +84,7 @@ architecture synthesis of microcode is
       (C_VAL_MEM_READ_SRC),
 
 
-      -- reads_from_dst = 1
-      -- writes_to_dst  = 1
+      -- For `ADD`-like instructions (that reads from and writes to destination):
 
       -- ADD R, R
       C_VAL_LAST &
