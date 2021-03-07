@@ -52,7 +52,7 @@ begin
 
    i_tdp_mem : entity work.wb_tdp_mem
       generic map (
-         G_INIT_FILE => "../cpu/prog.rom",
+         G_INIT_FILE => "test/prog.rom",
          G_RAM_STYLE => "block",
          G_ADDR_SIZE => 13,
          G_DATA_SIZE => 16
