@@ -57,8 +57,8 @@ need to be serialized and will take a total of three clock cycles.
 
 The first step in the instruction decoding is to categorize the instuction
 depending on:
-* Is source operand valid?
-* Is destination operand valid?
+* Does the instruction have a source operand?
+* Does the instruction have a destination operand?
 * Is the source operand an immediate value, i.e. `@PC++`?
 * Is the destination operand an immediate value, i.e. `@PC++`?
 * Does instruction read from destination operand?
@@ -66,17 +66,8 @@ depending on:
 * Does source operand involve memory?
 * Does destination operand involve memory?
 
-Based on the above, the Decode module generates a list of up to three microcode
+Based on the last four questions, the Decode module generates a list of up to three microcode
 instructions.
-
-The table above is implemented as a logic table where the index is calculated
-from the following four bits:
-
-* Does instruction read from destination operand?
-* Does instruction write to destination operand?
-* Does source operand involve memory?
-* Does destination operand involve memory?
-
 
 Below are some examples of instruction decodings.  In the table below I use the
 following abreviations:
@@ -85,6 +76,7 @@ following abreviations:
 * `MW`  : Write to memory
 * `RW`  : Write to register
 
+For `MOVE`-like instructions (that writes to but does not read from destination):
 ```
                | MRS | MRD |  MW |  RW |
                +-----+-----+-----+-----+
@@ -98,7 +90,10 @@ MOVE @R, R     |  X  |  .  |  .  |  .  |
 MOVE @R, @R    |  X  |  .  |  .  |  .  |
                |  .  |  .  |  X  |  .  |
                +-----+-----+-----+-----+
+```
 
+For `CMP`-like instructions (that reads from but does not write to destination):
+```
                | MRS | MRD |  MW |  RW |
                +-----+-----+-----+-----+
 CMP R, R       |  .  |  .  |  .  |  .  |
@@ -112,7 +107,10 @@ CMP @R, R      |  X  |  .  |  .  |  .  |
 CMP @R, @R     |  X  |  .  |  .  |  .  |
                |  .  |  X  |  .  |  .  |
                |-----|-----+-----+-----+
+```
 
+For `ADD`-like instructions (that reads from and writes to destination):
+```
                | MRS | MRD |  MW |  RW |
                +-----+-----+-----+-----+
 ADD R, R       |  .  |  .  |  .  |  X  |
@@ -127,7 +125,11 @@ ADD @R, @R     |  X  |  .  |  .  |  .  |
                |  .  |  X  |  .  |  .  |
                |  .  |  .  |  X  |  .  |
                +-----+-----+-----+-----+
+```
 
+For control and jump instructions that neither reads from nor writes to destination:
+
+```
                | MRS | MRD |  MW |  RW |
                +-----+-----+-----+-----+
 JMP R          |  .  |  .  |  .  |  .  |
@@ -146,23 +148,28 @@ One thing to note in the above is that `MW` and `RW` are never true in the same
 clock cycle.
 
 To the Execute module we have a number of signals for each clock cycle:
-* `MRS` : Read from memory and store in source buffer
-* `MRD` : Read from memory and store in destination buffer
-* `MW`  : Write to memory
-* `RW`  : Write to register
+* `MEM_WAIT_SRC` : Wait for source operand from memory
+* `MEM_WAIT_DST` : Wait for destination operand from memory
+* `MEM_WRITE`    : Write to memory
+* `MEM_READ_SRC` : Read from memory and store in source buffer
+* `MEM_READ_DST` : Read from memory and store in destination buffer
+* `REG_WRITE`    : Write to register
 
 The above signals are copied three times for the up to three clock cycles an
 instruction make take.
 
 Then there are some additional signals
 * `OPER`     : ALU operation. This is almost identical to the instruction opcode.
+* `CTRL`     : CTRL command. This is identical to corresponding field in the instruction.
 * `SRC_REG`  : Source register number
 * `SRC_MODE` : Source mode
+* `SRC_IMM`  : Source immediate mode (i.e. `@PC++`)
 * `SRC_VAL`  : Source register value
 * `DST_REG`  : Destination register number
 * `DST_MODE` : Destination mode
+* `DST_IMM`  : Destination immediate mode (i.e. `@PC++`)
 * `DST_VAL`  : Destination register value
-
+* `R14`      : Current value of Status Register
 
 
 ## TODO
@@ -174,43 +181,7 @@ Then there are some additional signals
 
 
 ## Cycle Optimizations:
-1. Let the FETCH module present two (or three) words to the DECODE module, so the latter doesn't have to wait.
-2. Eliminate the NOP cycle from the CMP @R1, @PC++ instruction.
-3. Optimize conditional jumps, so they don't execute superfluous microoperations.
-4. Optimize FETCH module. It currently takes three clock cycles after a jump. This could be reduced to one clock cycle.
-
-
-
-## Vivado Synthesis
-```
-Slice LUTs      : 921
-Slice Registers : 327
-Slices          : 296
-Block RAMs      : 2
-```
-
-```
-Number of cells:               5813
-  $assert                         1
-  BUFG                            1
-  CARRY4                         36
-  FDRE                          358
-  FDSE                            2
-  IBUF                            2
-  INV                            96
-  LUT1                           69
-  LUT2                          243
-  LUT3                          245
-  LUT4                          220
-  LUT5                          557
-  LUT6                         1226
-  MUXF7                        1024
-  MUXF8                         173
-  OBUF                           16
-  RAM128X1D                    1024
-  RAM32M                          8
-  RAM64M                        512
-
-Estimated number of LCs:       2248
-```
+1. Eliminate the NOP cycle from the CMP @R1, @PC++ instruction.
+2. Optimize conditional jumps, so they don't execute superfluous microoperations.
+3. Optimize FETCH module. It currently takes three clock cycles after a jump. This could be reduced to one clock cycle.
 

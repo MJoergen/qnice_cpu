@@ -71,14 +71,14 @@ architecture synthesis of decode is
       others        => '1');
 
 
-   signal has_src_operand : std_logic;
-   signal has_dst_operand : std_logic;
-   signal reads_from_dst  : std_logic;
-   signal writes_to_dst   : std_logic;
-   signal src_memory      : std_logic;
-   signal dst_memory      : std_logic;
-   signal immediate_src   : std_logic;
-   signal immediate_dst   : std_logic;
+   signal has_src_operand : std_logic; -- Does the instruction have a source operand?
+   signal has_dst_operand : std_logic; -- Does the instruction have a destination operand?
+   signal immediate_src   : std_logic; -- Is the source operand an immediate value, i.e. @PC++?
+   signal immediate_dst   : std_logic; -- Is the destination operand an immediate value, i.e. @PC++?
+   signal reads_from_dst  : std_logic; -- Does instruction read from destination operand?
+   signal writes_to_dst   : std_logic; -- Does instruction write to destination operand?
+   signal src_memory      : std_logic; -- Does source operand involve memory?
+   signal dst_memory      : std_logic; -- Does destination operand involve memory?
 
    -- microcode address bitmap:
    signal microcode_addr  : std_logic_vector(3 downto 0);
@@ -92,10 +92,6 @@ begin
 
    has_src_operand <= C_HAS_SRC_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
    has_dst_operand <= C_HAS_DST_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
-   reads_from_dst  <= C_READS_FROM_DST (to_integer(fetch_data_i(R_OPCODE)));
-   writes_to_dst   <= C_WRITES_TO_DST  (to_integer(fetch_data_i(R_OPCODE)));
-   src_memory      <= '0' when fetch_data_i(R_SRC_MODE) = C_MODE_REG else has_src_operand;
-   dst_memory      <= '0' when fetch_data_i(R_DST_MODE) = C_MODE_REG else has_dst_operand;
 
    -- Special case when src = @PC++
    immediate_src <= has_src_operand when
@@ -109,6 +105,11 @@ begin
                     fetch_data_i(R_DST_MODE) = C_MODE_POST
                else '0';
 
+   reads_from_dst  <= C_READS_FROM_DST (to_integer(fetch_data_i(R_OPCODE)));
+   writes_to_dst   <= C_WRITES_TO_DST  (to_integer(fetch_data_i(R_OPCODE)));
+   src_memory      <= '0' when fetch_data_i(R_SRC_MODE) = C_MODE_REG else has_src_operand;
+   dst_memory      <= '0' when fetch_data_i(R_DST_MODE) = C_MODE_REG else has_dst_operand;
+
 
    ------------------------------------------------------------
    -- Back-pressure to Fetch module
@@ -118,6 +119,10 @@ begin
    fetch_ready_o <= '0' when fetch_double_o and not fetch_double_i else -- Wait for immediate value
                     exe_ready_i;
 
+
+   ------------------------------------------------------------
+   -- Microcode generation
+   ------------------------------------------------------------
 
    microcode_addr(C_READ_DST)  <= reads_from_dst;
    microcode_addr(C_WRITE_DST) <= writes_to_dst;
