@@ -7,28 +7,41 @@ replacement, for the following two reasons:
 However, it should be a simple operation to modify the QNICE-FPGA project to
 support this implementation.
 
-## Architecture
 
+## Architecture
 This is essentially a three-stage pipeline consisting of:
 
-* Fetch
-* Decode
-* Execute
+* Fetch: Fetches one word at a time from the instruction memory
+* Instruction Cache: Forwards two words at a time to the decoder
+* Decode: Generates a list of micro-operations
+* Serializer: Outputs a sequence of single micro-operations
+* Execute: Executes one micro-operation
 
 See the following block diagram:
 ![Block Diagram](doc/cpu.png)
 
 
-## Interface
-From the Fetch to the Decode modules we have the following signals:
-
+## Interfaces
+From the Fetch to the ICache module we have the following signals:
 ```
-valid_i   : in  std_logic;
-ready_o   : out std_logic;
-double_i  : in  std_logic;
-addr_i    : in  std_logic_vector(15 downto 0);
-data_i    : in  std_logic_vector(31 downto 0);
-double_o  : out std_logic;
+valid_i : in  std_logic;
+ready_o : out std_logic;
+addr_i  : in  std_logic_vector(15 downto 0);
+data_i  : in  std_logic_vector(15 downto 0);
+```
+
+Here `valid_i` and `ready_o` are the usual handshaking signals, `addr_i` is the
+address of the current instruction, and `data_i` contains one word of data.
+
+
+From the ICache to the Decode module we have the following signals:
+```
+valid_i  : in  std_logic;
+ready_o  : out std_logic;
+double_i : in  std_logic;
+addr_i   : in  std_logic_vector(15 downto 0);
+data_i   : in  std_logic_vector(31 downto 0);
+double_o : out std_logic;
 ```
 
 Here `valid_i` and `ready_o` are the usual handshaking signals, `addr_i` is the

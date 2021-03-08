@@ -2,7 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std_unsigned.all;
 
-entity sequencer_to_decode is
+entity icache is
    port (
       clk_i            : in  std_logic;
       rst_i            : in  std_logic;
@@ -21,9 +21,9 @@ entity sequencer_to_decode is
       decode_data_o    : out std_logic_vector(31 downto 0);
       decode_double_i  : in  std_logic
    );
-end entity sequencer_to_decode;
+end entity icache;
 
-architecture synthesis of sequencer_to_decode is
+architecture synthesis of icache is
 
    signal addr : std_logic_vector(31 downto 0) := (others => '0');
    signal data : std_logic_vector(31 downto 0) := (others => '0');

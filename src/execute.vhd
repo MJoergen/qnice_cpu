@@ -28,11 +28,12 @@ entity execute is
       dec_r14_i        : in  std_logic_vector(15 downto 0);
 
       -- Memory
-      mem_valid_o      : out std_logic;                        -- combinatorial
-      mem_ready_i      : in  std_logic;
-      mem_op_o         : out std_logic_vector(2 downto 0);     -- combinatorial
-      mem_addr_o       : out std_logic_vector(15 downto 0);    -- combinatorial
-      mem_wr_data_o    : out std_logic_vector(15 downto 0);    -- combinatorial
+      mem_req_valid_o  : out std_logic;                        -- combinatorial
+      mem_req_ready_i  : in  std_logic;
+      mem_req_op_o     : out std_logic_vector(2 downto 0);     -- combinatorial
+      mem_req_addr_o   : out std_logic_vector(15 downto 0);    -- combinatorial
+      mem_req_data_o   : out std_logic_vector(15 downto 0);    -- combinatorial
+
       mem_src_valid_i  : in  std_logic;
       mem_src_ready_o  : out std_logic;                        -- combinatorial
       mem_src_data_i   : in  std_logic_vector(15 downto 0);
@@ -68,8 +69,8 @@ begin
    -- Get values read from memory
    ------------------------------------------------------------
 
-   mem_src_ready_o <= dec_microcodes_i(C_MEM_WAIT_SRC);
-   mem_dst_ready_o <= dec_microcodes_i(C_MEM_WAIT_DST);
+   mem_src_ready_o <= dec_valid_i and dec_microcodes_i(C_MEM_WAIT_SRC);
+   mem_dst_ready_o <= dec_valid_i and dec_microcodes_i(C_MEM_WAIT_DST);
 
 
    ------------------------------------------------------------
@@ -179,13 +180,13 @@ begin
    -- Update memory
    ------------------------------------------------------------
 
-   mem_valid_o    <= dec_valid_i and not (wait_for_mem_src or wait_for_mem_dst) and or(dec_microcodes_i(2 downto 0));
-   mem_op_o       <= dec_microcodes_i(2 downto 0);
-   mem_wr_data_o  <= alu_res_val(15 downto 0);
-   mem_addr_o     <= dec_src_val_i-1 when dec_microcodes_i(2) = '1' and dec_src_mode_i = C_MODE_PRE else
-                     dec_src_val_i   when dec_microcodes_i(2) = '1' else
-                     dec_dst_val_i-1 when dec_microcodes_i(2) = '0' and dec_dst_mode_i = C_MODE_PRE else
-                     dec_dst_val_i;
+   mem_req_valid_o <= dec_valid_i and not (wait_for_mem_src or wait_for_mem_dst) and or(dec_microcodes_i(2 downto 0));
+   mem_req_op_o    <= dec_microcodes_i(2 downto 0);
+   mem_req_data_o  <= alu_res_val(15 downto 0);
+   mem_req_addr_o  <= dec_src_val_i-1 when dec_microcodes_i(2) = '1' and dec_src_mode_i = C_MODE_PRE else
+                      dec_src_val_i   when dec_microcodes_i(2) = '1' else
+                      dec_dst_val_i-1 when dec_microcodes_i(2) = '0' and dec_dst_mode_i = C_MODE_PRE else
+                      dec_dst_val_i;
 
 end architecture synthesis;
 

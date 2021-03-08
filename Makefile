@@ -12,19 +12,19 @@ SOURCES += src/sub/pipe_concat.vhd
 SOURCES += src/sub/two_stage_buffer.vhd
 SOURCES += src/sub/two_stage_fifo.vhd
 
-SOURCES += src/axi_pause.vhd
 SOURCES += src/cpu_constants.vhd
+SOURCES += src/fetch.vhd
+SOURCES += src/icache.vhd
+SOURCES += src/decode.vhd
+SOURCES += src/serializer.vhd
+SOURCES += src/execute.vhd
+SOURCES += src/axi_pause.vhd
 SOURCES += src/alu_data.vhd
 SOURCES += src/alu_flags.vhd
-SOURCES += src/fetch.vhd
 SOURCES += src/microcode.vhd
-SOURCES += src/decode.vhd
-SOURCES += src/execute.vhd
 SOURCES += src/registers.vhd
 SOURCES += src/memory.vhd
 SOURCES += src/cpu.vhd
-SOURCES += src/sequencer_from_decode.vhd
-SOURCES += src/sequencer_to_decode.vhd
 
 TEST_SOURCES += test/tdp_ram.vhd
 TEST_SOURCES += test/wb_tdp_mem.vhd

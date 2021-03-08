@@ -9,11 +9,11 @@ entity memory is
       rst_i        : in  std_logic;
 
       -- From execute
-      s_valid_i    : in  std_logic;
-      s_ready_o    : out std_logic;
-      s_op_i       : in  std_logic_vector(2 downto 0);
-      s_addr_i     : in  std_logic_vector(15 downto 0);
-      s_data_i     : in  std_logic_vector(15 downto 0);
+      mreq_valid_i : in  std_logic;
+      mreq_ready_o : out std_logic;
+      mreq_op_i    : in  std_logic_vector(2 downto 0);
+      mreq_addr_i  : in  std_logic_vector(15 downto 0);
+      mreq_data_i  : in  std_logic_vector(15 downto 0);
 
       -- To execute
       msrc_valid_o : out std_logic;
@@ -53,16 +53,16 @@ architecture synthesis of memory is
 
 begin
 
-   s_ready_o <= not (s_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i)
-            and not (s_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i);
+   mreq_ready_o <= not (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i)
+               and not (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i);
 
 
    -- WISHBONE request interface is combinatorial
-   wb_cyc_o  <= ((s_valid_i and s_ready_o) or wait_for_ack) and not rst_i;
-   wb_stb_o  <= wb_cyc_o and s_valid_i and s_ready_o;
-   wb_addr_o <= s_addr_i;
-   wb_we_o   <= s_op_i(C_MEM_WRITE);
-   wb_dat_o  <= s_data_i;
+   wb_cyc_o  <= ((mreq_valid_i and mreq_ready_o) or wait_for_ack) and not rst_i;
+   wb_stb_o  <= wb_cyc_o and mreq_valid_i and mreq_ready_o;
+   wb_addr_o <= mreq_addr_i;
+   wb_we_o   <= mreq_valid_i and mreq_op_i(C_MEM_WRITE);
+   wb_dat_o  <= mreq_data_i;
 
    p_wait_for_ack : process (clk_i)
    begin
@@ -86,7 +86,7 @@ begin
    -- Store the request
    ----------------------
 
-   osf_mem_in_valid <= s_valid_i and s_ready_o and (s_op_i(C_MEM_READ_SRC) or s_op_i(C_MEM_READ_DST));
+   osf_mem_in_valid <= mreq_valid_i and mreq_ready_o and (mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST));
 
    i_one_stage_fifo_mem : entity work.one_stage_fifo
       generic map (
@@ -97,7 +97,7 @@ begin
          rst_i       => rst_i,
          s_valid_i   => osf_mem_in_valid,
          s_ready_o   => osf_mem_in_ready,
-         s_data_i(0) => s_op_i(C_MEM_READ_SRC),
+         s_data_i(0) => mreq_op_i(C_MEM_READ_SRC),
          m_valid_o   => osf_mem_out_valid,
          m_ready_i   => wb_cyc_o and wb_ack_i,
          m_data_o(0) => osf_mem_out_data

@@ -91,11 +91,11 @@ architecture synthesis of cpu is
    signal seq2exe_r14         : std_logic_vector(15 downto 0);
 
    -- Execute to memory
-   signal exe2mem_valid       : std_logic;
-   signal exe2mem_ready       : std_logic;
-   signal exe2mem_op          : std_logic_vector(2 downto 0);
-   signal exe2mem_addr        : std_logic_vector(15 downto 0);
-   signal exe2mem_wr_data     : std_logic_vector(15 downto 0);
+   signal exe2mem_req_valid   : std_logic;
+   signal exe2mem_req_ready   : std_logic;
+   signal exe2mem_req_op      : std_logic_vector(2 downto 0);
+   signal exe2mem_req_addr    : std_logic_vector(15 downto 0);
+   signal exe2mem_req_data    : std_logic_vector(15 downto 0);
 
    -- Memory to execute
    signal mem2exe_src_valid   : std_logic;
@@ -156,7 +156,7 @@ begin
       ); -- i_axi_pause
 
 
-   i_sequencer_to_decode : entity work.sequencer_to_decode
+   i_icache : entity work.icache
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i,
@@ -170,7 +170,7 @@ begin
          decode_addr_o   => seq2decode_addr,
          decode_data_o   => seq2decode_data,
          decode_double_i => seq2decode_double_consume
-      ); -- i_sequencer_to_decode
+      ); -- i_icache
 
 
    i_decode : entity work.decode
@@ -206,7 +206,7 @@ begin
       ); -- i_decode
 
 
-   i_sequencer_from_decode : entity work.sequencer_from_decode
+   i_serializer : entity work.serializer
       port map (
          clk_i               => clk_i,
          rst_i               => rst_i,
@@ -240,7 +240,7 @@ begin
          exe_dst_imm_o       => seq2exe_dst_imm,
          exe_res_reg_o       => seq2exe_res_reg,
          exe_r14_o           => seq2exe_r14
-      ); -- i_sequencer_from_decode
+      ); -- i_serializer
 
 
    i_registers : entity work.registers
@@ -284,11 +284,11 @@ begin
          dec_dst_imm_i    => seq2exe_dst_imm,
          dec_res_reg_i    => seq2exe_res_reg,
          dec_r14_i        => seq2exe_r14,
-         mem_valid_o      => exe2mem_valid,
-         mem_ready_i      => exe2mem_ready,
-         mem_op_o         => exe2mem_op,
-         mem_addr_o       => exe2mem_addr,
-         mem_wr_data_o    => exe2mem_wr_data,
+         mem_req_valid_o  => exe2mem_req_valid,
+         mem_req_ready_i  => exe2mem_req_ready,
+         mem_req_op_o     => exe2mem_req_op,
+         mem_req_addr_o   => exe2mem_req_addr,
+         mem_req_data_o   => exe2mem_req_data,
          mem_src_valid_i  => mem2exe_src_valid,
          mem_src_ready_o  => mem2exe_src_ready,
          mem_src_data_i   => mem2exe_src_data,
@@ -307,11 +307,11 @@ begin
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i,
-         s_valid_i       => exe2mem_valid,
-         s_ready_o       => exe2mem_ready,
-         s_op_i          => exe2mem_op,
-         s_addr_i        => exe2mem_addr,
-         s_data_i        => exe2mem_wr_data,
+         mreq_valid_i    => exe2mem_req_valid,
+         mreq_ready_o    => exe2mem_req_ready,
+         mreq_op_i       => exe2mem_req_op,
+         mreq_addr_i     => exe2mem_req_addr,
+         mreq_data_i     => exe2mem_req_data,
          msrc_valid_o    => mem2exe_src_valid,
          msrc_ready_i    => mem2exe_src_ready,
          msrc_data_o     => mem2exe_src_data,

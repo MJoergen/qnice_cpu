@@ -4,7 +4,7 @@ use ieee.numeric_std_unsigned.all;
 
 use work.cpu_constants.all;
 
-entity sequencer_from_decode is
+entity serializer is
    port (
       clk_i               : in  std_logic;
       rst_i               : in  std_logic;
@@ -43,9 +43,9 @@ entity sequencer_from_decode is
       exe_res_reg_o       : out std_logic_vector(3 downto 0);
       exe_r14_o           : out std_logic_vector(15 downto 0)
    );
-end entity sequencer_from_decode;
+end entity serializer;
 
-architecture synthesis of sequencer_from_decode is
+architecture synthesis of serializer is
 
    signal index : integer range 0 to 3 := 0;
    signal valid : std_logic := '0';
