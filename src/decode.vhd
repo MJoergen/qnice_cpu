@@ -28,6 +28,8 @@ entity decode is
       exe_valid_o      : out std_logic;
       exe_ready_i      : in  std_logic;
       exe_microcodes_o : out std_logic_vector(23 downto 0);
+      exe_addr_o       : out std_logic_vector(15 downto 0);
+      exe_inst_o       : out std_logic_vector(15 downto 0);
       exe_immediate_o  : out std_logic_vector(15 downto 0);
       exe_oper_o       : out std_logic_vector(3 downto 0);
       exe_ctrl_o       : out std_logic_vector(5 downto 0);
@@ -164,6 +166,8 @@ begin
             exe_valid_o      <= '1';
             exe_microcodes_o <= microcode_value;
             exe_immediate_o  <= fetch_data_i(R_IMMEDIATE);
+            exe_addr_o       <= fetch_addr_i;
+            exe_inst_o       <= fetch_data_i(R_INSTRUCTION);
             exe_oper_o       <= fetch_data_i(R_OPCODE);
             exe_ctrl_o       <= fetch_data_i(R_CTRL_CMD);
             exe_src_addr_o   <= reg_src_addr_o;

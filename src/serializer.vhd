@@ -13,6 +13,8 @@ entity serializer is
       decode_valid_i      : in  std_logic;
       decode_ready_o      : out std_logic;
       decode_microcodes_i : in  std_logic_vector(23 downto 0);
+      decode_addr_i       : in  std_logic_vector(15 downto 0);
+      decode_inst_i       : in  std_logic_vector(15 downto 0);
       decode_immediate_i  : in  std_logic_vector(15 downto 0);
       decode_oper_i       : in  std_logic_vector(3 downto 0);
       decode_ctrl_i       : in  std_logic_vector(5 downto 0);
@@ -31,6 +33,8 @@ entity serializer is
       exe_valid_o         : out std_logic;
       exe_ready_i         : in  std_logic;
       exe_microcodes_o    : out std_logic_vector(7 downto 0);
+      exe_addr_o          : out std_logic_vector(15 downto 0);
+      exe_inst_o          : out std_logic_vector(15 downto 0);
       exe_immediate_o     : out std_logic_vector(15 downto 0);
       exe_oper_o          : out std_logic_vector(3 downto 0);
       exe_ctrl_o          : out std_logic_vector(5 downto 0);
@@ -81,6 +85,8 @@ begin
 
    exe_valid_o      <= valid;
    exe_microcodes_o <= decode_microcodes_i(8*index+7 downto 8*index);
+   exe_addr_o       <= decode_addr_i;
+   exe_inst_o       <= decode_inst_i;
    exe_immediate_o  <= decode_immediate_i;
    exe_oper_o       <= decode_oper_i;
    exe_ctrl_o       <= decode_ctrl_i;

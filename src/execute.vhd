@@ -13,6 +13,8 @@ entity execute is
       dec_valid_i      : in  std_logic;
       dec_ready_o      : out std_logic;
       dec_microcodes_i : in  std_logic_vector(7 downto 0);
+      dec_addr_i       : in  std_logic_vector(15 downto 0);
+      dec_inst_i       : in  std_logic_vector(15 downto 0);
       dec_immediate_i  : in  std_logic_vector(15 downto 0);
       dec_oper_i       : in  std_logic_vector(3 downto 0);
       dec_ctrl_i       : in  std_logic_vector(5 downto 0);
@@ -46,7 +48,9 @@ entity execute is
       reg_r14_o        : out std_logic_vector(15 downto 0);
       reg_we_o         : out std_logic;
       reg_addr_o       : out std_logic_vector(3 downto 0);
-      reg_val_o        : out std_logic_vector(15 downto 0)
+      reg_val_o        : out std_logic_vector(15 downto 0);
+
+      inst_done_o      : out std_logic
    );
 end entity execute;
 
@@ -122,6 +126,17 @@ begin
       ); -- i_alu_flags
 
 
+   inst_done_o <= dec_valid_i and dec_ready_o and dec_microcodes_i(C_LAST);
+
+   p_debug : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if inst_done_o then
+            disassemble(dec_addr_i, dec_inst_i, dec_immediate_i);
+         end if;
+      end if;
+   end process p_debug;
+
    assert not (dec_oper_i = C_OPCODE_CTRL and dec_ctrl_i = C_CTRL_HALT)
       report "HALT instruction." severity failure;
 
@@ -189,9 +204,9 @@ begin
    mem_req_valid_o <= dec_valid_i and not (wait_for_mem_src or wait_for_mem_dst) and or(dec_microcodes_i(2 downto 0));
    mem_req_op_o    <= dec_microcodes_i(2 downto 0);
    mem_req_data_o  <= alu_res_val(15 downto 0);
-   mem_req_addr_o  <= dec_src_val_i-1 when dec_microcodes_i(2) = '1' and dec_src_mode_i = C_MODE_PRE else
-                      dec_src_val_i   when dec_microcodes_i(2) = '1' else
-                      dec_dst_val_i-1 when dec_microcodes_i(2) = '0' and dec_dst_mode_i = C_MODE_PRE else
+   mem_req_addr_o  <= dec_src_val_i-1 when dec_microcodes_i(C_MEM_READ_SRC) = '1' and dec_src_mode_i = C_MODE_PRE else
+                      dec_src_val_i   when dec_microcodes_i(C_MEM_READ_SRC) = '1' else
+                      dec_dst_val_i-1 when dec_microcodes_i(C_MEM_READ_SRC) = '0' and dec_dst_mode_i = C_MODE_PRE else
                       dec_dst_val_i;
 
 end architecture synthesis;

@@ -59,6 +59,8 @@ architecture synthesis of cpu is
    signal decode2seq_valid      : std_logic;
    signal decode2seq_ready      : std_logic;
    signal decode2seq_microcodes : std_logic_vector(23 downto 0);
+   signal decode2seq_addr       : std_logic_vector(15 downto 0);
+   signal decode2seq_inst       : std_logic_vector(15 downto 0);
    signal decode2seq_immediate  : std_logic_vector(15 downto 0);
    signal decode2seq_oper       : std_logic_vector(3 downto 0);
    signal decode2seq_ctrl       : std_logic_vector(5 downto 0);
@@ -77,6 +79,8 @@ architecture synthesis of cpu is
    signal seq2exe_valid       : std_logic;
    signal seq2exe_ready       : std_logic;
    signal seq2exe_microcodes  : std_logic_vector(7 downto 0);
+   signal seq2exe_addr        : std_logic_vector(15 downto 0);
+   signal seq2exe_inst        : std_logic_vector(15 downto 0);
    signal seq2exe_immediate   : std_logic_vector(15 downto 0);
    signal seq2exe_oper        : std_logic_vector(3 downto 0);
    signal seq2exe_ctrl        : std_logic_vector(5 downto 0);
@@ -116,6 +120,8 @@ architecture synthesis of cpu is
    -- Execute to fetch
    signal exe2fetch_valid     : std_logic;
    signal exe2fetch_addr      : std_logic_vector(15 downto 0);
+
+   signal icache_rst          : std_logic;
 
 begin
 
@@ -160,7 +166,7 @@ begin
    i_icache : entity work.icache
       port map (
          clk_i           => clk_i,
-         rst_i           => rst_i,
+         rst_i           => icache_rst,
          fetch_valid_i   => pause2seq_valid,
          fetch_ready_o   => pause2seq_ready,
          fetch_addr_i    => pause2seq_addr,
@@ -172,6 +178,8 @@ begin
          decode_data_o   => seq2decode_data,
          decode_double_i => seq2decode_double_consume
       ); -- i_icache
+
+   icache_rst <= rst_i or exe2fetch_valid;
 
 
    i_decode : entity work.decode
@@ -192,6 +200,8 @@ begin
          exe_valid_o      => decode2seq_valid,
          exe_ready_i      => decode2seq_ready,
          exe_microcodes_o => decode2seq_microcodes,
+         exe_addr_o       => decode2seq_addr,
+         exe_inst_o       => decode2seq_inst,
          exe_immediate_o  => decode2seq_immediate,
          exe_oper_o       => decode2seq_oper,
          exe_ctrl_o       => decode2seq_ctrl,
@@ -215,6 +225,8 @@ begin
          decode_valid_i      => decode2seq_valid,
          decode_ready_o      => decode2seq_ready,
          decode_microcodes_i => decode2seq_microcodes,
+         decode_addr_i       => decode2seq_addr,
+         decode_inst_i       => decode2seq_inst,
          decode_immediate_i  => decode2seq_immediate,
          decode_oper_i       => decode2seq_oper,
          decode_ctrl_i       => decode2seq_ctrl,
@@ -231,6 +243,8 @@ begin
          exe_valid_o         => seq2exe_valid,
          exe_ready_i         => seq2exe_ready,
          exe_microcodes_o    => seq2exe_microcodes,
+         exe_addr_o          => seq2exe_addr,
+         exe_inst_o          => seq2exe_inst,
          exe_immediate_o     => seq2exe_immediate,
          exe_oper_o          => seq2exe_oper,
          exe_ctrl_o          => seq2exe_ctrl,
@@ -275,6 +289,8 @@ begin
          dec_valid_i      => seq2exe_valid,
          dec_ready_o      => seq2exe_ready,
          dec_microcodes_i => seq2exe_microcodes,
+         dec_addr_i       => seq2exe_addr,
+         dec_inst_i       => seq2exe_inst,
          dec_immediate_i  => seq2exe_immediate,
          dec_oper_i       => seq2exe_oper,
          dec_ctrl_i       => seq2exe_ctrl,
@@ -335,11 +351,11 @@ begin
    p_debug : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if exe2reg_we = '1' then
+         if not rst_i and exe2reg_we then
             report "Write value 0x" & to_hstring(exe2reg_val) & " to register " & to_hstring(exe2reg_addr);
          end if;
 
-         if wbd_stb_o = '1' and wbd_we_o = '1' and wbd_stall_i = '0' then
+         if not rst_i and wbd_stb_o and wbd_we_o and not wbd_stall_i then
             report "Write value 0x" & to_hstring(wbd_dat_o) & " to memory 0x" & to_hstring(wbd_addr_o);
          end if;
       end if;

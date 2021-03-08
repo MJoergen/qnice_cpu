@@ -2,27 +2,44 @@
 
 This version of the QNICE CPU (from the QNICE-FPGA project) is not a drop-in
 replacement, for the following two reasons:
-   * This design uses the Wishbone memory bus
-   * This design uses separate instruction and data interfaces.
+* This design uses the Wishbone memory bus.
+* This design uses separate instruction and data interfaces.
+
 However, it should be a simple operation to modify the QNICE-FPGA project to
 support this implementation.
 
+The overall idea of this implementation is to convert each instruction into a
+sequence of micro-operations:
+* Read from memory to source operand buffer
+* Read from memory to destination operand buffer
+* Write to memory
+* Write to register
+
+The reason is that e.g. the instruction `ADD @R0, @R1` performs two memory
+reads (from `@R0` and `@R1`) and one memory write (to `@R1`). Since only one
+memory operation is possible in each clock cycle, such an instruction will
+need to be serialized and will take a total of three clock cycles.
+
 
 ## Architecture
-This is essentially a three-stage pipeline consisting of:
+This is essentially a five-stage pipeline consisting of:
 
-* Fetch: Fetches one word at a time from the instruction memory
-* Instruction Cache: Forwards two words at a time to the decoder
-* Decode: Generates a list of micro-operations
-* Serializer: Outputs a sequence of single micro-operations
-* Execute: Executes one micro-operation
+* Fetch: Fetches one word at a time from the instruction memory.
+* Instruction Cache: Forwards two words at a time to the decoder.
+* Decode: Generates a list of micro-operations.
+* Serializer: Outputs a sequence of single micro-operations.
+* Execute: Executes one micro-operation.
+
+TBD: The Fetch and Instruction Cache will be merged into one stage, and
+the Serializer and Execute will be merged too.
 
 See the following block diagram:
+
 ![Block Diagram](doc/cpu.png)
 
 
 ## Interfaces
-From the Fetch to the ICache module we have the following signals:
+From the Fetch into the Instruction Cache module we have the following signals:
 ```
 valid_i : in  std_logic;
 ready_o : out std_logic;
@@ -31,10 +48,11 @@ data_i  : in  std_logic_vector(15 downto 0);
 ```
 
 Here `valid_i` and `ready_o` are the usual handshaking signals, `addr_i` is the
-address of the current instruction, and `data_i` contains one word of data.
+current address, and `data_i` is the corresponding data. Except for branches,
+`addr_i` will automatically increment.
 
 
-From the ICache to the Decode module we have the following signals:
+From the ICache into the Decode module we have the following signals:
 ```
 valid_i  : in  std_logic;
 ready_o  : out std_logic;
@@ -55,18 +73,6 @@ whether one or two words are consumed in this clock cycle. Therefore, this
 signal must depend combinatorially on the input signals.
 
 ## Instruction decoding
-
-The overall idea of this implementation is to convert each instruction into a
-sequence of micro-operations:
-* Read from memory to source operand buffer
-* Read from memory to destination operand buffer
-* Write to memory
-* Write to register
-
-The reason is that e.g. the instruction `ADD @R0, @R1` performs two memory
-reads (from `@R0` and `@R1`) and one memory write (to `@R1`). Since only one
-memory operation is possible in each clock cycle, such an instruction will
-need to be serialized and will take a total of three clock cycles.
 
 The first step in the instruction decoding is to categorize the instuction
 depending on:
