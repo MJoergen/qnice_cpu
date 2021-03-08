@@ -173,6 +173,12 @@ begin
             reg_we_o   <= '1';
          end if;
       end if;
+
+      if rst_i = '1' then
+         reg_addr_o <= to_stdlogicvector(C_REG_PC, 4);
+         reg_val_o  <= (others => '0');
+         reg_we_o   <= '1';
+      end if;
    end process p_reg;
 
 

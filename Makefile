@@ -71,8 +71,9 @@ hw/$(TOP).tcl: Makefile
 	echo "read_xdc hw/$(TOP).xdc" >> $@
 	echo "synth_design -top $(TOP) -part xc7a100tcsg324-1 -flatten_hierarchy none" >> $@
 	echo "write_checkpoint -force post_synth.dcp" >> $@
-	echo "opt_design -directive NoBramPowerOpt" >> $@
+	echo "opt_design" >> $@
 	echo "place_design" >> $@
+	echo "phys_opt_design" >> $@
 	echo "route_design" >> $@
 	echo "write_checkpoint -force post_route.dcp" >> $@
 	echo "write_bitstream -force $(TOP).bit" >> $@

@@ -25,10 +25,10 @@ architecture synthesis of dp_ram is
 
    type mem_t is array (0 to 2**G_ADDR_SIZE-1) of std_logic_vector(G_DATA_SIZE-1 downto 0);
 
-   signal ram_r : mem_t := (others => (others => '0'));
+   signal dp_ram_r : mem_t := (others => (others => '0'));
 
    attribute ram_style : string;
-   attribute ram_style of ram_r : signal is G_RAM_STYLE;
+   attribute ram_style of dp_ram_r : signal is G_RAM_STYLE;
 
 begin
 
@@ -36,13 +36,13 @@ begin
    begin
       if rising_edge(clk_i) then
          if wr_en_i = '1' then
-            ram_r(to_integer(wr_addr_i)) <= wr_data_i;
+            dp_ram_r(to_integer(wr_addr_i)) <= wr_data_i;
          end if;
 
 -- pragma synthesis_off
          if rst_i = '1' then
             for i in 0 to 7 loop
-               ram_r(i) <= X"111" * to_std_logic_vector(i, 4);
+               dp_ram_r(i) <= X"111" * to_std_logic_vector(i, 4);
             end loop;
          end if;
 -- pragma synthesis_on
@@ -53,7 +53,7 @@ begin
    p_read : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         rd_data_o <= ram_r(to_integer(rd_addr_i));
+         rd_data_o <= dp_ram_r(to_integer(rd_addr_i));
       end if;
    end process p_read;
 

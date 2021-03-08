@@ -198,3 +198,15 @@ Then there are some additional signals
 2. Optimize conditional jumps, so they don't execute superfluous microoperations.
 3. Optimize FETCH module. It currently takes three clock cycles after a jump. This could be reduced to one clock cycle.
 
+## Utilization
+
+|   Name    | LUTs | Regs | Slices |
+| --------- | ---- | ---- | ------ |
+| Fetch     |   35 |   51 |    22  |
+| Decode    |   14 |   61 |    25  |
+| Execute   |  457 |    0 |   156  |
+| Registers |   69 |   56 |    25  |
+| Memory    |   31 |   37 |    20  |
+| TOTAL     |  646 |  245 |   215  |
+
+

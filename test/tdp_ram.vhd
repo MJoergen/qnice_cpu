@@ -52,10 +52,10 @@ architecture synthesis of tdp_ram is
    end function;
 
    -- Initial memory contents
-   shared variable ram_r : ram_t := InitRamFromFile(G_INIT_FILE);
+   shared variable tdp_ram_r : ram_t := InitRamFromFile(G_INIT_FILE);
 
    attribute ram_style : string;
-   attribute ram_style of ram_r : variable is G_RAM_STYLE;
+   attribute ram_style of tdp_ram_r : variable is G_RAM_STYLE;
 
 begin
 
@@ -63,10 +63,10 @@ begin
    begin
       if rising_edge(clk_i) then
          if a_rd_en_i = '1' then
-            a_rd_data_o <= ram_r(to_integer(a_addr_i));
+            a_rd_data_o <= tdp_ram_r(to_integer(a_addr_i));
          end if;
          if a_wr_en_i = '1' then
-            ram_r(to_integer(a_addr_i)) := a_wr_data_i;
+            tdp_ram_r(to_integer(a_addr_i)) := a_wr_data_i;
          end if;
       end if;
    end process p_a;
@@ -75,10 +75,10 @@ begin
    begin
       if rising_edge(clk_i) then
          if b_rd_en_i = '1' then
-            b_rd_data_o <= ram_r(to_integer(b_addr_i));
+            b_rd_data_o <= tdp_ram_r(to_integer(b_addr_i));
          end if;
          if b_wr_en_i = '1' then
-            ram_r(to_integer(b_addr_i)) := b_wr_data_i;
+            tdp_ram_r(to_integer(b_addr_i)) := b_wr_data_i;
          end if;
       end if;
    end process p_b;

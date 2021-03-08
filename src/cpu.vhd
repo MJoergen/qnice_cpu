@@ -265,8 +265,8 @@ begin
 
 
    -- Writes to R15 are forwarded back to the fetch stage as well.
-   exe2fetch_valid <= '1'             when rst_i else and(exe2reg_addr) and exe2reg_we;
-   exe2fetch_addr  <= (others => '0') when rst_i else exe2reg_val;
+   exe2fetch_valid <= and(exe2reg_addr) and exe2reg_we;
+   exe2fetch_addr  <= exe2reg_val;
 
    i_execute : entity work.execute
       port map (
