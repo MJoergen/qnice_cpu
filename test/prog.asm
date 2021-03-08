@@ -8,22 +8,22 @@
       ADD @R9, R8    ; Write value 0x0BBB to register 8
       ADD @R8, @R7   ; Write value 0x0666 to memory 0x0777
 
+      MOVE 0x1234, R1   ; Write value 0x1234 to register 1
+      ADD  0x2345, R1   ; Write value 0x3579 to register 1
+
       CMP R2, R8
       CMP R3, @R8
       CMP @R4, R8
       CMP @R5, @R8
-
-      MOVE L_4, R13     ; Initialize stack pointer
-      RSUB L_3, 1
-
-      MOVE 0x1234, R1   ; Write value 0x1234 to register 1
-      ADD  0x2345, R1   ; Write value 0x3579 to register 1
 
       CMP  0x1234, R1
       CMP  R1, 0x2345
 
       CMP  0x1234, @R1
       CMP  @R1, 0x2345
+
+      MOVE L_4, R13     ; Initialize stack pointer
+      RSUB L_3, 1
 
       ABRA L_1, 1
       HALT
