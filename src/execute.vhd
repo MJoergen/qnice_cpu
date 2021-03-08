@@ -146,7 +146,7 @@ begin
 
       if dec_valid_i and dec_ready_o then
          -- Handle pre- and post increment here.
-         if dec_src_mode_i = C_MODE_POST or dec_src_mode_i = C_MODE_PRE then
+         if (dec_src_mode_i = C_MODE_POST or dec_src_mode_i = C_MODE_PRE) and dec_src_imm_i = '0' then
             reg_addr_o <= dec_src_addr_i;
             if dec_src_mode_i = C_MODE_POST then
                reg_val_o <= dec_src_val_i + 1;
@@ -156,7 +156,7 @@ begin
             reg_we_o   <= '1';
          end if;
 
-         if dec_dst_mode_i = C_MODE_POST or dec_dst_mode_i = C_MODE_PRE then
+         if (dec_dst_mode_i = C_MODE_POST or dec_dst_mode_i = C_MODE_PRE) and dec_dst_imm_i = '0' then
             reg_addr_o <= dec_dst_addr_i;
             if dec_dst_mode_i = C_MODE_POST then
                reg_val_o <= dec_dst_val_i + 1;

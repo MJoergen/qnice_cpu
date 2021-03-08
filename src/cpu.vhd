@@ -34,13 +34,13 @@ architecture synthesis of cpu is
    signal fetch2pause_addr    : std_logic_vector(15 downto 0);
    signal fetch2pause_data    : std_logic_vector(15 downto 0);
 
-   -- Pause to sequencer
+   -- Pause to icache
    signal pause2seq_valid     : std_logic;
    signal pause2seq_ready     : std_logic;
    signal pause2seq_addr      : std_logic_vector(15 downto 0);
    signal pause2seq_data      : std_logic_vector(15 downto 0);
 
-   -- Sequencer to decode
+   -- Icache to decode
    signal seq2decode_valid    : std_logic;
    signal seq2decode_ready    : std_logic;
    signal seq2decode_double_valid  : std_logic;
@@ -55,12 +55,13 @@ architecture synthesis of cpu is
    signal dec2reg_dst_val     : std_logic_vector(15 downto 0);
    signal reg2dec_r14         : std_logic_vector(15 downto 0);
 
-   -- Decode to sequencer
+   -- Decode to serializer
    signal decode2seq_valid      : std_logic;
    signal decode2seq_ready      : std_logic;
    signal decode2seq_microcodes : std_logic_vector(23 downto 0);
    signal decode2seq_immediate  : std_logic_vector(15 downto 0);
    signal decode2seq_oper       : std_logic_vector(3 downto 0);
+   signal decode2seq_ctrl       : std_logic_vector(5 downto 0);
    signal decode2seq_src_addr   : std_logic_vector(3 downto 0);
    signal decode2seq_src_val    : std_logic_vector(15 downto 0);
    signal decode2seq_src_mode   : std_logic_vector(1 downto 0);
@@ -72,7 +73,7 @@ architecture synthesis of cpu is
    signal decode2seq_res_reg    : std_logic_vector(3 downto 0);
    signal decode2seq_r14        : std_logic_vector(15 downto 0);
 
-   -- Sequencer to execute
+   -- Serializer to execute
    signal seq2exe_valid       : std_logic;
    signal seq2exe_ready       : std_logic;
    signal seq2exe_microcodes  : std_logic_vector(7 downto 0);
@@ -193,6 +194,7 @@ begin
          exe_microcodes_o => decode2seq_microcodes,
          exe_immediate_o  => decode2seq_immediate,
          exe_oper_o       => decode2seq_oper,
+         exe_ctrl_o       => decode2seq_ctrl,
          exe_src_addr_o   => decode2seq_src_addr,
          exe_src_val_o    => decode2seq_src_val,
          exe_src_mode_o   => decode2seq_src_mode,
@@ -215,6 +217,7 @@ begin
          decode_microcodes_i => decode2seq_microcodes,
          decode_immediate_i  => decode2seq_immediate,
          decode_oper_i       => decode2seq_oper,
+         decode_ctrl_i       => decode2seq_ctrl,
          decode_src_addr_i   => decode2seq_src_addr,
          decode_src_val_i    => decode2seq_src_val,
          decode_src_mode_i   => decode2seq_src_mode,
@@ -230,6 +233,7 @@ begin
          exe_microcodes_o    => seq2exe_microcodes,
          exe_immediate_o     => seq2exe_immediate,
          exe_oper_o          => seq2exe_oper,
+         exe_ctrl_o          => seq2exe_ctrl,
          exe_src_addr_o      => seq2exe_src_addr,
          exe_src_val_o       => seq2exe_src_val,
          exe_src_mode_o      => seq2exe_src_mode,
