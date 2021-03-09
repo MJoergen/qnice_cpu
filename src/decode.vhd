@@ -188,6 +188,14 @@ begin
 
             -- Treat jumps as a special case
             if fetch_data_i(R_OPCODE) = C_OPCODE_JMP then
+               exe_microcodes_o(C_REG_WRITE) <= '1';
+               exe_res_reg_o <= to_stdlogicvector(C_REG_PC, 4);
+
+               -- Relative jump
+               if fetch_data_i(R_JMP_MODE) = C_JMP_RBRA or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB then
+                  assert immediate_src = '1';
+                  exe_immediate_o  <= fetch_data_i(R_IMMEDIATE) + fetch_addr_i + 2;
+               end if;
             end if;
          end if;
 
