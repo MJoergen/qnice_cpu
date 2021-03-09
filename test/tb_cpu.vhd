@@ -2,6 +2,9 @@ library ieee;
 use ieee.std_logic_1164.all;
 
 entity tb_cpu is
+   generic (
+      G_ROM : string
+   );
 end entity tb_cpu;
 
 architecture simulation of tb_cpu is
@@ -27,6 +30,9 @@ begin
    end process p_rstn;
 
    i_system : entity work.system
+      generic map (
+         G_ROM => G_ROM
+      )
       port map (
          clk_i  => clk,
          rstn_i => rstn

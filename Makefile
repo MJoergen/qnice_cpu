@@ -30,8 +30,10 @@ TEST_SOURCES += test/tdp_ram.vhd
 TEST_SOURCES += test/wb_tdp_mem.vhd
 TEST_SOURCES += test/system.vhd
 
-ASM = test/prog.asm
-ROM = test/prog.rom
+TEST = prog_simple
+
+ASM = test/$(TEST).asm
+ROM = test/$(TEST).rom
 ASSEMBLER = $(HOME)/git/sy2002/QNICE-FPGA/assembler/asm
 
 TB  = tb_cpu
@@ -52,7 +54,7 @@ show: $(WAVE)
 $(WAVE): $(SOURCES) $(TEST_SOURCES) $(ROM)
 	ghdl -i --std=08 $(SOURCES) $(TEST_SOURCES)
 	ghdl -m --std=08 -frelaxed $(TB)
-	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=3us
+	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=3us -gG_ROM=$(ROM)
 
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
@@ -69,7 +71,7 @@ hw/$(TOP).tcl: Makefile
 	echo "# This is a tcl command script for the Vivado tool chain" > $@
 	echo "read_vhdl -vhdl2008 { $(SOURCES) $(TEST_SOURCES) }" >> $@
 	echo "read_xdc hw/$(TOP).xdc" >> $@
-	echo "synth_design -top $(TOP) -part xc7a100tcsg324-1 -flatten_hierarchy none" >> $@
+	echo "synth_design -top $(TOP) -part xc7a100tcsg324-1 -flatten_hierarchy none -generic G_ROM=$(ROM)" >> $@
 	echo "write_checkpoint -force post_synth.dcp" >> $@
 	echo "opt_design" >> $@
 	echo "place_design" >> $@
@@ -84,8 +86,8 @@ synth: $(SOURCES) $(TEST_SOURCES) $(ROM)
 	yosys -m ghdl -p 'ghdl --std=08 -frelaxed $(TOP); synth_xilinx -top $(TOP) -edif $(TOP).edif' > yosys.log
 
 clean:
-	rm -rf test/prog.lis
-	rm -rf test/prog.out
+	rm -rf test/$(TEST).lis
+	rm -rf test/$(TEST).out
 	rm -rf work-obj08.cf
 	rm -rf $(WAVE)
 	rm -rf $(ROM)

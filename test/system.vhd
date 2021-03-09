@@ -2,6 +2,9 @@ library ieee;
 use ieee.std_logic_1164.all;
 
 entity system is
+   generic (
+      G_ROM : string
+   );
    port (
       clk_i  : in  std_logic;
       rstn_i : in  std_logic;
@@ -52,7 +55,7 @@ begin
 
    i_tdp_mem : entity work.wb_tdp_mem
       generic map (
-         G_INIT_FILE => "test/prog.rom",
+         G_INIT_FILE => G_ROM,
          G_RAM_STYLE => "block",
          G_ADDR_SIZE => 13,
          G_DATA_SIZE => 16
