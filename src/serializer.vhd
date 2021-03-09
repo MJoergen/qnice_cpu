@@ -16,15 +16,11 @@ entity serializer is
       decode_addr_i       : in  std_logic_vector(15 downto 0);
       decode_inst_i       : in  std_logic_vector(15 downto 0);
       decode_immediate_i  : in  std_logic_vector(15 downto 0);
-      decode_oper_i       : in  std_logic_vector(3 downto 0);
-      decode_ctrl_i       : in  std_logic_vector(5 downto 0);
       decode_src_addr_i   : in  std_logic_vector(3 downto 0);
       decode_src_val_i    : in  std_logic_vector(15 downto 0);
-      decode_src_mode_i   : in  std_logic_vector(1 downto 0);
       decode_src_imm_i    : in  std_logic;
       decode_dst_addr_i   : in  std_logic_vector(3 downto 0);
       decode_dst_val_i    : in  std_logic_vector(15 downto 0);
-      decode_dst_mode_i   : in  std_logic_vector(1 downto 0);
       decode_dst_imm_i    : in  std_logic;
       decode_res_reg_i    : in  std_logic_vector(3 downto 0);
       decode_r14_i        : in  std_logic_vector(15 downto 0);
@@ -36,15 +32,11 @@ entity serializer is
       exe_addr_o          : out std_logic_vector(15 downto 0);
       exe_inst_o          : out std_logic_vector(15 downto 0);
       exe_immediate_o     : out std_logic_vector(15 downto 0);
-      exe_oper_o          : out std_logic_vector(3 downto 0);
-      exe_ctrl_o          : out std_logic_vector(5 downto 0);
       exe_src_addr_o      : out std_logic_vector(3 downto 0);
       exe_src_val_o       : out std_logic_vector(15 downto 0);
-      exe_src_mode_o      : out std_logic_vector(1 downto 0);
       exe_src_imm_o       : out std_logic;
       exe_dst_addr_o      : out std_logic_vector(3 downto 0);
       exe_dst_val_o       : out std_logic_vector(15 downto 0);
-      exe_dst_mode_o      : out std_logic_vector(1 downto 0);
       exe_dst_imm_o       : out std_logic;
       exe_res_reg_o       : out std_logic_vector(3 downto 0);
       exe_r14_o           : out std_logic_vector(15 downto 0)
@@ -88,15 +80,11 @@ begin
    exe_addr_o       <= decode_addr_i;
    exe_inst_o       <= decode_inst_i;
    exe_immediate_o  <= decode_immediate_i;
-   exe_oper_o       <= decode_oper_i;
-   exe_ctrl_o       <= decode_ctrl_i;
    exe_src_addr_o   <= decode_src_addr_i;
    exe_src_val_o    <= decode_src_val_i;
-   exe_src_mode_o   <= decode_src_mode_i;
    exe_src_imm_o    <= decode_src_imm_i;
    exe_dst_addr_o   <= decode_dst_addr_i;
    exe_dst_val_o    <= decode_dst_val_i;
-   exe_dst_mode_o   <= decode_dst_mode_i;
    exe_dst_imm_o    <= decode_dst_imm_i;
    exe_res_reg_o    <= decode_res_reg_i;
    exe_r14_o        <= decode_r14_i;

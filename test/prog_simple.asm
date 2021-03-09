@@ -26,17 +26,16 @@ L_0   CMP R2, R8
       CMP  0x1234, @R1
       CMP  @R1, 0x2345
 
-      MOVE L_4, R13     ; Initialize stack pointer
-      ADD  R7, R8
-      RSUB L_3, 1
-
       ABRA L_1, 1
       HALT
 
 L_1   RBRA L_2, 1
       HALT
 
-L_2   HALT
+L_2   MOVE L_4, R13     ; Initialize stack pointer
+      ADD  R7, R8
+      RSUB L_3, 1
+      HALT
 
 L_3   MOVE    @R13++, R15
       .DW 0x0000

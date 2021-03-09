@@ -31,15 +31,11 @@ entity decode is
       exe_addr_o       : out std_logic_vector(15 downto 0);
       exe_inst_o       : out std_logic_vector(15 downto 0);
       exe_immediate_o  : out std_logic_vector(15 downto 0);
-      exe_oper_o       : out std_logic_vector(3 downto 0);
-      exe_ctrl_o       : out std_logic_vector(5 downto 0);
       exe_src_addr_o   : out std_logic_vector(3 downto 0);
       exe_src_val_o    : out std_logic_vector(15 downto 0);
-      exe_src_mode_o   : out std_logic_vector(1 downto 0);
       exe_src_imm_o    : out std_logic;
       exe_dst_addr_o   : out std_logic_vector(3 downto 0);
       exe_dst_val_o    : out std_logic_vector(15 downto 0);
-      exe_dst_mode_o   : out std_logic_vector(1 downto 0);
       exe_dst_imm_o    : out std_logic;
       exe_res_reg_o    : out std_logic_vector(3 downto 0);
       exe_r14_o        : out std_logic_vector(15 downto 0)
@@ -113,8 +109,8 @@ begin
 
    reads_from_dst  <= C_READS_FROM_DST (to_integer(fetch_data_i(R_OPCODE)));
    writes_to_dst   <= C_WRITES_TO_DST  (to_integer(fetch_data_i(R_OPCODE)));
-   src_memory      <= '0' when fetch_data_i(R_SRC_MODE) = C_MODE_REG else has_src_operand;
-   dst_memory      <= '0' when fetch_data_i(R_DST_MODE) = C_MODE_REG else has_dst_operand;
+   src_memory      <= '0' when (fetch_data_i(R_SRC_MODE) = C_MODE_REG or immediate_src = '1') else has_src_operand;
+   dst_memory      <= '0' when (fetch_data_i(R_DST_MODE) = C_MODE_REG or immediate_dst = '1') else has_dst_operand;
 
 
    ------------------------------------------------------------
@@ -180,19 +176,19 @@ begin
          if fetch_valid_i and fetch_ready_o then
             exe_valid_o      <= '1';
             exe_microcodes_o <= microcode_value;
-            exe_immediate_o  <= fetch_data_i(R_IMMEDIATE);
             exe_addr_o       <= fetch_addr_i;
+            exe_immediate_o  <= fetch_data_i(R_IMMEDIATE);
             exe_inst_o       <= fetch_data_i(R_INSTRUCTION);
-            exe_oper_o       <= fetch_data_i(R_OPCODE);
-            exe_ctrl_o       <= fetch_data_i(R_CTRL_CMD);
             exe_src_addr_o   <= reg_src_addr_o;
-            exe_src_mode_o   <= fetch_data_i(R_SRC_MODE);
             exe_src_imm_o    <= immediate_src;
             exe_dst_addr_o   <= reg_dst_addr_o;
-            exe_dst_mode_o   <= fetch_data_i(R_DST_MODE);
             exe_dst_imm_o    <= immediate_dst;
             exe_res_reg_o    <= reg_dst_addr_o;
             exe_r14_o        <= reg_r14_i;
+
+            -- Treat jumps as a special case
+            if fetch_data_i(R_OPCODE) = C_OPCODE_JMP then
+            end if;
          end if;
 
          if rst_i = '1' then
