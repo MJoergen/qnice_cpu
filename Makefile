@@ -30,7 +30,7 @@ TEST_SOURCES += test/tdp_ram.vhd
 TEST_SOURCES += test/wb_tdp_mem.vhd
 TEST_SOURCES += test/system.vhd
 
-TEST = prog_simple
+TEST ?= prog_simple
 
 ASM = test/$(TEST).asm
 ROM = test/$(TEST).rom
@@ -54,7 +54,7 @@ show: $(WAVE)
 $(WAVE): $(SOURCES) $(TEST_SOURCES) $(ROM)
 	ghdl -i --std=08 $(SOURCES) $(TEST_SOURCES)
 	ghdl -m --std=08 -frelaxed $(TB)
-	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=3us -gG_ROM=$(ROM)
+	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=3000us -gG_ROM=$(ROM)
 
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)

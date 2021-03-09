@@ -63,6 +63,8 @@ architecture synthesis of execute is
    signal alu_res_val   : std_logic_vector(16 downto 0);
    signal alu_res_flags : std_logic_vector(15 downto 0);
 
+   signal update_reg    : std_logic;
+
 begin
 
    ------------------------------------------------------------
@@ -152,13 +154,17 @@ begin
    -- Update register (combinatorial)
    ------------------------------------------------------------
 
+   update_reg <= dec_r14_i(to_integer(dec_inst_i(R_JMP_COND))) xor dec_inst_i(R_JMP_NEG)
+                 when dec_inst_i(R_OPCODE) = C_OPCODE_JMP
+              else '1';
+
    p_reg : process (all)
    begin
       reg_addr_o <= (others => '0');
       reg_val_o  <= (others => '0');
       reg_we_o   <= '0';
 
-      if dec_valid_i and dec_ready_o then
+      if dec_valid_i and dec_ready_o and update_reg then
          -- Handle pre- and post increment here.
          if (dec_inst_i(R_SRC_MODE) = C_MODE_POST or dec_inst_i(R_SRC_MODE) = C_MODE_PRE) and dec_src_imm_i = '0' then
             reg_addr_o <= dec_src_addr_i;
