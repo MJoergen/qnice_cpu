@@ -166,7 +166,8 @@ begin
 
       if dec_valid_i and dec_ready_o and update_reg then
          -- Handle pre- and post increment here.
-         if (dec_inst_i(R_SRC_MODE) = C_MODE_POST or dec_inst_i(R_SRC_MODE) = C_MODE_PRE) and dec_src_imm_i = '0' then
+         if (dec_inst_i(R_SRC_MODE) = C_MODE_POST or dec_inst_i(R_SRC_MODE) = C_MODE_PRE) and
+            dec_microcodes_i(C_MEM_READ_SRC) = '1' then
             reg_addr_o <= dec_src_addr_i;
             if dec_inst_i(R_SRC_MODE) = C_MODE_POST then
                reg_val_o <= dec_src_val_i + 1;
@@ -176,7 +177,8 @@ begin
             reg_we_o   <= '1';
          end if;
 
-         if (dec_inst_i(R_DST_MODE) = C_MODE_POST or dec_inst_i(R_DST_MODE) = C_MODE_PRE) and dec_dst_imm_i = '0' then
+         if (dec_inst_i(R_DST_MODE) = C_MODE_POST or dec_inst_i(R_DST_MODE) = C_MODE_PRE) and
+            (dec_microcodes_i(C_MEM_READ_DST) = '1' or dec_microcodes_i(C_MEM_WRITE) = '1') then
             reg_addr_o <= dec_dst_addr_i;
             if dec_inst_i(R_DST_MODE) = C_MODE_POST then
                reg_val_o <= dec_dst_val_i + 1;

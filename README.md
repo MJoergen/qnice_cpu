@@ -208,11 +208,11 @@ Then there are some additional signals
 
 |   Name    | LUTs | Regs | Slices |
 | --------- | ---- | ---- | ------ |
-| Fetch     |   35 |   51 |    22  |
-| Decode    |   14 |   61 |    25  |
-| Execute   |  457 |    0 |   156  |
-| Registers |   69 |   56 |    25  |
-| Memory    |   31 |   37 |    20  |
-| TOTAL     |  646 |  245 |   215  |
+| Fetch     |   45 |   86 |    30  |
+| Decode    |   53 |   82 |    44  |
+| Execute   |  489 |    0 |   171  |
+| Registers |   71 |   56 |    39  |
+| Memory    |   43 |   37 |    45  |
+| TOTAL     |  748 |  333 |   255  |
 
 
