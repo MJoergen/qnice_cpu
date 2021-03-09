@@ -72,7 +72,9 @@ package cpu_constants is
    constant C_MEM_DST     : integer := 0;   -- dst_memory
 
    -- Microcode value
-   constant C_LAST         : integer := 7;
+   constant C_LAST         : integer := 11;
+   constant C_REG_MOD_SRC  : integer := 7;   -- modify source register
+   constant C_REG_MOD_DST  : integer := 6;   -- modify destination register
    constant C_MEM_WAIT_SRC : integer := 5;   -- wait from source from memory
    constant C_MEM_WAIT_DST : integer := 4;   -- wait from destination from memory
    constant C_REG_WRITE    : integer := 3;   -- write to register
@@ -80,81 +82,17 @@ package cpu_constants is
    constant C_MEM_READ_DST : integer := 1;   -- memory to destination
    constant C_MEM_WRITE    : integer := 0;   -- write to memory
 
-   constant C_VAL_LAST         : std_logic_vector(7 downto 0) := (C_LAST         => '1', others => '0');
-   constant C_VAL_MEM_WAIT_SRC : std_logic_vector(7 downto 0) := (C_MEM_WAIT_SRC => '1', others => '0');
-   constant C_VAL_MEM_WAIT_DST : std_logic_vector(7 downto 0) := (C_MEM_WAIT_DST => '1', others => '0');
-   constant C_VAL_REG_WRITE    : std_logic_vector(7 downto 0) := (C_REG_WRITE    => '1', others => '0');
-   constant C_VAL_MEM_READ_SRC : std_logic_vector(7 downto 0) := (C_MEM_READ_SRC => '1', others => '0');
-   constant C_VAL_MEM_READ_DST : std_logic_vector(7 downto 0) := (C_MEM_READ_DST => '1', others => '0');
-   constant C_VAL_MEM_WRITE    : std_logic_vector(7 downto 0) := (C_MEM_WRITE    => '1', others => '0');
-
+   constant C_VAL_LAST         : std_logic_vector(11 downto 0) := (C_LAST         => '1', others => '0');
+   constant C_VAL_REG_MOD_SRC  : std_logic_vector(11 downto 0) := (C_REG_MOD_SRC  => '1', others => '0');
+   constant C_VAL_REG_MOD_DST  : std_logic_vector(11 downto 0) := (C_REG_MOD_DST  => '1', others => '0');
+   constant C_VAL_MEM_WAIT_SRC : std_logic_vector(11 downto 0) := (C_MEM_WAIT_SRC => '1', others => '0');
+   constant C_VAL_MEM_WAIT_DST : std_logic_vector(11 downto 0) := (C_MEM_WAIT_DST => '1', others => '0');
+   constant C_VAL_REG_WRITE    : std_logic_vector(11 downto 0) := (C_REG_WRITE    => '1', others => '0');
+   constant C_VAL_MEM_READ_SRC : std_logic_vector(11 downto 0) := (C_MEM_READ_SRC => '1', others => '0');
+   constant C_VAL_MEM_READ_DST : std_logic_vector(11 downto 0) := (C_MEM_READ_DST => '1', others => '0');
+   constant C_VAL_MEM_WRITE    : std_logic_vector(11 downto 0) := (C_MEM_WRITE    => '1', others => '0');
 
    procedure disassemble(pc : std_logic_vector; inst : std_logic_vector; operand : std_logic_vector);
-
-   type t_stage is record
-      -- Only valid after stage 1
-      valid              : std_logic;
-      pc_inst            : std_logic_vector(15 downto 0);
-
-      -- Only valid after stage 2
-      instruction        : std_logic_vector(15 downto 0);
-      inst_opcode        : std_logic_vector(3 downto 0);
-      inst_ctrl_cmd      : std_logic_vector(5 downto 0);
-      inst_src_mode      : std_logic_vector(1 downto 0);
-      inst_src_reg       : std_logic_vector(3 downto 0);
-      inst_dst_mode      : std_logic_vector(1 downto 0);
-      inst_dst_reg       : std_logic_vector(3 downto 0);
-      inst_jmp_mode      : std_logic_vector(1 downto 0);
-      inst_jmp_neg       : std_logic;
-      inst_jmp_cond      : std_logic_vector(2 downto 0);
-      src_reg_valid      : std_logic;
-      src_reg_wr_request : std_logic;
-      src_reg_wr_value   : std_logic_vector(15 downto 0);
-      src_mem_rd_request : std_logic;
-      src_mem_rd_address : std_logic_vector(15 downto 0);
-      dst_reg_valid      : std_logic;
-      dst_reg_wr_request : std_logic;
-      dst_reg_wr_value   : std_logic_vector(15 downto 0);
-      dst_mem_rd_request : std_logic;
-      dst_mem_rd_address : std_logic_vector(15 downto 0);
-      res_reg_wr_request : std_logic;
-      res_mem_wr_request : std_logic;
-      res_mem_wr_address : std_logic_vector(15 downto 0);
-      res_reg_sp_update  : std_logic;
-
-      -- Only valid after stage 3
-      src_operand        : std_logic_vector(15 downto 0);
-   end record t_stage;
-
-   constant C_STAGE_INIT : t_stage := (
-      valid              => '0',
-      pc_inst            => (others => '0'),
-      instruction        => (others => '0'),
-      inst_opcode        => (others => '0'),
-      inst_ctrl_cmd      => (others => '0'),
-      inst_src_mode      => (others => '0'),
-      inst_src_reg       => (others => '0'),
-      inst_dst_mode      => (others => '0'),
-      inst_dst_reg       => (others => '0'),
-      inst_jmp_mode      => (others => '0'),
-      inst_jmp_neg       => '0',
-      inst_jmp_cond      => (others => '0'),
-      src_reg_valid      => '0',
-      src_reg_wr_request => '0',
-      src_reg_wr_value   => (others => '0'),
-      src_mem_rd_request => '0',
-      src_mem_rd_address => (others => '0'),
-      dst_reg_valid      => '0',
-      dst_reg_wr_request => '0',
-      dst_reg_wr_value   => (others => '0'),
-      dst_mem_rd_request => '0',
-      dst_mem_rd_address => (others => '0'),
-      res_reg_wr_request => '0',
-      res_mem_wr_request => '0',
-      res_mem_wr_address => (others => '0'),
-      res_reg_sp_update  => '0',
-      src_operand        => (others => '0')
-   );
 
 end cpu_constants;
 

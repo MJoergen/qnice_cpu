@@ -27,7 +27,7 @@ entity decode is
       -- To Execute stage
       exe_valid_o      : out std_logic;
       exe_ready_i      : in  std_logic;
-      exe_microcodes_o : out std_logic_vector(23 downto 0);
+      exe_microcodes_o : out std_logic_vector(35 downto 0);
       exe_addr_o       : out std_logic_vector(15 downto 0);
       exe_inst_o       : out std_logic_vector(15 downto 0);
       exe_immediate_o  : out std_logic_vector(15 downto 0);
@@ -82,7 +82,7 @@ architecture synthesis of decode is
 
    -- microcode address bitmap:
    signal microcode_addr  : std_logic_vector(3 downto 0);
-   signal microcode_value : std_logic_vector(23 downto 0);
+   signal microcode_value : std_logic_vector(35 downto 0);
 
    signal pc_d : std_logic_vector(15 downto 0);
 

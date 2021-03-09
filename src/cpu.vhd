@@ -58,7 +58,7 @@ architecture synthesis of cpu is
    -- Decode to serializer
    signal decode2seq_valid      : std_logic;
    signal decode2seq_ready      : std_logic;
-   signal decode2seq_microcodes : std_logic_vector(23 downto 0);
+   signal decode2seq_microcodes : std_logic_vector(35 downto 0);
    signal decode2seq_addr       : std_logic_vector(15 downto 0);
    signal decode2seq_inst       : std_logic_vector(15 downto 0);
    signal decode2seq_immediate  : std_logic_vector(15 downto 0);
@@ -74,7 +74,7 @@ architecture synthesis of cpu is
    -- Serializer to execute
    signal seq2exe_valid       : std_logic;
    signal seq2exe_ready       : std_logic;
-   signal seq2exe_microcodes  : std_logic_vector(7 downto 0);
+   signal seq2exe_microcodes  : std_logic_vector(11 downto 0);
    signal seq2exe_addr        : std_logic_vector(15 downto 0);
    signal seq2exe_inst        : std_logic_vector(15 downto 0);
    signal seq2exe_immediate   : std_logic_vector(15 downto 0);
