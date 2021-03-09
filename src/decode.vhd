@@ -188,7 +188,11 @@ begin
 
             -- Treat jumps as a special case
             if fetch_data_i(R_OPCODE) = C_OPCODE_JMP then
-               exe_microcodes_o(C_REG_WRITE) <= '1';
+               if src_memory = '0' then
+                  exe_microcodes_o(C_REG_WRITE) <= '1';
+               else
+                  exe_microcodes_o(12+C_REG_WRITE) <= '1';
+               end if;
                exe_res_reg_o <= to_stdlogicvector(C_REG_PC, 4);
 
                -- Relative jump
