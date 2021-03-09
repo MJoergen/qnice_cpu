@@ -11,7 +11,11 @@
       MOVE 0x1234, R1   ; Write value 0x1234 to register 1
       ADD  0x2345, R1   ; Write value 0x3579 to register 1
 
-      CMP R2, R8
+      MOVE R15, R1   ; Write 0x000D to register 1
+      MOVE L_0, R15  ; Write 0x0010 to register 15
+      HALT
+
+L_0   CMP R2, R8
       CMP R3, @R8
       CMP @R4, R8
       CMP @R5, @R8

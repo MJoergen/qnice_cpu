@@ -88,6 +88,8 @@ architecture synthesis of decode is
    signal microcode_addr  : std_logic_vector(3 downto 0);
    signal microcode_value : std_logic_vector(23 downto 0);
 
+   signal pc_d : std_logic_vector(15 downto 0);
+
 begin
 
    ------------------------------------------------------------
@@ -141,13 +143,26 @@ begin
 
 
    ------------------------------------------------------------
+   -- Special consideration when reading from R15 (PC)
+   ------------------------------------------------------------
+
+   p_pc_d : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         pc_d <= fetch_addr_i;
+      end if;
+   end process p_pc_d;
+
+
+   ------------------------------------------------------------
    -- Generate combinatorial output values
    ------------------------------------------------------------
 
    reg_src_addr_o <= fetch_data_i(R_SRC_REG);
    reg_dst_addr_o <= fetch_data_i(R_DST_REG);
 
-   exe_src_val_o  <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
+   exe_src_val_o  <= pc_d+1 when exe_src_addr_o = C_REG_PC else
+                     reg_src_val_i; -- One clock cycle after reg_src_addr_o
    exe_dst_val_o  <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
 
 
