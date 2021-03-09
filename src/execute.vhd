@@ -146,7 +146,7 @@ begin
    ------------------------------------------------------------
 
    reg_r14_o    <= alu_res_flags;
-   reg_r14_we_o <= dec_valid_i and dec_ready_o;
+   reg_r14_we_o <= dec_valid_i and dec_ready_o and dec_microcodes_i(C_LAST);
 
 
    ------------------------------------------------------------
