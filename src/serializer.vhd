@@ -50,36 +50,31 @@ end entity serializer;
 architecture synthesis of serializer is
 
    signal index : integer range 0 to 3 := 0;
-   signal valid : std_logic := '0';
 
 begin
 
-   decode_ready_o <= '1' when exe_microcodes_o(C_LAST) = '1' else not valid;
+   decode_ready_o <= '0' when decode_valid_i = '1' and exe_microcodes_o(C_LAST) = '0' else
+                     '1';
 
    p_index : process (clk_i)
    begin
       if rising_edge(clk_i) then
          if exe_valid_o and exe_ready_i then
             if decode_ready_o then
-               valid <= '0';
+               index <= 0;
             else
                index <= index + 1;
             end if;
          end if;
 
-         if decode_valid_i and decode_ready_o then
-            valid <= '1';
-            index <= 0;
-         end if;
-
          if rst_i then
-            valid <= '0';
+            index <= 0;
          end if;
       end if;
    end process p_index;
 
 
-   exe_valid_o      <= valid;
+   exe_valid_o      <= decode_valid_i;
    exe_microcodes_o <= decode_microcodes_i(12*index+11 downto 12*index);
    exe_addr_o       <= decode_addr_i;
    exe_inst_o       <= decode_inst_i;

@@ -4,22 +4,22 @@ use ieee.numeric_std_unsigned.all;
 
 entity icache is
    port (
-      clk_i            : in  std_logic;
-      rst_i            : in  std_logic;
+      clk_i           : in  std_logic;
+      rst_i           : in  std_logic;
 
       -- From Instruction fetch
-      fetch_valid_i    : in  std_logic;
-      fetch_ready_o    : out std_logic;
-      fetch_addr_i     : in  std_logic_vector(15 downto 0);
-      fetch_data_i     : in  std_logic_vector(15 downto 0);
+      fetch_valid_i   : in  std_logic;
+      fetch_ready_o   : out std_logic;
+      fetch_addr_i    : in  std_logic_vector(15 downto 0);
+      fetch_data_i    : in  std_logic_vector(15 downto 0);
 
       -- To Decode
-      decode_valid_o   : out std_logic;
-      decode_ready_i   : in  std_logic;
-      decode_double_o  : out std_logic;
-      decode_addr_o    : out std_logic_vector(15 downto 0);
-      decode_data_o    : out std_logic_vector(31 downto 0);
-      decode_double_i  : in  std_logic
+      decode_valid_o  : out std_logic;
+      decode_ready_i  : in  std_logic;
+      decode_double_o : out std_logic;
+      decode_addr_o   : out std_logic_vector(15 downto 0);
+      decode_data_o   : out std_logic_vector(31 downto 0);
+      decode_double_i : in  std_logic
    );
 end entity icache;
 
@@ -33,7 +33,7 @@ architecture synthesis of icache is
 
 begin
 
-   decode_valid_o  <= '1' when state = ONE_ST or state = TWO_ST else '0';
+   decode_valid_o  <= not rst_i when state = ONE_ST or state = TWO_ST else '0';
    decode_double_o <= '1' when state = TWO_ST else '0';
    decode_addr_o   <= addr(15 downto 0);
    decode_data_o   <= data;
