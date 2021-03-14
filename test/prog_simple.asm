@@ -34,7 +34,7 @@ L_1   RBRA L_2, 1
 
 L_2   MOVE L_4, R13     ; Initialize stack pointer
       ADD  R7, R8
-      RSUB L_3, 1
+      ASUB L_3, 1
       HALT
 
 L_3   MOVE    @R13++, R15

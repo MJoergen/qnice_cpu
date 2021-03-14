@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Tue Mar  9 14:46:13 2021
+[*] Tue Mar  9 15:35:38 2021
 [*]
 [dumpfile] "/home/mike/git/MJoergen/qnice_cpu/test/tb_cpu.ghw"
-[dumpfile_mtime] "Tue Mar  9 14:36:11 2021"
-[dumpfile_size] 10858664
+[dumpfile_mtime] "Tue Mar  9 15:32:16 2021"
+[dumpfile_size] 302952
 [savefile] "/home/mike/git/MJoergen/qnice_cpu/test/tb_cpu.gtkw"
-[timestart] 845293500000
+[timestart] 2872700000
 [size] 1920 1132
-[pos] -1 -1
-*-25.166620 845394000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -1921 -12
+*-25.051188 2994000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_cpu.
 [treeopen] top.tb_cpu.i_system.
@@ -223,6 +223,8 @@ top.tb_cpu.i_system.i_cpu.i_execute.reg_we_o
 top.tb_cpu.i_system.i_cpu.i_execute.reg_r14_we_o
 @22
 #{top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[16:0]} top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[16] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[15] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[14] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[13] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[12] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[11] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[10] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[9] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[8] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[7] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[6] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[5] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[4] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[3] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[2] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[1] top.tb_cpu.i_system.i_cpu.i_execute.alu_res_val[0]
+@29
+top.tb_cpu.i_system.i_cpu.i_execute.update_reg
 @1000200
 -execute
 @c00200

@@ -32,9 +32,11 @@ entity decode is
       exe_inst_o       : out std_logic_vector(15 downto 0);
       exe_immediate_o  : out std_logic_vector(15 downto 0);
       exe_src_addr_o   : out std_logic_vector(3 downto 0);
+      exe_src_mode_o   : out std_logic_vector(1 downto 0);
       exe_src_val_o    : out std_logic_vector(15 downto 0);
       exe_src_imm_o    : out std_logic;
       exe_dst_addr_o   : out std_logic_vector(3 downto 0);
+      exe_dst_mode_o   : out std_logic_vector(1 downto 0);
       exe_dst_val_o    : out std_logic_vector(15 downto 0);
       exe_dst_imm_o    : out std_logic;
       exe_res_reg_o    : out std_logic_vector(3 downto 0);
@@ -155,7 +157,8 @@ begin
    ------------------------------------------------------------
 
    reg_src_addr_o <= fetch_data_i(R_SRC_REG);
-   reg_dst_addr_o <= fetch_data_i(R_DST_REG);
+   reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data_i(R_OPCODE) = C_OPCODE_JMP else
+                     fetch_data_i(R_DST_REG);
 
    exe_src_val_o  <= pc_d+1 when exe_src_addr_o = C_REG_PC else
                      reg_src_val_i; -- One clock cycle after reg_src_addr_o
@@ -180,20 +183,47 @@ begin
             exe_immediate_o  <= fetch_data_i(R_IMMEDIATE);
             exe_inst_o       <= fetch_data_i(R_INSTRUCTION);
             exe_src_addr_o   <= reg_src_addr_o;
+            exe_src_mode_o   <= fetch_data_i(R_SRC_MODE);
             exe_src_imm_o    <= immediate_src;
             exe_dst_addr_o   <= reg_dst_addr_o;
+            exe_dst_mode_o   <= fetch_data_i(R_DST_MODE);
             exe_dst_imm_o    <= immediate_dst;
             exe_res_reg_o    <= reg_dst_addr_o;
             exe_r14_o        <= reg_r14_i;
 
             -- Treat jumps as a special case
             if fetch_data_i(R_OPCODE) = C_OPCODE_JMP then
-               if src_memory = '0' then
-                  exe_microcodes_o(C_REG_WRITE) <= '1';
-               else
-                  exe_microcodes_o(12+C_REG_WRITE) <= '1';
-               end if;
+               -- Write new address to PC
                exe_res_reg_o <= to_stdlogicvector(C_REG_PC, 4);
+               if src_memory = '0' then
+                  exe_microcodes_o <= std_logic_vector'(
+                                      C_VAL_LAST &
+                                      C_VAL_LAST &
+                                      (C_VAL_LAST or C_VAL_REG_WRITE));
+               else
+                  exe_microcodes_o <= std_logic_vector'(
+                                      C_VAL_LAST &
+                                      (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
+                                      (C_VAL_MEM_READ_SRC or C_VAL_REG_MOD_SRC));
+               end if;
+
+               -- Subroutine call
+               if fetch_data_i(R_JMP_MODE) = C_JMP_ASUB or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB then
+                  -- Artifically introduce a MOVE R15, @--R13
+                  exe_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4);
+                  exe_dst_mode_o <= to_stdlogicvector(C_MODE_PRE, 2);
+                  if src_memory = '0' then
+                     exe_microcodes_o <= std_logic_vector'(
+                                         C_VAL_LAST &
+                                         (C_VAL_LAST or C_VAL_REG_WRITE) &
+                                         (C_VAL_REG_MOD_DST or C_VAL_MEM_WRITE));
+                  else
+                     exe_microcodes_o <= std_logic_vector'(
+                                         (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
+                                         (C_VAL_MEM_READ_SRC or C_VAL_REG_MOD_SRC) &
+                                         (C_VAL_REG_MOD_DST or C_VAL_MEM_WRITE));
+                  end if;
+               end if;
 
                -- Relative jump
                if fetch_data_i(R_JMP_MODE) = C_JMP_RBRA or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB then

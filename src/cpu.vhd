@@ -63,9 +63,11 @@ architecture synthesis of cpu is
    signal decode2seq_inst       : std_logic_vector(15 downto 0);
    signal decode2seq_immediate  : std_logic_vector(15 downto 0);
    signal decode2seq_src_addr   : std_logic_vector(3 downto 0);
+   signal decode2seq_src_mode   : std_logic_vector(1 downto 0);
    signal decode2seq_src_val    : std_logic_vector(15 downto 0);
    signal decode2seq_src_imm    : std_logic;
    signal decode2seq_dst_addr   : std_logic_vector(3 downto 0);
+   signal decode2seq_dst_mode   : std_logic_vector(1 downto 0);
    signal decode2seq_dst_val    : std_logic_vector(15 downto 0);
    signal decode2seq_dst_imm    : std_logic;
    signal decode2seq_res_reg    : std_logic_vector(3 downto 0);
@@ -79,9 +81,11 @@ architecture synthesis of cpu is
    signal seq2exe_inst        : std_logic_vector(15 downto 0);
    signal seq2exe_immediate   : std_logic_vector(15 downto 0);
    signal seq2exe_src_addr    : std_logic_vector(3 downto 0);
+   signal seq2exe_src_mode    : std_logic_vector(1 downto 0);
    signal seq2exe_src_val     : std_logic_vector(15 downto 0);
    signal seq2exe_src_imm     : std_logic;
    signal seq2exe_dst_addr    : std_logic_vector(3 downto 0);
+   signal seq2exe_dst_mode    : std_logic_vector(1 downto 0);
    signal seq2exe_dst_val     : std_logic_vector(15 downto 0);
    signal seq2exe_dst_imm     : std_logic;
    signal seq2exe_res_reg     : std_logic_vector(3 downto 0);
@@ -196,9 +200,11 @@ begin
          exe_inst_o       => decode2seq_inst,
          exe_immediate_o  => decode2seq_immediate,
          exe_src_addr_o   => decode2seq_src_addr,
+         exe_src_mode_o   => decode2seq_src_mode,
          exe_src_val_o    => decode2seq_src_val,
          exe_src_imm_o    => decode2seq_src_imm,
          exe_dst_addr_o   => decode2seq_dst_addr,
+         exe_dst_mode_o   => decode2seq_dst_mode,
          exe_dst_val_o    => decode2seq_dst_val,
          exe_dst_imm_o    => decode2seq_dst_imm,
          exe_res_reg_o    => decode2seq_res_reg,
@@ -217,9 +223,11 @@ begin
          decode_inst_i       => decode2seq_inst,
          decode_immediate_i  => decode2seq_immediate,
          decode_src_addr_i   => decode2seq_src_addr,
+         decode_src_mode_i   => decode2seq_src_mode,
          decode_src_val_i    => decode2seq_src_val,
          decode_src_imm_i    => decode2seq_src_imm,
          decode_dst_addr_i   => decode2seq_dst_addr,
+         decode_dst_mode_i   => decode2seq_dst_mode,
          decode_dst_val_i    => decode2seq_dst_val,
          decode_dst_imm_i    => decode2seq_dst_imm,
          decode_res_reg_i    => decode2seq_res_reg,
@@ -231,9 +239,11 @@ begin
          exe_inst_o          => seq2exe_inst,
          exe_immediate_o     => seq2exe_immediate,
          exe_src_addr_o      => seq2exe_src_addr,
+         exe_src_mode_o      => seq2exe_src_mode,
          exe_src_val_o       => seq2exe_src_val,
          exe_src_imm_o       => seq2exe_src_imm,
          exe_dst_addr_o      => seq2exe_dst_addr,
+         exe_dst_mode_o      => seq2exe_dst_mode,
          exe_dst_val_o       => seq2exe_dst_val,
          exe_dst_imm_o       => seq2exe_dst_imm,
          exe_res_reg_o       => seq2exe_res_reg,
@@ -273,9 +283,11 @@ begin
          dec_inst_i       => seq2exe_inst,
          dec_immediate_i  => seq2exe_immediate,
          dec_src_addr_i   => seq2exe_src_addr,
+         dec_src_mode_i   => seq2exe_src_mode,
          dec_src_val_i    => seq2exe_src_val,
          dec_src_imm_i    => seq2exe_src_imm,
          dec_dst_addr_i   => seq2exe_dst_addr,
+         dec_dst_mode_i   => seq2exe_dst_mode,
          dec_dst_val_i    => seq2exe_dst_val,
          dec_dst_imm_i    => seq2exe_dst_imm,
          dec_res_reg_i    => seq2exe_res_reg,

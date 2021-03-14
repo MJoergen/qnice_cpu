@@ -17,9 +17,11 @@ entity execute is
       dec_inst_i       : in  std_logic_vector(15 downto 0);
       dec_immediate_i  : in  std_logic_vector(15 downto 0);
       dec_src_addr_i   : in  std_logic_vector(3 downto 0);
+      dec_src_mode_i   : in  std_logic_vector(1 downto 0);
       dec_src_val_i    : in  std_logic_vector(15 downto 0);
       dec_src_imm_i    : in  std_logic;
       dec_dst_addr_i   : in  std_logic_vector(3 downto 0);
+      dec_dst_mode_i   : in  std_logic_vector(1 downto 0);
       dec_dst_val_i    : in  std_logic_vector(15 downto 0);
       dec_dst_imm_i    : in  std_logic;
       dec_res_reg_i    : in  std_logic_vector(3 downto 0);
@@ -200,10 +202,10 @@ begin
 
       if dec_valid_i and dec_ready_o and update_reg then
          -- Handle pre- and post increment here.
-         if (dec_inst_i(R_SRC_MODE) = C_MODE_POST or dec_inst_i(R_SRC_MODE) = C_MODE_PRE) and
-            dec_microcodes_i(C_REG_MOD_SRC) = '1' then
+         if dec_microcodes_i(C_REG_MOD_SRC) = '1' and
+            (dec_src_mode_i = C_MODE_POST or dec_src_mode_i = C_MODE_PRE) then
             reg_addr_o <= dec_src_addr_i;
-            if dec_inst_i(R_SRC_MODE) = C_MODE_POST then
+            if dec_src_mode_i = C_MODE_POST then
                reg_val_o <= dec_src_val + 1;
             else
                reg_val_o <= dec_src_val - 1;
@@ -211,10 +213,10 @@ begin
             reg_we_o   <= '1';
          end if;
 
-         if (dec_inst_i(R_DST_MODE) = C_MODE_POST or dec_inst_i(R_DST_MODE) = C_MODE_PRE) and
-            dec_microcodes_i(C_REG_MOD_DST) = '1' then
+         if dec_microcodes_i(C_REG_MOD_DST) = '1' and
+            (dec_dst_mode_i = C_MODE_POST or dec_dst_mode_i = C_MODE_PRE) then
             reg_addr_o <= dec_dst_addr_i;
-            if dec_inst_i(R_DST_MODE) = C_MODE_POST then
+            if dec_dst_mode_i = C_MODE_POST then
                reg_val_o <= dec_dst_val + 1;
             else
                reg_val_o <= dec_dst_val - 1;
@@ -242,12 +244,15 @@ begin
    -- Update memory
    ------------------------------------------------------------
 
-   mem_req_valid_o <= dec_valid_i and not (wait_for_mem_src or wait_for_mem_dst) and or(dec_microcodes_i(2 downto 0));
+   mem_req_valid_o <= dec_valid_i and dec_ready_o and or(mem_req_op_o);
    mem_req_op_o    <= dec_microcodes_i(2 downto 0);
-   mem_req_data_o  <= alu_res_val(15 downto 0);
-   mem_req_addr_o  <= dec_src_val-1 when dec_microcodes_i(C_MEM_READ_SRC) = '1' and dec_inst_i(R_SRC_MODE) = C_MODE_PRE else
+   mem_req_data_o  <= dec_addr_i + 2 when mem_req_op_o /= 0 and dec_inst_i(R_OPCODE) = C_OPCODE_JMP and
+                      (dec_src_imm_i = '1' or dec_dst_imm_i = '1') else
+                      dec_addr_i + 1 when mem_req_op_o /= 0 and dec_inst_i(R_OPCODE) = C_OPCODE_JMP else
+                      alu_res_val(15 downto 0);
+   mem_req_addr_o  <= dec_src_val-1 when dec_microcodes_i(C_MEM_READ_SRC) = '1' and dec_src_mode_i = C_MODE_PRE else
                       dec_src_val   when dec_microcodes_i(C_MEM_READ_SRC) = '1' else
-                      dec_dst_val-1 when dec_microcodes_i(C_MEM_READ_SRC) = '0' and dec_inst_i(R_DST_MODE) = C_MODE_PRE else
+                      dec_dst_val-1 when dec_microcodes_i(C_MEM_READ_SRC) = '0' and dec_dst_mode_i = C_MODE_PRE else
                       dec_dst_val;
 
 end architecture synthesis;
