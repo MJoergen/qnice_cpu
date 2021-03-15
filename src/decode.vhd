@@ -88,6 +88,9 @@ architecture synthesis of decode is
 
    signal pc_d : std_logic_vector(15 downto 0);
 
+   signal fetch_data   : std_logic_vector(31 downto 0);
+   signal fetch_data_d : std_logic_vector(31 downto 0);
+
 begin
 
    ------------------------------------------------------------
@@ -153,12 +156,29 @@ begin
 
 
    ------------------------------------------------------------
+   -- Handle bypass
+   ------------------------------------------------------------
+
+   p_bypass : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if fetch_valid_i and fetch_ready_o then
+            fetch_data_d <= fetch_data_i;
+         end if;
+      end if;
+   end process p_bypass;
+
+   fetch_data <= fetch_data_d when fetch_ready_o = '0' else
+                 fetch_data_i;
+
+
+   ------------------------------------------------------------
    -- Generate combinatorial output values
    ------------------------------------------------------------
 
-   reg_src_addr_o <= fetch_data_i(R_SRC_REG);
-   reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data_i(R_OPCODE) = C_OPCODE_JMP else
-                     fetch_data_i(R_DST_REG);
+   reg_src_addr_o <= fetch_data(R_SRC_REG);
+   reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data(R_OPCODE) = C_OPCODE_JMP else
+                     fetch_data(R_DST_REG);
 
    exe_src_val_o  <= pc_d+1 when exe_src_addr_o = C_REG_PC else
                      reg_src_val_i; -- One clock cycle after reg_src_addr_o
@@ -176,6 +196,7 @@ begin
             exe_valid_o <= '0';
          end if;
 
+         exe_r14_o        <= reg_r14_i;
          if fetch_valid_i and fetch_ready_o then
             exe_valid_o      <= '1';
             exe_microcodes_o <= microcode_value;
@@ -189,7 +210,6 @@ begin
             exe_dst_mode_o   <= fetch_data_i(R_DST_MODE);
             exe_dst_imm_o    <= immediate_dst;
             exe_res_reg_o    <= reg_dst_addr_o;
-            exe_r14_o        <= reg_r14_i;
 
             -- Treat jumps as a special case
             if fetch_data_i(R_OPCODE) = C_OPCODE_JMP then
