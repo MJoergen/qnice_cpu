@@ -30,6 +30,8 @@ architecture synthesis of dp_ram is
    attribute ram_style : string;
    attribute ram_style of dp_ram_r : signal is G_RAM_STYLE;
 
+   signal rd_data : std_logic_vector(G_DATA_SIZE-1 downto 0);
+
 begin
 
    p_write : process (clk_i)
@@ -50,12 +52,20 @@ begin
    end process p_write;
 
 
-   p_read : process (clk_i)
+   p_read_falling : process (clk_i)
+   begin
+      if falling_edge(clk_i) then
+         rd_data <= dp_ram_r(to_integer(rd_addr_i));
+      end if;
+   end process p_read_falling;
+
+   p_read_rising : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         rd_data_o <= dp_ram_r(to_integer(rd_addr_i));
+         rd_data_o <= rd_data;
       end if;
-   end process p_read;
+   end process p_read_rising;
+
 
 end architecture synthesis;
 
