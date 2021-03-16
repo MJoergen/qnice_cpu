@@ -92,31 +92,6 @@ architecture synthesis of decode is
 begin
 
    ------------------------------------------------------------
-   -- Instruction format decoding
-   ------------------------------------------------------------
-
-   has_src_operand <= C_HAS_SRC_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
-   has_dst_operand <= C_HAS_DST_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
-
-   -- Special case when src = @PC++
-   immediate_src <= has_src_operand when
-                    fetch_data_i(R_SRC_REG)  = C_REG_PC and
-                    fetch_data_i(R_SRC_MODE) = C_MODE_POST
-               else '0';
-
-   -- Special case when dst = @PC++
-   immediate_dst <= has_dst_operand when
-                    fetch_data_i(R_DST_REG)  = C_REG_PC and
-                    fetch_data_i(R_DST_MODE) = C_MODE_POST
-               else '0';
-
-   reads_from_dst  <= C_READS_FROM_DST (to_integer(fetch_data_i(R_OPCODE)));
-   writes_to_dst   <= C_WRITES_TO_DST  (to_integer(fetch_data_i(R_OPCODE)));
-   src_memory      <= '0' when (fetch_data_i(R_SRC_MODE) = C_MODE_REG or immediate_src = '1') else has_src_operand;
-   dst_memory      <= '0' when (fetch_data_i(R_DST_MODE) = C_MODE_REG or immediate_dst = '1') else has_dst_operand;
-
-
-   ------------------------------------------------------------
    -- Back-pressure to Fetch module
    ------------------------------------------------------------
 
@@ -126,23 +101,7 @@ begin
 
 
    ------------------------------------------------------------
-   -- Microcode generation
-   ------------------------------------------------------------
-
-   microcode_addr(C_READ_DST)  <= reads_from_dst;
-   microcode_addr(C_WRITE_DST) <= writes_to_dst;
-   microcode_addr(C_MEM_SRC)   <= src_memory;
-   microcode_addr(C_MEM_DST)   <= dst_memory;
-
-   i_microcode : entity work.microcode
-      port map (
-         addr_i  => microcode_addr,
-         value_o => microcode_value
-      ); -- i_microcode
-
-
-   ------------------------------------------------------------
-   -- Handle bypass
+   -- Hold previous value of input
    ------------------------------------------------------------
 
    p_bypass : process (clk_i)
@@ -169,6 +128,47 @@ begin
    exe_src_val_o  <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
    exe_dst_val_o  <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
    exe_r14_o      <= reg_r14_i;
+
+
+   ------------------------------------------------------------
+   -- Instruction format decoding
+   ------------------------------------------------------------
+
+   has_src_operand <= C_HAS_SRC_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
+   has_dst_operand <= C_HAS_DST_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
+
+   -- Special case when src = @PC++
+   immediate_src <= has_src_operand when
+                    fetch_data_i(R_SRC_REG)  = C_REG_PC and
+                    fetch_data_i(R_SRC_MODE) = C_MODE_POST
+               else '0';
+
+   -- Special case when dst = @PC++
+   immediate_dst <= has_dst_operand when
+                    fetch_data_i(R_DST_REG)  = C_REG_PC and
+                    fetch_data_i(R_DST_MODE) = C_MODE_POST
+               else '0';
+
+   reads_from_dst  <= C_READS_FROM_DST (to_integer(fetch_data_i(R_OPCODE)));
+   writes_to_dst   <= C_WRITES_TO_DST  (to_integer(fetch_data_i(R_OPCODE)));
+   src_memory      <= '0' when (fetch_data_i(R_SRC_MODE) = C_MODE_REG or immediate_src = '1') else has_src_operand;
+   dst_memory      <= '0' when (fetch_data_i(R_DST_MODE) = C_MODE_REG or immediate_dst = '1') else has_dst_operand;
+
+
+   ------------------------------------------------------------
+   -- Microcode generation
+   ------------------------------------------------------------
+
+   microcode_addr(C_READ_DST)  <= reads_from_dst;
+   microcode_addr(C_WRITE_DST) <= writes_to_dst;
+   microcode_addr(C_MEM_SRC)   <= src_memory;
+   microcode_addr(C_MEM_DST)   <= dst_memory;
+
+   i_microcode : entity work.microcode
+      port map (
+         addr_i  => microcode_addr,
+         value_o => microcode_value
+      ); -- i_microcode
 
 
    ------------------------------------------------------------
