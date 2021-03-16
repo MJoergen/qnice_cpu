@@ -17,13 +17,11 @@ entity tdp_ram is
       a_addr_i      : in  std_logic_vector(G_ADDR_SIZE-1 downto 0);
       a_wr_en_i     : in  std_logic;
       a_wr_data_i   : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
-      a_rd_en_i     : in  std_logic;
       a_rd_data_o   : out std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0');
       -- Port B
       b_addr_i      : in  std_logic_vector(G_ADDR_SIZE-1 downto 0);
       b_wr_en_i     : in  std_logic;
       b_wr_data_i   : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
-      b_rd_en_i     : in  std_logic;
       b_rd_data_o   : out std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0')
    );
 end entity tdp_ram;
@@ -62,9 +60,7 @@ begin
    p_a : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if a_rd_en_i = '1' then
-            a_rd_data_o <= tdp_ram_r(to_integer(a_addr_i));
-         end if;
+         a_rd_data_o <= tdp_ram_r(to_integer(a_addr_i));
          if a_wr_en_i = '1' then
             tdp_ram_r(to_integer(a_addr_i)) := a_wr_data_i;
          end if;
@@ -74,9 +70,7 @@ begin
    p_b : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if b_rd_en_i = '1' then
-            b_rd_data_o <= tdp_ram_r(to_integer(b_addr_i));
-         end if;
+         b_rd_data_o <= tdp_ram_r(to_integer(b_addr_i));
          if b_wr_en_i = '1' then
             tdp_ram_r(to_integer(b_addr_i)) := b_wr_data_i;
          end if;
