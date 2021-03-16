@@ -47,6 +47,8 @@ entity execute is
       reg_we_o         : out std_logic;
       reg_addr_o       : out std_logic_vector(3 downto 0);
       reg_val_o        : out std_logic_vector(15 downto 0);
+      fetch_valid_o    : out std_logic;
+      fetch_addr_o     : out std_logic_vector(15 downto 0);
 
       inst_done_o      : out std_logic
    );
@@ -199,6 +201,15 @@ begin
          reg_we_o   <= '1';
       end if;
    end process p_reg;
+
+
+   ------------------------------------------------------------
+   -- Update memory
+   ------------------------------------------------------------
+
+   -- Writes to R15 are forwarded back to the fetch stage as well.
+   fetch_valid_o <= and(reg_addr_o) and reg_we_o;
+   fetch_addr_o  <= reg_val_o;
 
 
    ------------------------------------------------------------

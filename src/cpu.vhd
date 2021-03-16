@@ -31,7 +31,7 @@ end entity cpu;
 
 architecture synthesis of cpu is
 
-   -- From FETCH to DECODE
+   -- FETCH to DECODE
    signal fetch2decode_valid          : std_logic;
    signal fetch2decode_ready          : std_logic;
    signal fetch2decode_double_valid   : std_logic;
@@ -57,6 +57,10 @@ architecture synthesis of cpu is
    signal decode2exe_res_reg          : std_logic_vector(3 downto 0);
    signal decode2exe_r14              : std_logic_vector(15 downto 0);
 
+   -- EXECUTE to FETCH
+   signal exe2fetch_valid             : std_logic;
+   signal exe2fetch_addr              : std_logic_vector(15 downto 0);
+
    -- DECODE to register file
    signal decode2reg_src_reg          : std_logic_vector(3 downto 0);
    signal decode2reg_src_val          : std_logic_vector(15 downto 0);
@@ -71,7 +75,7 @@ architecture synthesis of cpu is
    signal exe2mem_req_addr            : std_logic_vector(15 downto 0);
    signal exe2mem_req_data            : std_logic_vector(15 downto 0);
 
-   -- Memory to execute
+   -- Memory to EXECUTE
    signal mem2exe_src_valid           : std_logic;
    signal mem2exe_src_ready           : std_logic;
    signal mem2exe_src_data            : std_logic_vector(15 downto 0);
@@ -79,18 +83,18 @@ architecture synthesis of cpu is
    signal mem2exe_dst_ready           : std_logic;
    signal mem2exe_dst_data            : std_logic_vector(15 downto 0);
 
-   -- Execute to registers
+   -- EXECUTE to registers
    signal exe2reg_r14_we              : std_logic;
    signal exe2reg_r14                 : std_logic_vector(15 downto 0);
    signal exe2reg_we                  : std_logic;
    signal exe2reg_addr                : std_logic_vector(3 downto 0);
    signal exe2reg_val                 : std_logic_vector(15 downto 0);
 
-   -- Execute to fetch
-   signal exe2fetch_valid             : std_logic;
-   signal exe2fetch_addr              : std_logic_vector(15 downto 0);
-
 begin
+
+   ------------------------------------------------------------
+   -- Instruction FETCH
+   ------------------------------------------------------------
 
    i_fetch_cache : entity work.fetch_cache
       port map (
@@ -112,6 +116,10 @@ begin
          m_double_i  => fetch2decode_double_consume
       ); -- i_fetch_cache
 
+
+   ------------------------------------------------------------
+   -- Instruction DECODE
+   ------------------------------------------------------------
 
    i_decode_serialized : entity work.decode_serialized
       port map (
@@ -147,9 +155,9 @@ begin
       ); -- i_decode_serialized
 
 
-   -- Writes to R15 are forwarded back to the fetch stage as well.
-   exe2fetch_valid <= and(exe2reg_addr) and exe2reg_we;
-   exe2fetch_addr  <= exe2reg_val;
+   ------------------------------------------------------------
+   -- Instruction EXECUTE
+   ------------------------------------------------------------
 
    i_execute : entity work.execute
       port map (
@@ -182,6 +190,8 @@ begin
          mem_dst_valid_i  => mem2exe_dst_valid,
          mem_dst_ready_o  => mem2exe_dst_ready,
          mem_dst_data_i   => mem2exe_dst_data,
+         fetch_valid_o    => exe2fetch_valid,
+         fetch_addr_o     => exe2fetch_addr,
          reg_r14_we_o     => exe2reg_r14_we,
          reg_r14_o        => exe2reg_r14,
          reg_we_o         => exe2reg_we,
@@ -190,50 +200,63 @@ begin
       ); -- i_execute
 
 
+   ------------------------------------------------------------
+   -- Register file
+   ------------------------------------------------------------
+
    i_registers : entity work.registers
       generic map (
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH
       )
       port map (
-         clk_i         => clk_i,
-         rst_i         => rst_i,
-         src_reg_i     => decode2reg_src_reg,
-         src_val_o     => decode2reg_src_val,
-         dst_reg_i     => decode2reg_dst_reg,
-         dst_val_o     => decode2reg_dst_val,
-         r14_o         => reg2decode_r14,
-         wr_r14_en_i   => exe2reg_r14_we,
-         wr_r14_i      => exe2reg_r14,
-         wr_en_i       => exe2reg_we,
-         wr_addr_i     => exe2reg_addr,
-         wr_val_i      => exe2reg_val
+         clk_i       => clk_i,
+         rst_i       => rst_i,
+         src_reg_i   => decode2reg_src_reg,
+         src_val_o   => decode2reg_src_val,
+         dst_reg_i   => decode2reg_dst_reg,
+         dst_val_o   => decode2reg_dst_val,
+         r14_o       => reg2decode_r14,
+         wr_r14_en_i => exe2reg_r14_we,
+         wr_r14_i    => exe2reg_r14,
+         wr_en_i     => exe2reg_we,
+         wr_addr_i   => exe2reg_addr,
+         wr_val_i    => exe2reg_val
       ); -- i_registers
 
 
+   ------------------------------------------------------------
+   -- Memory interface
+   ------------------------------------------------------------
+
    i_memory : entity work.memory
       port map (
-         clk_i           => clk_i,
-         rst_i           => rst_i,
-         mreq_valid_i    => exe2mem_req_valid,
-         mreq_ready_o    => exe2mem_req_ready,
-         mreq_op_i       => exe2mem_req_op,
-         mreq_addr_i     => exe2mem_req_addr,
-         mreq_data_i     => exe2mem_req_data,
-         msrc_valid_o    => mem2exe_src_valid,
-         msrc_ready_i    => mem2exe_src_ready,
-         msrc_data_o     => mem2exe_src_data,
-         mdst_valid_o    => mem2exe_dst_valid,
-         mdst_ready_i    => mem2exe_dst_ready,
-         mdst_data_o     => mem2exe_dst_data,
-         wb_cyc_o        => wbd_cyc_o,
-         wb_stb_o        => wbd_stb_o,
-         wb_stall_i      => wbd_stall_i,
-         wb_addr_o       => wbd_addr_o,
-         wb_we_o         => wbd_we_o,
-         wb_dat_o        => wbd_dat_o,
-         wb_ack_i        => wbd_ack_i,
-         wb_data_i       => wbd_data_i
+         clk_i        => clk_i,
+         rst_i        => rst_i,
+         mreq_valid_i => exe2mem_req_valid,
+         mreq_ready_o => exe2mem_req_ready,
+         mreq_op_i    => exe2mem_req_op,
+         mreq_addr_i  => exe2mem_req_addr,
+         mreq_data_i  => exe2mem_req_data,
+         msrc_valid_o => mem2exe_src_valid,
+         msrc_ready_i => mem2exe_src_ready,
+         msrc_data_o  => mem2exe_src_data,
+         mdst_valid_o => mem2exe_dst_valid,
+         mdst_ready_i => mem2exe_dst_ready,
+         mdst_data_o  => mem2exe_dst_data,
+         wb_cyc_o     => wbd_cyc_o,
+         wb_stb_o     => wbd_stb_o,
+         wb_stall_i   => wbd_stall_i,
+         wb_addr_o    => wbd_addr_o,
+         wb_we_o      => wbd_we_o,
+         wb_dat_o     => wbd_dat_o,
+         wb_ack_i     => wbd_ack_i,
+         wb_data_i    => wbd_data_i
       ); -- i_memory
+
+
+   ------------------------------------------------------------
+   -- Debug output
+   ------------------------------------------------------------
 
    p_debug : process (clk_i)
    begin
