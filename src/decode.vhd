@@ -183,6 +183,7 @@ begin
    exe_src_val_o  <= pc_d+1 when exe_src_addr_o = C_REG_PC else
                      reg_src_val_i; -- One clock cycle after reg_src_addr_o
    exe_dst_val_o  <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
+   exe_r14_o      <= reg_r14_i;
 
 
    ------------------------------------------------------------
@@ -196,7 +197,6 @@ begin
             exe_valid_o <= '0';
          end if;
 
-         exe_r14_o        <= reg_r14_i;
          if fetch_valid_i and fetch_ready_o then
             exe_valid_o      <= '1';
             exe_microcodes_o <= microcode_value;
