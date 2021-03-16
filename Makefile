@@ -13,15 +13,15 @@ SOURCES += src/sub/two_stage_buffer.vhd
 SOURCES += src/sub/two_stage_fifo.vhd
 
 SOURCES += src/cpu_constants.vhd
+SOURCES += src/microcode.vhd
 SOURCES += src/fetch.vhd
 SOURCES += src/icache.vhd
 SOURCES += src/decode.vhd
 SOURCES += src/serializer.vhd
-SOURCES += src/execute.vhd
 SOURCES += src/axi_pause.vhd
 SOURCES += src/alu_data.vhd
 SOURCES += src/alu_flags.vhd
-SOURCES += src/microcode.vhd
+SOURCES += src/execute.vhd
 SOURCES += src/registers.vhd
 SOURCES += src/memory.vhd
 SOURCES += src/cpu.vhd
@@ -31,6 +31,7 @@ TEST_SOURCES += test/wb_tdp_mem.vhd
 TEST_SOURCES += test/system.vhd
 
 TEST ?= prog
+REGISTER_BANK_WIDTH ?= 8
 
 ASM = test/$(TEST).asm
 ROM = test/$(TEST).rom
@@ -54,7 +55,7 @@ show: $(WAVE)
 $(WAVE): $(SOURCES) $(TEST_SOURCES) $(ROM)
 	ghdl -i --std=08 $(SOURCES) $(TEST_SOURCES)
 	ghdl -m --std=08 -frelaxed $(TB)
-	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=850us -gG_ROM=$(ROM)
+	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=850us -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH)
 
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
@@ -71,7 +72,7 @@ hw/$(TOP).tcl: Makefile
 	echo "# This is a tcl command script for the Vivado tool chain" > $@
 	echo "read_vhdl -vhdl2008 { $(SOURCES) $(TEST_SOURCES) }" >> $@
 	echo "read_xdc hw/$(TOP).xdc" >> $@
-	echo "synth_design -top $(TOP) -part xc7a100tcsg324-1 -flatten_hierarchy none -generic G_ROM=$(ROM)" >> $@
+	echo "synth_design -top $(TOP) -part xc7a100tcsg324-1 -flatten_hierarchy none -generic G_ROM=$(ROM) -generic G_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH)" >> $@
 	echo "write_checkpoint -force post_synth.dcp" >> $@
 	echo "opt_design" >> $@
 	echo "place_design" >> $@
@@ -83,7 +84,7 @@ hw/$(TOP).tcl: Makefile
 
 synth: $(SOURCES) $(TEST_SOURCES) $(ROM)
 	ghdl -a --std=08 -frelaxed $(SOURCES) $(TEST_SOURCES)
-	yosys -m ghdl -p 'ghdl --std=08 -frelaxed $(TOP); synth_xilinx -top $(TOP) -edif $(TOP).edif' > yosys.log
+	yosys -m ghdl -p 'ghdl --std=08 -frelaxed -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) $(TOP); synth_xilinx -top $(TOP) -edif $(TOP).edif' > yosys.log
 
 clean:
 	rm -rf test/$(TEST).lis

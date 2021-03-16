@@ -14,6 +14,9 @@ use work.cpu_constants.all;
 -- clock cycle gives the NEW value, i.e. the one just written.
 
 entity registers is
+   generic (
+      G_REGISTER_BANK_WIDTH : integer
+   );
    port (
       clk_i         : in  std_logic;
       rst_i         : in  std_logic;
@@ -34,11 +37,11 @@ end entity registers;
 
 architecture synthesis of registers is
 
-   signal lower_rd_src_addr : std_logic_vector(10 downto 0);
-   signal lower_rd_dst_addr : std_logic_vector(10 downto 0);
+   signal lower_rd_src_addr : std_logic_vector(G_REGISTER_BANK_WIDTH+2 downto 0);
+   signal lower_rd_dst_addr : std_logic_vector(G_REGISTER_BANK_WIDTH+2 downto 0);
    signal lower_rd_src_val  : std_logic_vector(15 downto 0);
    signal lower_rd_dst_val  : std_logic_vector(15 downto 0);
-   signal lower_wr_addr     : std_logic_vector(10 downto 0);
+   signal lower_wr_addr     : std_logic_vector(G_REGISTER_BANK_WIDTH+2 downto 0);
    signal lower_wr_en       : std_logic;
 
    signal upper_rd_src_addr : std_logic_vector(2 downto 0);
@@ -64,14 +67,14 @@ begin
    -- Lower register bank: R0 - R7
    ------------------------------------------------------------
 
-   lower_rd_src_addr <= r14(15 downto 8) & src_reg_i(2 downto 0);
-   lower_rd_dst_addr <= r14(15 downto 8) & dst_reg_i(2 downto 0);
-   lower_wr_addr     <= r14(15 downto 8) & wr_addr_i(2 downto 0);
+   lower_rd_src_addr <= r14(G_REGISTER_BANK_WIDTH+7 downto 8) & src_reg_i(2 downto 0);
+   lower_rd_dst_addr <= r14(G_REGISTER_BANK_WIDTH+7 downto 8) & dst_reg_i(2 downto 0);
+   lower_wr_addr     <= r14(G_REGISTER_BANK_WIDTH+7 downto 8) & wr_addr_i(2 downto 0);
    lower_wr_en       <= wr_en_i and not wr_addr_i(3);
 
    i_ram_lower_src : entity work.dp_ram
       generic map (
-         G_ADDR_SIZE => 11,
+         G_ADDR_SIZE => G_REGISTER_BANK_WIDTH+3,
          G_DATA_SIZE => 16
       )
       port map (
@@ -87,7 +90,7 @@ begin
 
    i_ram_lower_dst : entity work.dp_ram
       generic map (
-         G_ADDR_SIZE => 11,
+         G_ADDR_SIZE => G_REGISTER_BANK_WIDTH+3,
          G_DATA_SIZE => 16
       )
       port map (

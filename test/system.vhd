@@ -3,6 +3,7 @@ use ieee.std_logic_1164.all;
 
 entity system is
    generic (
+      G_REGISTER_BANK_WIDTH : integer;
       G_ROM : string
    );
    port (
@@ -34,6 +35,9 @@ begin
    led_o <= wbd_addr;
 
    i_cpu : entity work.cpu
+      generic map (
+         G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH
+      )
       port map (
          clk_i       => clk_i,
          rst_i       => not rstn_i,

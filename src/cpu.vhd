@@ -2,6 +2,9 @@ library ieee;
 use ieee.std_logic_1164.all;
 
 entity cpu is
+   generic (
+      G_REGISTER_BANK_WIDTH : integer
+   );
    port (
       clk_i       : in  std_logic;
       rst_i       : in  std_logic;
@@ -252,6 +255,9 @@ begin
 
 
    i_registers : entity work.registers
+      generic map (
+         G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH
+      )
       port map (
          clk_i         => clk_i,
          rst_i         => rst_i,

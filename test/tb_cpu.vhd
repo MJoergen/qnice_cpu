@@ -3,6 +3,7 @@ use ieee.std_logic_1164.all;
 
 entity tb_cpu is
    generic (
+      G_REGISTER_BANK_WIDTH : integer;
       G_ROM : string
    );
 end entity tb_cpu;
@@ -31,6 +32,7 @@ begin
 
    i_system : entity work.system
       generic map (
+         G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
          G_ROM => G_ROM
       )
       port map (
