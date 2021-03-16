@@ -16,6 +16,7 @@ SOURCES += src/cpu_constants.vhd
 SOURCES += src/microcode.vhd
 SOURCES += src/fetch.vhd
 SOURCES += src/icache.vhd
+SOURCES += src/fetch_cache.vhd
 SOURCES += src/decode.vhd
 SOURCES += src/serializer.vhd
 SOURCES += src/axi_pause.vhd
