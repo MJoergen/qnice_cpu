@@ -4,6 +4,15 @@ use ieee.numeric_std_unsigned.all;
 
 use work.cpu_constants.all;
 
+-- This is the register file of the QNICE CPU
+--
+-- There is a one-clock-cycle delay when reading.
+--
+-- It supports Write-Before-Read, which means
+-- that if one reads from and write to the same
+-- register in a given clock cycle, then the next
+-- clock cycle gives the NEW value, i.e. the one just written.
+
 entity registers is
    port (
       clk_i         : in  std_logic;
@@ -25,24 +34,24 @@ end entity registers;
 
 architecture synthesis of registers is
 
+   signal lower_rd_src_addr : std_logic_vector(10 downto 0);
+   signal lower_rd_dst_addr : std_logic_vector(10 downto 0);
+   signal lower_rd_src_val  : std_logic_vector(15 downto 0);
+   signal lower_rd_dst_val  : std_logic_vector(15 downto 0);
+   signal lower_wr_addr     : std_logic_vector(10 downto 0);
+   signal lower_wr_en       : std_logic;
+
    type upper_mem_t is array (8 to 15) of std_logic_vector(15 downto 0);
 
    signal upper_regs : upper_mem_t := (others => (others => '0'));
 
    signal r14 : std_logic_vector(15 downto 0) := (others => '0');
 
-   signal src_val_upper : std_logic_vector(15 downto 0);
-   signal dst_val_upper : std_logic_vector(15 downto 0);
-
-   signal src_val_lower : std_logic_vector(15 downto 0);
-   signal dst_val_lower : std_logic_vector(15 downto 0);
+   signal upper_rd_src_val : std_logic_vector(15 downto 0);
+   signal upper_rd_dst_val : std_logic_vector(15 downto 0);
 
    signal src_reg_d : std_logic_vector(3 downto 0);
    signal dst_reg_d : std_logic_vector(3 downto 0);
-
-   signal src_rd_addr : std_logic_vector(10 downto 0);
-   signal dst_rd_addr : std_logic_vector(10 downto 0);
-   signal wr_addr     : std_logic_vector(10 downto 0);
 
    signal wr_r14_en_d : std_logic;
    signal wr_r14_d    : std_logic_vector(15 downto 0);
@@ -52,10 +61,14 @@ architecture synthesis of registers is
 
 begin
 
-   src_rd_addr <= r14(15 downto 8) & src_reg_i(2 downto 0);
-   dst_rd_addr <= r14(15 downto 8) & dst_reg_i(2 downto 0);
-   wr_addr     <= r14(15 downto 8) & wr_addr_i(2 downto 0);
+   ------------------------------------------------------------
+   -- Lower register bank: R0 - R7
+   ------------------------------------------------------------
 
+   lower_rd_src_addr <= r14(15 downto 8) & src_reg_i(2 downto 0);
+   lower_rd_dst_addr <= r14(15 downto 8) & dst_reg_i(2 downto 0);
+   lower_wr_addr     <= r14(15 downto 8) & wr_addr_i(2 downto 0);
+   lower_wr_en       <= wr_en_i and not wr_addr_i(3);
 
    i_ram_lower_src : entity work.dp_ram
       generic map (
@@ -65,11 +78,11 @@ begin
       port map (
          clk_i     => clk_i,
          rst_i     => rst_i,
-         rd_addr_i => src_rd_addr,
-         rd_data_o => src_val_lower,
-         wr_addr_i => wr_addr,
+         rd_addr_i => lower_rd_src_addr,
+         rd_data_o => lower_rd_src_val,
+         wr_addr_i => lower_wr_addr,
          wr_data_i => wr_val_i,
-         wr_en_i   => wr_en_i and not wr_addr_i(3)
+         wr_en_i   => lower_wr_en
       ); -- i_ram_lower_src
 
 
@@ -81,15 +94,19 @@ begin
       port map (
          clk_i     => clk_i,
          rst_i     => rst_i,
-         rd_addr_i => dst_rd_addr,
-         rd_data_o => dst_val_lower,
-         wr_addr_i => wr_addr,
+         rd_addr_i => lower_rd_dst_addr,
+         rd_data_o => lower_rd_dst_val,
+         wr_addr_i => lower_wr_addr,
          wr_data_i => wr_val_i,
-         wr_en_i   => wr_en_i and not wr_addr_i(3)
+         wr_en_i   => lower_wr_en
       ); -- i_ram_lower_dst
 
 
-   p_write : process (clk_i)
+   ------------------------------------------------------------
+   -- Upper register bank: R8 - R15
+   ------------------------------------------------------------
+
+   p_upper_write : process (clk_i)
    begin
       if rising_edge(clk_i) then
          if wr_en_i = '1' then
@@ -106,25 +123,21 @@ begin
          end if;
 -- pragma synthesis_on
       end if;
-   end process p_write;
+   end process p_upper_write;
 
 
-   p_delay : process (clk_i)
+   p_upper_read : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         src_reg_d <= src_reg_i;
-         dst_reg_d <= dst_reg_i;
+         upper_rd_src_val <= upper_regs(8+to_integer(src_reg_i(2 downto 0)));
+         upper_rd_dst_val <= upper_regs(8+to_integer(dst_reg_i(2 downto 0)));
       end if;
-   end process p_delay;
+   end process p_upper_read;
 
-   p_read : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         src_val_upper <= upper_regs(8+to_integer(src_reg_i(2 downto 0)));
-         dst_val_upper <= upper_regs(8+to_integer(dst_reg_i(2 downto 0)));
-      end if;
-   end process p_read;
 
+   ------------------------------------------------------------
+   -- Special handling of R14
+   ------------------------------------------------------------
 
    p_r14 : process (clk_i)
    begin
@@ -151,6 +164,8 @@ begin
    p_wbr : process (clk_i)
    begin
       if rising_edge(clk_i) then
+         src_reg_d   <= src_reg_i;
+         dst_reg_d   <= dst_reg_i;
          wr_r14_en_d <= wr_r14_en_i;
          wr_r14_d    <= wr_r14_i;
          wr_val_d    <= wr_val_i;
@@ -162,14 +177,14 @@ begin
 
    r14_o <= r14;
 
-   src_val_o <= wr_val_d      when wr_en_d = '1' and wr_addr_d = src_reg_d else
-                r14           when src_reg_d = C_REG_SR else
-                src_val_upper when src_reg_d >= 8 else
-                src_val_lower;
-   dst_val_o <= wr_val_d      when wr_en_d = '1' and wr_addr_d = dst_reg_d else
-                r14           when dst_reg_d = C_REG_SR else
-                dst_val_upper when dst_reg_d >= 8 else
-                dst_val_lower;
+   src_val_o <= wr_val_d         when wr_en_d = '1' and wr_addr_d = src_reg_d else
+                r14              when src_reg_d = C_REG_SR else
+                upper_rd_src_val when src_reg_d >= 8 else
+                lower_rd_src_val;
+   dst_val_o <= wr_val_d         when wr_en_d = '1' and wr_addr_d = dst_reg_d else
+                r14              when dst_reg_d = C_REG_SR else
+                upper_rd_dst_val when dst_reg_d >= 8 else
+                lower_rd_dst_val;
 
 end architecture synthesis;
 
