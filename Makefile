@@ -101,4 +101,5 @@ clean:
 	rm -rf usage_statistics_webtalk*
 	rm -rf tight_setup_hold_pins.txt
 	rm -rf system.edif
+	rm -rf .Xil
 
