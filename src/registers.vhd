@@ -41,18 +41,17 @@ architecture synthesis of registers is
    signal lower_wr_addr     : std_logic_vector(10 downto 0);
    signal lower_wr_en       : std_logic;
 
-   type upper_mem_t is array (8 to 15) of std_logic_vector(15 downto 0);
-
-   signal upper_regs : upper_mem_t := (others => (others => '0'));
+   signal upper_rd_src_addr : std_logic_vector(2 downto 0);
+   signal upper_rd_dst_addr : std_logic_vector(2 downto 0);
+   signal upper_rd_src_val  : std_logic_vector(15 downto 0);
+   signal upper_rd_dst_val  : std_logic_vector(15 downto 0);
+   signal upper_wr_addr     : std_logic_vector(2 downto 0);
+   signal upper_wr_en       : std_logic;
 
    signal r14 : std_logic_vector(15 downto 0) := (others => '0');
 
-   signal upper_rd_src_val : std_logic_vector(15 downto 0);
-   signal upper_rd_dst_val : std_logic_vector(15 downto 0);
-
-   signal src_reg_d : std_logic_vector(3 downto 0);
-   signal dst_reg_d : std_logic_vector(3 downto 0);
-
+   signal src_reg_d   : std_logic_vector(3 downto 0);
+   signal dst_reg_d   : std_logic_vector(3 downto 0);
    signal wr_r14_en_d : std_logic;
    signal wr_r14_d    : std_logic_vector(15 downto 0);
    signal wr_en_d     : std_logic;
@@ -106,33 +105,43 @@ begin
    -- Upper register bank: R8 - R15
    ------------------------------------------------------------
 
-   p_upper_write : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         if wr_en_i = '1' then
-            if to_integer(wr_addr_i) >= 8 then
-               upper_regs(to_integer(wr_addr_i)) <= wr_val_i;
-            end if;
-         end if;
+   upper_rd_src_addr <= src_reg_i(2 downto 0);
+   upper_rd_dst_addr <= dst_reg_i(2 downto 0);
+   upper_wr_addr     <= wr_addr_i(2 downto 0);
+   upper_wr_en       <= wr_en_i and wr_addr_i(3);
 
--- pragma synthesis_off
-         if rst_i = '1' then
-            for i in 8 to 15 loop
-               upper_regs(i) <= X"111" * to_std_logic_vector(i, 4);
-            end loop;
-         end if;
--- pragma synthesis_on
-      end if;
-   end process p_upper_write;
+   i_ram_upper_src : entity work.dp_ram
+      generic map (
+         G_RAM_STYLE => "distributed",
+         G_ADDR_SIZE => 3,
+         G_DATA_SIZE => 16
+      )
+      port map (
+         clk_i     => clk_i,
+         rst_i     => rst_i,
+         rd_addr_i => upper_rd_src_addr,
+         rd_data_o => upper_rd_src_val,
+         wr_addr_i => upper_wr_addr,
+         wr_data_i => wr_val_i,
+         wr_en_i   => upper_wr_en
+      ); -- i_ram_upper_src
 
 
-   p_upper_read : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         upper_rd_src_val <= upper_regs(8+to_integer(src_reg_i(2 downto 0)));
-         upper_rd_dst_val <= upper_regs(8+to_integer(dst_reg_i(2 downto 0)));
-      end if;
-   end process p_upper_read;
+   i_ram_upper_dst : entity work.dp_ram
+      generic map (
+         G_RAM_STYLE => "distributed",
+         G_ADDR_SIZE => 3,
+         G_DATA_SIZE => 16
+      )
+      port map (
+         clk_i     => clk_i,
+         rst_i     => rst_i,
+         rd_addr_i => upper_rd_dst_addr,
+         rd_data_o => upper_rd_dst_val,
+         wr_addr_i => upper_wr_addr,
+         wr_data_i => wr_val_i,
+         wr_en_i   => upper_wr_en
+      ); -- i_ram_upper_dst
 
 
    ------------------------------------------------------------
