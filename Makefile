@@ -19,6 +19,7 @@ SOURCES += src/icache.vhd
 SOURCES += src/fetch_cache.vhd
 SOURCES += src/decode.vhd
 SOURCES += src/serializer.vhd
+SOURCES += src/decode_serialized.vhd
 SOURCES += src/axi_pause.vhd
 SOURCES += src/alu_data.vhd
 SOURCES += src/alu_flags.vhd

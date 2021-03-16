@@ -39,67 +39,56 @@ architecture synthesis of cpu is
    signal fetch2decode_data           : std_logic_vector(31 downto 0);
    signal fetch2decode_double_consume : std_logic;
 
-   -- Decode to Register file
-   signal dec2reg_src_reg     : std_logic_vector(3 downto 0);
-   signal dec2reg_src_val     : std_logic_vector(15 downto 0);
-   signal dec2reg_dst_reg     : std_logic_vector(3 downto 0);
-   signal dec2reg_dst_val     : std_logic_vector(15 downto 0);
-   signal reg2dec_r14         : std_logic_vector(15 downto 0);
+   -- DECODE to EXECUTE
+   signal decode2exe_valid            : std_logic;
+   signal decode2exe_ready            : std_logic;
+   signal decode2exe_microcodes       : std_logic_vector(11 downto 0);
+   signal decode2exe_addr             : std_logic_vector(15 downto 0);
+   signal decode2exe_inst             : std_logic_vector(15 downto 0);
+   signal decode2exe_immediate        : std_logic_vector(15 downto 0);
+   signal decode2exe_src_addr         : std_logic_vector(3 downto 0);
+   signal decode2exe_src_mode         : std_logic_vector(1 downto 0);
+   signal decode2exe_src_val          : std_logic_vector(15 downto 0);
+   signal decode2exe_src_imm          : std_logic;
+   signal decode2exe_dst_addr         : std_logic_vector(3 downto 0);
+   signal decode2exe_dst_mode         : std_logic_vector(1 downto 0);
+   signal decode2exe_dst_val          : std_logic_vector(15 downto 0);
+   signal decode2exe_dst_imm          : std_logic;
+   signal decode2exe_res_reg          : std_logic_vector(3 downto 0);
+   signal decode2exe_r14              : std_logic_vector(15 downto 0);
 
-   subtype R_SER_ADDR      is natural range  15 downto 0;
-   subtype R_SER_INST      is natural range  31 downto 16;
-   subtype R_SER_IMMEDIATE is natural range  47 downto 32;
-   subtype R_SER_SRC_ADDR  is natural range  51 downto 48;
-   subtype R_SER_SRC_MODE  is natural range  53 downto 52;
-   subtype R_SER_SRC_VAL   is natural range  69 downto 54;
-   constant R_SER_SRC_IMM  : integer := 70;
-   subtype R_SER_DST_ADDR  is natural range  74 downto 71;
-   subtype R_SER_DST_MODE  is natural range  76 downto 75;
-   subtype R_SER_DST_VAL   is natural range  92 downto 77;
-   constant R_SER_DST_IMM  : integer := 93;
-   subtype R_SER_RES_REG   is natural range  97 downto 94;
-   subtype R_SER_R14       is natural range 113 downto 98;
-   constant C_SERIALIZER_SIZE : integer := 114;
+   -- DECODE to register file
+   signal decode2reg_src_reg          : std_logic_vector(3 downto 0);
+   signal decode2reg_src_val          : std_logic_vector(15 downto 0);
+   signal decode2reg_dst_reg          : std_logic_vector(3 downto 0);
+   signal decode2reg_dst_val          : std_logic_vector(15 downto 0);
+   signal reg2decode_r14              : std_logic_vector(15 downto 0);
 
-   -- Decode to serializer
-   signal decode2seq_valid      : std_logic;
-   signal decode2seq_ready      : std_logic;
-   signal decode2seq_microcodes : std_logic_vector(35 downto 0);
-   signal decode2seq_user       : std_logic_vector(C_SERIALIZER_SIZE-1 downto 0);
-
-   -- Serializer to execute
-   signal seq2exe_valid       : std_logic;
-   signal seq2exe_ready       : std_logic;
-   signal seq2exe_microcodes  : std_logic_vector(11 downto 0);
-   signal seq2exe_user        : std_logic_vector(C_SERIALIZER_SIZE-1 downto 0);
-
-   -- Execute to memory
-   signal exe2mem_req_valid   : std_logic;
-   signal exe2mem_req_ready   : std_logic;
-   signal exe2mem_req_op      : std_logic_vector(2 downto 0);
-   signal exe2mem_req_addr    : std_logic_vector(15 downto 0);
-   signal exe2mem_req_data    : std_logic_vector(15 downto 0);
+   -- EXECUTE to memory
+   signal exe2mem_req_valid           : std_logic;
+   signal exe2mem_req_ready           : std_logic;
+   signal exe2mem_req_op              : std_logic_vector(2 downto 0);
+   signal exe2mem_req_addr            : std_logic_vector(15 downto 0);
+   signal exe2mem_req_data            : std_logic_vector(15 downto 0);
 
    -- Memory to execute
-   signal mem2exe_src_valid   : std_logic;
-   signal mem2exe_src_ready   : std_logic;
-   signal mem2exe_src_data    : std_logic_vector(15 downto 0);
-   signal mem2exe_dst_valid   : std_logic;
-   signal mem2exe_dst_ready   : std_logic;
-   signal mem2exe_dst_data    : std_logic_vector(15 downto 0);
+   signal mem2exe_src_valid           : std_logic;
+   signal mem2exe_src_ready           : std_logic;
+   signal mem2exe_src_data            : std_logic_vector(15 downto 0);
+   signal mem2exe_dst_valid           : std_logic;
+   signal mem2exe_dst_ready           : std_logic;
+   signal mem2exe_dst_data            : std_logic_vector(15 downto 0);
 
    -- Execute to registers
-   signal exe2reg_r14_we      : std_logic;
-   signal exe2reg_r14         : std_logic_vector(15 downto 0);
-   signal exe2reg_we          : std_logic;
-   signal exe2reg_addr        : std_logic_vector(3 downto 0);
-   signal exe2reg_val         : std_logic_vector(15 downto 0);
+   signal exe2reg_r14_we              : std_logic;
+   signal exe2reg_r14                 : std_logic_vector(15 downto 0);
+   signal exe2reg_we                  : std_logic;
+   signal exe2reg_addr                : std_logic_vector(3 downto 0);
+   signal exe2reg_val                 : std_logic_vector(15 downto 0);
 
    -- Execute to fetch
-   signal exe2fetch_valid     : std_logic;
-   signal exe2fetch_addr      : std_logic_vector(15 downto 0);
-
-   signal icache_rst          : std_logic;
+   signal exe2fetch_valid             : std_logic;
+   signal exe2fetch_addr              : std_logic_vector(15 downto 0);
 
 begin
 
@@ -124,7 +113,7 @@ begin
       ); -- i_fetch_cache
 
 
-   i_decode : entity work.decode
+   i_decode_serialized : entity work.decode_serialized
       port map (
          clk_i            => clk_i,
          rst_i            => rst_i,
@@ -134,47 +123,28 @@ begin
          fetch_addr_i     => fetch2decode_addr,
          fetch_data_i     => fetch2decode_data,
          fetch_double_o   => fetch2decode_double_consume,
-         reg_src_addr_o   => dec2reg_src_reg,
-         reg_src_val_i    => dec2reg_src_val,
-         reg_dst_addr_o   => dec2reg_dst_reg,
-         reg_dst_val_i    => dec2reg_dst_val,
-         reg_r14_i        => reg2dec_r14,
-         exe_valid_o      => decode2seq_valid,
-         exe_ready_i      => decode2seq_ready,
-         exe_microcodes_o => decode2seq_microcodes,
-         exe_addr_o       => decode2seq_user(R_SER_ADDR),
-         exe_inst_o       => decode2seq_user(R_SER_INST),
-         exe_immediate_o  => decode2seq_user(R_SER_IMMEDIATE),
-         exe_src_addr_o   => decode2seq_user(R_SER_SRC_ADDR),
-         exe_src_mode_o   => decode2seq_user(R_SER_SRC_MODE),
-         exe_src_val_o    => decode2seq_user(R_SER_SRC_VAL),
-         exe_src_imm_o    => decode2seq_user(R_SER_SRC_IMM),
-         exe_dst_addr_o   => decode2seq_user(R_SER_DST_ADDR),
-         exe_dst_mode_o   => decode2seq_user(R_SER_DST_MODE),
-         exe_dst_val_o    => decode2seq_user(R_SER_DST_VAL),
-         exe_dst_imm_o    => decode2seq_user(R_SER_DST_IMM),
-         exe_res_reg_o    => decode2seq_user(R_SER_RES_REG),
-         exe_r14_o        => decode2seq_user(R_SER_R14)
-      ); -- i_decode
-
-
-   i_serializer : entity work.serializer
-      generic map (
-         G_DATA_SIZE => 12,
-         G_USER_SIZE => C_SERIALIZER_SIZE
-      )
-      port map (
-         clk_i     => clk_i,
-         rst_i     => rst_i,
-         s_valid_i => decode2seq_valid,
-         s_ready_o => decode2seq_ready,
-         s_data_i  => decode2seq_microcodes,
-         s_user_i  => decode2seq_user,
-         m_valid_o => seq2exe_valid,
-         m_ready_i => seq2exe_ready,
-         m_data_o  => seq2exe_microcodes,
-         m_user_o  => seq2exe_user
-      ); -- i_serializer
+         reg_src_addr_o   => decode2reg_src_reg,
+         reg_src_val_i    => decode2reg_src_val,
+         reg_dst_addr_o   => decode2reg_dst_reg,
+         reg_dst_val_i    => decode2reg_dst_val,
+         reg_r14_i        => reg2decode_r14,
+         exe_valid_o      => decode2exe_valid,
+         exe_ready_i      => decode2exe_ready,
+         exe_microcodes_o => decode2exe_microcodes,
+         exe_addr_o       => decode2exe_addr,
+         exe_inst_o       => decode2exe_inst,
+         exe_immediate_o  => decode2exe_immediate,
+         exe_src_addr_o   => decode2exe_src_addr,
+         exe_src_mode_o   => decode2exe_src_mode,
+         exe_src_val_o    => decode2exe_src_val,
+         exe_src_imm_o    => decode2exe_src_imm,
+         exe_dst_addr_o   => decode2exe_dst_addr,
+         exe_dst_mode_o   => decode2exe_dst_mode,
+         exe_dst_val_o    => decode2exe_dst_val,
+         exe_dst_imm_o    => decode2exe_dst_imm,
+         exe_res_reg_o    => decode2exe_res_reg,
+         exe_r14_o        => decode2exe_r14
+      ); -- i_decode_serialized
 
 
    -- Writes to R15 are forwarded back to the fetch stage as well.
@@ -185,22 +155,22 @@ begin
       port map (
          clk_i            => clk_i,
          rst_i            => rst_i,
-         dec_valid_i      => seq2exe_valid,
-         dec_ready_o      => seq2exe_ready,
-         dec_microcodes_i => seq2exe_microcodes,
-         dec_addr_i       => seq2exe_user(R_SER_ADDR),
-         dec_inst_i       => seq2exe_user(R_SER_INST),
-         dec_immediate_i  => seq2exe_user(R_SER_IMMEDIATE),
-         dec_src_addr_i   => seq2exe_user(R_SER_SRC_ADDR),
-         dec_src_mode_i   => seq2exe_user(R_SER_SRC_MODE),
-         dec_src_val_i    => seq2exe_user(R_SER_SRC_VAL),
-         dec_src_imm_i    => seq2exe_user(R_SER_SRC_IMM),
-         dec_dst_addr_i   => seq2exe_user(R_SER_DST_ADDR),
-         dec_dst_mode_i   => seq2exe_user(R_SER_DST_MODE),
-         dec_dst_val_i    => seq2exe_user(R_SER_DST_VAL),
-         dec_dst_imm_i    => seq2exe_user(R_SER_DST_IMM),
-         dec_res_reg_i    => seq2exe_user(R_SER_RES_REG),
-         dec_r14_i        => seq2exe_user(R_SER_R14),
+         dec_valid_i      => decode2exe_valid,
+         dec_ready_o      => decode2exe_ready,
+         dec_microcodes_i => decode2exe_microcodes,
+         dec_addr_i       => decode2exe_addr,
+         dec_inst_i       => decode2exe_inst,
+         dec_immediate_i  => decode2exe_immediate,
+         dec_src_addr_i   => decode2exe_src_addr,
+         dec_src_mode_i   => decode2exe_src_mode,
+         dec_src_val_i    => decode2exe_src_val,
+         dec_src_imm_i    => decode2exe_src_imm,
+         dec_dst_addr_i   => decode2exe_dst_addr,
+         dec_dst_mode_i   => decode2exe_dst_mode,
+         dec_dst_val_i    => decode2exe_dst_val,
+         dec_dst_imm_i    => decode2exe_dst_imm,
+         dec_res_reg_i    => decode2exe_res_reg,
+         dec_r14_i        => decode2exe_r14,
          mem_req_valid_o  => exe2mem_req_valid,
          mem_req_ready_i  => exe2mem_req_ready,
          mem_req_op_o     => exe2mem_req_op,
@@ -227,11 +197,11 @@ begin
       port map (
          clk_i         => clk_i,
          rst_i         => rst_i,
-         src_reg_i     => dec2reg_src_reg,
-         src_val_o     => dec2reg_src_val,
-         dst_reg_i     => dec2reg_dst_reg,
-         dst_val_o     => dec2reg_dst_val,
-         r14_o         => reg2dec_r14,
+         src_reg_i     => decode2reg_src_reg,
+         src_val_o     => decode2reg_src_val,
+         dst_reg_i     => decode2reg_dst_reg,
+         dst_val_o     => decode2reg_dst_val,
+         r14_o         => reg2decode_r14,
          wr_r14_en_i   => exe2reg_r14_we,
          wr_r14_i      => exe2reg_r14,
          wr_en_i       => exe2reg_we,
