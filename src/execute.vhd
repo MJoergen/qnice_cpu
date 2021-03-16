@@ -96,6 +96,7 @@ begin
    alu_flags   <= dec_r14_i;
    alu_src_val <= dec_immediate_i when dec_src_imm_i else
                   mem_src_data_i when dec_microcodes_i(C_MEM_WAIT_SRC) = '1' else
+                  dec_addr_i+1 when dec_src_addr_i = C_REG_PC else
                   dec_src_val_i;
    alu_dst_val <= dec_immediate_i when dec_dst_imm_i else
                   mem_dst_data_i when dec_microcodes_i(C_MEM_WAIT_DST) = '1' else
