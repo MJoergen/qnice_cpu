@@ -1,9 +1,10 @@
 # A pipelined implementation of the QNICE CPU
 
 This version of the QNICE CPU (from the QNICE-FPGA project) is not a drop-in
-replacement, for the following two reasons:
+replacement, for the following three reasons:
 * This design uses the Wishbone memory bus.
 * This design uses separate instruction and data interfaces.
+* This design expects a one-clock-cycle delay when reading from instruction and/or data memory.
 
 However, it should be a simple operation to modify the QNICE-FPGA project to
 support this implementation.
@@ -22,16 +23,11 @@ need to be serialized and will take a total of three clock cycles.
 
 
 ## Architecture
-This is essentially a five-stage pipeline consisting of:
+This is essentially a three-stage pipeline consisting of:
 
-* Fetch: Fetches one word at a time from the instruction memory.
-* Instruction Cache: Forwards two words at a time to the decoder.
-* Decode: Generates a list of micro-operations.
-* Serializer: Outputs a sequence of single micro-operations.
-* Execute: Executes one micro-operation.
-
-TBD: The Fetch and Instruction Cache will be merged into one stage, and
-the Serializer and Execute will be merged too.
+* FETCH: Fetches two words at a time from the instruction memory.
+* DECODE: Outputs a sequence of single micro-operations.
+* EXECUTE: Executes one micro-operation.
 
 See the following block diagram:
 
@@ -39,38 +35,79 @@ See the following block diagram:
 
 
 ## Interfaces
-From the Fetch into the Instruction Cache module we have the following signals:
+From the FETCH to the DECODE stage we have the following signals:
 ```
-valid_i : in  std_logic;
-ready_o : out std_logic;
-addr_i  : in  std_logic_vector(15 downto 0);
-data_i  : in  std_logic_vector(15 downto 0);
-```
-
-Here `valid_i` and `ready_o` are the usual handshaking signals, `addr_i` is the
-current address, and `data_i` is the corresponding data. Except for branches,
-`addr_i` will automatically increment.
-
-
-From the ICache into the Decode module we have the following signals:
-```
-valid_i  : in  std_logic;
-ready_o  : out std_logic;
-double_i : in  std_logic;
-addr_i   : in  std_logic_vector(15 downto 0);
-data_i   : in  std_logic_vector(31 downto 0);
-double_o : out std_logic;
+valid          : std_logic;
+ready          : std_logic;
+double_valid   : std_logic;
+addr           : std_logic_vector(15 downto 0);
+data           : std_logic_vector(31 downto 0);
+double_consume : std_logic;
 ```
 
-Here `valid_i` and `ready_o` are the usual handshaking signals, `addr_i` is the
-address of the current instruction, and `data_i` contains one or two words of
-data, as indicated by the signal `double_i`. In either case `data_i(15 downto
-0)` is the instruction, and `data_i(31 downto 16)` is the immediate operand if
+Here `valid` and `ready` are the usual handshaking signals, `addr` is the
+address of the current instruction, and `data` contains one or two words of
+data, as indicated by the signal `double_valid`. In either case `data(15 downto
+0)` is the instruction, and `data(31 downto 16)` is the immediate operand if
 present.
 
-In conjunction with the `ready_o` signal, the signal `double_o` indicates
+In conjunction with the `ready` signal, the signal `double_consume` indicates
 whether one or two words are consumed in this clock cycle. Therefore, this
 signal must depend combinatorially on the input signals.
+
+From the DECODE stage to the EXECUTE stage
+```
+valid      : std_logic;
+ready      : std_logic;
+microcodes : std_logic_vector(11 downto 0);
+addr       : std_logic_vector(15 downto 0);
+inst       : std_logic_vector(15 downto 0);
+immediate  : std_logic_vector(15 downto 0);
+src_addr   : std_logic_vector(3 downto 0);
+src_mode   : std_logic_vector(1 downto 0);
+src_val    : std_logic_vector(15 downto 0);
+src_imm    : std_logic;
+dst_addr   : std_logic_vector(3 downto 0);
+dst_mode   : std_logic_vector(1 downto 0);
+dst_val    : std_logic_vector(15 downto 0);
+dst_imm    : std_logic;
+res_reg    : std_logic_vector(3 downto 0);
+r14        : std_logic_vector(15 downto 0);
+```
+
+Between the DECODE stage and the register file we have:
+```
+rd_en   : std_logic;
+src_reg : std_logic_vector(3 downto 0);
+src_val : std_logic_vector(15 downto 0);
+dst_reg : std_logic_vector(3 downto 0);
+dst_val : std_logic_vector(15 downto 0);
+r14     : std_logic_vector(15 downto 0);
+```
+
+Between the EXECUTE stage and the register file we have:
+```
+r14_we : std_logic;
+r14    : std_logic_vector(15 downto 0);
+we     : std_logic;
+addr   : std_logic_vector(3 downto 0);
+val    : std_logic_vector(15 downto 0);
+```
+
+Between the EXECUTE stage and the memory module we have:
+```
+req_valid : std_logic;
+req_ready : std_logic;
+req_op    : std_logic_vector(2 downto 0);
+req_addr  : std_logic_vector(15 downto 0);
+req_data  : std_logic_vector(15 downto 0);
+src_valid : std_logic;
+src_ready : std_logic;
+src_data  : std_logic_vector(15 downto 0);
+dst_valid : std_logic;
+dst_ready : std_logic;
+dst_data  : std_logic_vector(15 downto 0);
+```
 
 ## Instruction decoding
 
