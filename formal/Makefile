@@ -3,6 +3,11 @@
 
 DUTS  = one_stage_buffer
 DUTS += one_stage_fifo
+DUTS += two_stage_buffer
+DUTS += two_stage_fifo
+DUTS += pipe_concat
+DUTS += memory
+DUTS += fetch
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))

@@ -1,0 +1,36 @@
+[tasks]
+cover
+bmc
+
+[options]
+cover: mode cover
+cover: depth 10
+cover: append 3
+bmc: mode bmc
+bmc: depth 10
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 fetch.vhd            fetch.psl \
+              one_stage_buffer.vhd one_stage_buffer.psl \
+              two_stage_buffer.vhd two_stage_buffer.psl \
+              two_stage_fifo.vhd   two_stage_fifo.psl \
+              pipe_concat.vhd      pipe_concat.psl \
+              -e fetch
+prep -top fetch
+chformal -assume2assert fetch/* %M
+
+[files]
+fetch.psl
+pipe_concat.psl
+one_stage_buffer.psl
+two_stage_buffer.psl
+two_stage_fifo.psl
+../src/fetch.vhd
+../src/sub/pipe_concat.vhd
+../src/sub/one_stage_buffer.vhd
+../src/sub/two_stage_buffer.vhd
+../src/sub/two_stage_fifo.vhd
+

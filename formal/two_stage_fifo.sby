@@ -1,0 +1,20 @@
+[tasks]
+cover
+bmc
+
+[options]
+cover: mode cover
+bmc: mode bmc
+bmc: depth 4
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 two_stage_fifo.vhd two_stage_fifo.psl -e two_stage_fifo
+prep -top two_stage_fifo
+
+[files]
+two_stage_fifo.psl
+../src/sub/two_stage_fifo.vhd
+

@@ -1,0 +1,23 @@
+[tasks]
+cover
+bmc
+
+[options]
+cover: mode cover
+bmc: mode bmc
+bmc: depth 4
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 two_stage_buffer.vhd one_stage_buffer.vhd one_stage_buffer.psl two_stage_buffer.psl -e two_stage_buffer
+prep -top two_stage_buffer
+chformal -assume2assert two_stage_buffer/* %M
+
+[files]
+two_stage_buffer.psl
+../src/sub/two_stage_buffer.vhd
+one_stage_buffer.psl
+../src/sub/one_stage_buffer.vhd
+
