@@ -62,6 +62,7 @@ architecture synthesis of cpu is
    signal exe2fetch_addr              : std_logic_vector(15 downto 0);
 
    -- DECODE to register file
+   signal decode2reg_rd_en            : std_logic;
    signal decode2reg_src_reg          : std_logic_vector(3 downto 0);
    signal decode2reg_src_val          : std_logic_vector(15 downto 0);
    signal decode2reg_dst_reg          : std_logic_vector(3 downto 0);
@@ -131,6 +132,7 @@ begin
          fetch_addr_i     => fetch2decode_addr,
          fetch_data_i     => fetch2decode_data,
          fetch_double_o   => fetch2decode_double_consume,
+         reg_rd_en_o      => decode2reg_rd_en,
          reg_src_addr_o   => decode2reg_src_reg,
          reg_src_val_i    => decode2reg_src_val,
          reg_dst_addr_o   => decode2reg_dst_reg,
@@ -200,6 +202,7 @@ begin
       ); -- i_execute
 
 
+
    ------------------------------------------------------------
    -- Register file
    ------------------------------------------------------------
@@ -211,6 +214,7 @@ begin
       port map (
          clk_i       => clk_i,
          rst_i       => rst_i,
+         rd_en_i     => decode2reg_rd_en,
          src_reg_i   => decode2reg_src_reg,
          src_val_o   => decode2reg_src_val,
          dst_reg_i   => decode2reg_dst_reg,

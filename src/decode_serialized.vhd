@@ -15,6 +15,7 @@ entity decode_serialized is
       fetch_double_o   : out std_logic;                     -- combinatorial
 
       -- Register file. Value arrives on the next clock cycle
+      reg_rd_en_o      : out std_logic;
       reg_src_addr_o   : out std_logic_vector(3 downto 0);  -- combinatorial
       reg_dst_addr_o   : out std_logic_vector(3 downto 0);  -- combinatorial
       reg_src_val_i    : in  std_logic_vector(15 downto 0);
@@ -76,6 +77,7 @@ begin
          fetch_addr_i     => fetch_addr_i,
          fetch_data_i     => fetch_data_i,
          fetch_double_o   => fetch_double_o,
+         reg_rd_en_o      => reg_rd_en_o,
          reg_src_addr_o   => reg_src_addr_o,
          reg_src_val_i    => reg_src_val_i,
          reg_dst_addr_o   => reg_dst_addr_o,

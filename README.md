@@ -245,11 +245,11 @@ Then there are some additional signals
 
 |   Name    | LUTs | Regs | Slices |
 | --------- | ---- | ---- | ------ |
-| Fetch     |   45 |   86 |    26  |
-| Decode    |   72 |   96 |    54  |
-| Execute   |  507 |    0 |   200  |
-| Registers |  105 |  141 |    80  |
-| Memory    |   43 |   37 |    45  |
-| TOTAL     |  819 |  428 |   308  |
+| Fetch     |   84 |  152 |    51  |
+| Decode    |   77 |   78 |    55  |
+| Execute   |  524 |    0 |   198  |
+| Registers |  112 |  141 |    83  |
+| Memory    |   46 |   37 |    40  |
+| TOTAL     |  843 |  408 |   291  |
 
 

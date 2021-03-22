@@ -18,6 +18,7 @@ entity decode is
       fetch_double_o   : out std_logic;                     -- combinatorial
 
       -- Register file. Value arrives on the next clock cycle
+      reg_rd_en_o      : out std_logic;
       reg_src_addr_o   : out std_logic_vector(3 downto 0);  -- combinatorial
       reg_dst_addr_o   : out std_logic_vector(3 downto 0);  -- combinatorial
       reg_src_val_i    : in  std_logic_vector(15 downto 0);
@@ -86,9 +87,6 @@ architecture synthesis of decode is
    signal microcode_addr  : std_logic_vector(3 downto 0);
    signal microcode_value : std_logic_vector(35 downto 0);
 
-   signal fetch_data   : std_logic_vector(31 downto 0);
-   signal fetch_data_d : std_logic_vector(31 downto 0);
-
 begin
 
    ------------------------------------------------------------
@@ -101,29 +99,13 @@ begin
 
 
    ------------------------------------------------------------
-   -- Hold previous value of input
-   ------------------------------------------------------------
-
-   p_bypass : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         if fetch_valid_i and fetch_ready_o then
-            fetch_data_d <= fetch_data_i;
-         end if;
-      end if;
-   end process p_bypass;
-
-   fetch_data <= fetch_data_d when fetch_ready_o = '0' else
-                 fetch_data_i;
-
-
-   ------------------------------------------------------------
    -- Generate combinatorial output values
    ------------------------------------------------------------
 
-   reg_src_addr_o <= fetch_data(R_SRC_REG);
-   reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data(R_OPCODE) = C_OPCODE_JMP else
-                     fetch_data(R_DST_REG);
+   reg_rd_en_o    <= fetch_valid_i and fetch_ready_o;
+   reg_src_addr_o <= fetch_data_i(R_SRC_REG);
+   reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data_i(R_OPCODE) = C_OPCODE_JMP else
+                     fetch_data_i(R_DST_REG);
 
    exe_src_val_o  <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
    exe_dst_val_o  <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o

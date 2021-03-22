@@ -21,6 +21,7 @@ entity registers is
       clk_i         : in  std_logic;
       rst_i         : in  std_logic;
       -- Read interface
+      rd_en_i       : in  std_logic;
       src_reg_i     : in  std_logic_vector(3 downto 0);
       src_val_o     : out std_logic_vector(15 downto 0);
       dst_reg_i     : in  std_logic_vector(3 downto 0);
@@ -61,14 +62,33 @@ architecture synthesis of registers is
    signal wr_addr_d   : std_logic_vector(3 downto 0);
    signal wr_val_d    : std_logic_vector(15 downto 0);
 
+   signal src_reg_r   : std_logic_vector(3 downto 0);
+   signal dst_reg_r   : std_logic_vector(3 downto 0);
+   signal src_reg     : std_logic_vector(3 downto 0);
+   signal dst_reg     : std_logic_vector(3 downto 0);
+
 begin
+
+   p_rden : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if rd_en_i = '1' then
+            src_reg_r <= src_reg_i;
+            dst_reg_r <= dst_reg_i;
+         end if;
+      end if;
+   end process p_rden;
+
+   src_reg <= src_reg_i when rd_en_i = '1' else src_reg_r;
+   dst_reg <= dst_reg_i when rd_en_i = '1' else dst_reg_r;
+
 
    ------------------------------------------------------------
    -- Lower register bank: R0 - R7
    ------------------------------------------------------------
 
-   lower_rd_src_addr <= r14(G_REGISTER_BANK_WIDTH+7 downto 8) & src_reg_i(2 downto 0);
-   lower_rd_dst_addr <= r14(G_REGISTER_BANK_WIDTH+7 downto 8) & dst_reg_i(2 downto 0);
+   lower_rd_src_addr <= r14(G_REGISTER_BANK_WIDTH+7 downto 8) & src_reg(2 downto 0);
+   lower_rd_dst_addr <= r14(G_REGISTER_BANK_WIDTH+7 downto 8) & dst_reg(2 downto 0);
    lower_wr_addr     <= r14(G_REGISTER_BANK_WIDTH+7 downto 8) & wr_addr_i(2 downto 0);
    lower_wr_en       <= wr_en_i and not wr_addr_i(3);
 
@@ -108,8 +128,8 @@ begin
    -- Upper register bank: R8 - R15
    ------------------------------------------------------------
 
-   upper_rd_src_addr <= src_reg_i(2 downto 0);
-   upper_rd_dst_addr <= dst_reg_i(2 downto 0);
+   upper_rd_src_addr <= src_reg(2 downto 0);
+   upper_rd_dst_addr <= dst_reg(2 downto 0);
    upper_wr_addr     <= wr_addr_i(2 downto 0);
    upper_wr_en       <= wr_en_i and wr_addr_i(3);
 
@@ -176,8 +196,8 @@ begin
    p_wbr : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         src_reg_d   <= src_reg_i;
-         dst_reg_d   <= dst_reg_i;
+         src_reg_d   <= src_reg;
+         dst_reg_d   <= dst_reg;
          wr_r14_en_d <= wr_r14_en_i;
          wr_r14_d    <= wr_r14_i;
          wr_val_d    <= wr_val_i;
