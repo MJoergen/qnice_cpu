@@ -11,11 +11,13 @@ DUTS += fetch
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))
+BMC_PASS   = $(patsubst %,%_bmc/PASS,$(DUTS))
+COVER_PASS = $(patsubst %,%_cover/PASS,$(DUTS))
 
-all: $(BMC)
+all: $(BMC_PASS)
 
-%_bmc: SBY=$(patsubst %_bmc,%,$@)
-%_bmc:
+%_bmc/PASS: SBY=$(patsubst %_bmc/PASS,%,$@)
+%_bmc/PASS:
 	sby --yosys "yosys -m ghdl" -f $(SBY).sby
 
 clean:
