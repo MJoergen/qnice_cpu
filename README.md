@@ -228,6 +228,26 @@ Then there are some additional signals
 * `R14`      : Current value of Status Register
 
 
+## Interleaving
+Analyzing the timing of a QNICE assembly program is not simple, due to the
+pipeline architecture. Some instructions - like `MOVE 0x0000, R0` are limited
+by the bandwidth of the instruction memory, while other instrucions - like
+`MOVE @R0, @R1` are limited by the bandwidth of the data memory.
+
+What this means is that the instruction `MOVE 0x0000, R0` need only take one
+clock cycle to execute, but it needs to read two words from the instruction
+memory. On the other hand the instruction `MOVE @R0, @R1` needs at least two
+clock cycles to execute, but only reads one word from instruction memory.
+
+In the file `test/prog_interleave.asm` I conduct a small experiment, where I
+first have a sequence of idential instruction `MOVE 0x0000, R0` that each take
+two clock cycles, then a sequence of identical instructions `MOVE @R0, @R1`
+that again take two clock cycles each. The final part contains alternating
+instructions `MOVE 0x0000, R0` and `MOVE @R0, @R1`, and this sequence of two
+instructions take a total of three instructions to execute. So the pair of
+instructions are faster than each individual instruction.
+
+
 ## TODO
 * Cleanup code.
 * Formal verification.
