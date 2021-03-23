@@ -1,0 +1,49 @@
+vunit i_registers(registers(synthesis))
+{
+
+   -- set all declarations to run on clk
+   default clock is rising_edge(clk_i);
+
+
+   ----------------------------------------------
+   -- INTERNAL ASSERTIONS
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- ASSERTIONS ON OUTPUTS
+   ----------------------------------------------
+
+   signal f_write_to_r14 : std_logic;
+   f_write_to_r14 <= '1' when wr_en_i = '1' and wr_addr_i = 14 else '0';
+
+   f_r14_a : assert always {wr_r14_en_i and not f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_r14_i) or X"0001")};
+   f_r14_b : assert always {f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_val_i) or X"0001")};
+
+   -- Write before read
+   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = src_reg_i and wr_addr_i /= 14} |=> {src_val_o = prev(wr_val_i)};
+   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = dst_reg_i and wr_addr_i /= 14} |=> {dst_val_o = prev(wr_val_i)};
+
+
+   ----------------------------------------------
+   -- ASSUMPTIONS ABOUT INPUTS
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- COVER STATEMENTS TO VERIFY REACHABILITY
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
+   ----------------------------------------------
+
+
+} -- vunit i_registers(registers(synthesis))
+

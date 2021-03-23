@@ -8,6 +8,7 @@ DUTS += two_stage_fifo
 DUTS += pipe_concat
 DUTS += memory
 DUTS += fetch
+DUTS += registers
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))

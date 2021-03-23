@@ -1,0 +1,23 @@
+[tasks]
+bmc
+cover
+
+[options]
+bmc: mode bmc
+bmc: depth 6
+cover: mode cover
+cover: depth 6
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 -gG_REGISTER_BANK_WIDTH=1 registers.vhd registers.psl dp_ram.vhd cpu_constants.vhd -e registers
+prep -top registers
+
+[files]
+registers.psl
+../src/cpu_constants.vhd
+../src/registers.vhd
+../src/sub/dp_ram.vhd
+
