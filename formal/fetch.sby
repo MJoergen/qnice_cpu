@@ -28,7 +28,7 @@ pipe_concat.psl
 one_stage_buffer.psl
 two_stage_buffer.psl
 two_stage_fifo.psl
-../src/fetch.vhd
+../src/fetch/fetch.vhd
 ../src/sub/pipe_concat.vhd
 ../src/sub/one_stage_buffer.vhd
 ../src/sub/two_stage_buffer.vhd
