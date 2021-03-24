@@ -47,11 +47,32 @@ SAVE          = test/$(TB).gtkw
 TOP = system
 
 
-###############################################3
-## Simulation
-###############################################3
+################################################
+## Help
+################################################
 
-show: $(WAVE)
+.PHONY: help
+help:
+	@echo
+	@echo "Possible targets:"
+	@echo "  make sim        : Run simulation"
+	@echo "  make system.bit : Run synthesis using Vivado"
+	@echo "  make synth      : Run synthesis using yosys"
+	@echo "  make formal     : Run formal verification"
+	@echo "  make clean      : Remove all generated files"
+	@echo "  make help       : This message"
+	@echo "Optional arguments:"
+	@echo "  TEST=<filename>           : Specify assembly source file. Defaults to prog."
+	@echo "  REGISTER_BANK_WIDTH=<val> : Number of bits in register bank number. Defaults to 8."
+	@echo
+
+
+################################################
+## Simulation
+################################################
+
+.PHONY: sim
+sim: $(WAVE)
 	gtkwave $(WAVE) $(SAVE)
 
 $(WAVE): $(SOURCES) $(TEST_SOURCES) $(ROM)
@@ -63,9 +84,9 @@ $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
 
 
-###############################################3
-## Synthesis
-###############################################3
+################################################
+## Synthesis using Vivado
+################################################
 
 $(TOP).bit: hw/$(TOP).tcl $(SOURCES) $(TEST_SOURCES) hw/$(TOP).xdc $(ROM)
 	bash -c "source $(XILINX_DIR)/settings64.sh ; vivado -mode tcl -source $<"
@@ -84,10 +105,31 @@ hw/$(TOP).tcl: Makefile
 	echo "write_bitstream -force $(TOP).bit" >> $@
 	echo "exit" >> $@
 
+
+################################################
+## Synthesis using yosys
+################################################
+
+.PHONY: synth
 synth: $(SOURCES) $(TEST_SOURCES) $(ROM)
 	ghdl -a --std=08 -frelaxed $(SOURCES) $(TEST_SOURCES)
 	yosys -m ghdl -p 'ghdl --std=08 -frelaxed -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) $(TOP); synth_xilinx -top $(TOP) -edif $(TOP).edif' > yosys.log
 
+
+################################################
+## Formal
+################################################
+
+.PHONY: formal
+formal:
+	make -C formal
+
+
+################################################
+## Cleanup
+################################################
+
+.PHONY: clean
 clean:
 	rm -rf test/$(TEST).lis
 	rm -rf test/$(TEST).out
@@ -104,4 +146,5 @@ clean:
 	rm -rf tight_setup_hold_pins.txt
 	rm -rf system.edif
 	rm -rf .Xil
+	make -C formal clean
 
