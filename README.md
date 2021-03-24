@@ -265,11 +265,11 @@ instructions are faster than each individual instruction.
 
 |   Name    | LUTs | Regs | Slices |
 | --------- | ---- | ---- | ------ |
-| Fetch     |   84 |  152 |    51  |
-| Decode    |   77 |   78 |    55  |
-| Execute   |  524 |    0 |   198  |
-| Registers |  112 |  141 |    83  |
-| Memory    |   46 |   37 |    40  |
-| TOTAL     |  843 |  408 |   291  |
+| Fetch     |   83 |  152 |    57  |
+| Decode    |   73 |   76 |    37  |
+| Execute   |  524 |    0 |   190  |
+| Registers |  110 |  141 |    65  |
+| Memory    |   43 |   37 |    43  |
+| TOTAL     |  833 |  406 |   280  |
 
 

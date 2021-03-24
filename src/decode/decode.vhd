@@ -102,7 +102,7 @@ begin
    -- Generate combinatorial output values
    ------------------------------------------------------------
 
-   reg_rd_en_o    <= fetch_valid_i and fetch_ready_o;
+   reg_rd_en_o    <= exe_ready_i;
    reg_src_addr_o <= fetch_data_i(R_SRC_REG);
    reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data_i(R_OPCODE) = C_OPCODE_JMP else
                      fetch_data_i(R_DST_REG);
