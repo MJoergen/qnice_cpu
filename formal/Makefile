@@ -9,6 +9,7 @@ DUTS += pipe_concat
 DUTS += memory
 DUTS += fetch
 DUTS += registers
+DUTS += dp_ram
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))
@@ -17,9 +18,9 @@ COVER_PASS = $(patsubst %,%_cover/PASS,$(DUTS))
 
 all: $(BMC_PASS)
 
-%_bmc/PASS: SBY=$(patsubst %_bmc/PASS,%,$@)
+%_bmc/PASS: DUT=$(patsubst %_bmc/PASS,%,$@)
 %_bmc/PASS:
-	sby --yosys "yosys -m ghdl" -f $(SBY).sby
+	sby --yosys "yosys -m ghdl" -f $(DUT).sby
 
 clean:
 	rm -rf $(BMC)

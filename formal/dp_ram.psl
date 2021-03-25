@@ -1,0 +1,58 @@
+vunit i_dp_ram(dp_ram(synthesis))
+{
+
+   -- set all declarations to run on clk
+   default clock is rising_edge(clk_i);
+
+
+   ----------------------------------------------
+   -- INTERNAL ASSERTIONS
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- ASSERTIONS ON OUTPUTS
+   ----------------------------------------------
+
+   signal c_addr : std_logic_vector(G_ADDR_SIZE-1 downto 0);
+   attribute anyconst : boolean;
+   attribute anyconst of c_addr : signal is true;
+
+   signal f_data    : std_logic_vector(G_DATA_SIZE-1 downto 0);
+   signal f_written : std_logic := '0';
+
+   p_written : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if wr_en_i = '1' and wr_addr_i = c_addr then
+            f_data    <= wr_data_i;
+            f_written <= '1';
+         end if;
+      end if;
+   end process p_written;
+
+   assert always {f_written = '1' and rd_addr_i = c_addr and wr_en_i = '0'} |=> {rd_data_o = f_data};
+
+
+   ----------------------------------------------
+   -- ASSUMPTIONS ABOUT INPUTS
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- COVER STATEMENTS TO VERIFY REACHABILITY
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
+   ----------------------------------------------
+
+
+} -- vunit i_registers(registers(synthesis))
+

@@ -1,0 +1,21 @@
+[tasks]
+bmc
+cover
+
+[options]
+bmc: mode bmc
+bmc: depth 6
+cover: mode cover
+cover: depth 6
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_RAM_STYLE=distributed dp_ram.vhd dp_ram.psl -e dp_ram
+prep -top dp_ram
+
+[files]
+dp_ram.psl
+../src/sub/dp_ram.vhd
+
