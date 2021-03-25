@@ -31,7 +31,11 @@ vunit i_dp_ram(dp_ram(synthesis))
       end if;
    end process p_written;
 
-   assert always {f_written = '1' and rd_addr_i = c_addr and wr_en_i = '0'} |=> {rd_data_o = f_data};
+   -- We can read back last value written to any given address
+   assert always {f_written = '1' and rd_addr_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {rd_data_o = f_data};
+
+   -- Output value only changes when rd_en_i is asserted.
+   assert always {not rd_en_i} |=> {stable(rd_data_o)};
 
 
    ----------------------------------------------

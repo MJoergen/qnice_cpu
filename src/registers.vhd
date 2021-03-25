@@ -100,6 +100,7 @@ begin
       port map (
          clk_i     => clk_i,
          rst_i     => rst_i,
+         rd_en_i   => '1',
          rd_addr_i => lower_rd_src_addr,
          rd_data_o => lower_rd_src_val,
          wr_addr_i => lower_wr_addr,
@@ -116,6 +117,7 @@ begin
       port map (
          clk_i     => clk_i,
          rst_i     => rst_i,
+         rd_en_i   => '1',
          rd_addr_i => lower_rd_dst_addr,
          rd_data_o => lower_rd_dst_val,
          wr_addr_i => lower_wr_addr,
@@ -142,6 +144,7 @@ begin
       port map (
          clk_i     => clk_i,
          rst_i     => rst_i,
+         rd_en_i   => '1',
          rd_addr_i => upper_rd_src_addr,
          rd_data_o => upper_rd_src_val,
          wr_addr_i => upper_wr_addr,
@@ -159,6 +162,7 @@ begin
       port map (
          clk_i     => clk_i,
          rst_i     => rst_i,
+         rd_en_i   => '1',
          rd_addr_i => upper_rd_dst_addr,
          rd_data_o => upper_rd_dst_val,
          wr_addr_i => upper_wr_addr,

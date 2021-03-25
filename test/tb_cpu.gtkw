@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Tue Mar 23 04:47:11 2021
+[*] Thu Mar 25 12:29:17 2021
 [*]
 [dumpfile] "/home/mike/git/MJoergen/qnice_cpu/test/tb_cpu.ghw"
-[dumpfile_mtime] "Tue Mar 23 04:41:14 2021"
-[dumpfile_size] 385998
+[dumpfile_mtime] "Thu Mar 25 12:28:31 2021"
+[dumpfile_size] 11320589
 [savefile] "/home/mike/git/MJoergen/qnice_cpu/test/tb_cpu.gtkw"
-[timestart] 70300000
+[timestart] 787893100000
 [size] 1853 1132
 [pos] -1 -1
-*-25.051188 168900000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-25.051188 787945700000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_cpu.
 [treeopen] top.tb_cpu.i_system.
@@ -80,7 +80,7 @@ top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_double_i
 #{top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[31:0]} top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[31] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[30] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[29] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[28] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[27] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[26] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[25] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[24] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[23] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[22] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[21] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[20] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[19] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[18] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[17] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[16] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[15] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[14] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[13] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[12] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[11] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[10] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[9] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[8] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[7] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[6] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[5] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[4] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[3] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[2] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[1] top.tb_cpu.i_system.i_cpu.i_fetch_cache.m_data_o[0]
 @1401200
 -FETCH
-@800200
+@c00200
 -DECODE
 @28
 top.tb_cpu.i_system.i_cpu.i_decode_serialized.clk_i
@@ -126,7 +126,7 @@ top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_imm_o
 #{top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[15:0]} top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[15] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[14] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[13] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[12] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[11] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[10] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[9] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[8] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[7] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[6] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[5] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[4] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[3] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[2] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[1] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_dst_val_o[0]
 #{top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_res_reg_o[3:0]} top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_res_reg_o[3] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_res_reg_o[2] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_res_reg_o[1] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_res_reg_o[0]
 #{top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[15:0]} top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[15] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[14] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[13] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[12] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[11] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[10] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[9] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[8] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[7] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[6] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[5] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[4] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[3] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[2] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[1] top.tb_cpu.i_system.i_cpu.i_decode_serialized.exe_r14_o[0]
-@1000200
+@1401200
 -DECODE
 @c00200
 -execute
@@ -223,11 +223,13 @@ top.tb_cpu.i_system.i_cpu.i_memory.wb_ack_i
 #{top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[15:0]} top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[15] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[14] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[13] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[12] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[11] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[10] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[9] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[8] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[7] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[6] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[5] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[4] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[3] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[2] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[1] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[0]
 @1401200
 -memory
-@c00200
+@800200
 -registers
 @28
 top.tb_cpu.i_system.i_cpu.i_registers.clk_i
 top.tb_cpu.i_system.i_cpu.i_registers.rst_i
+[color] 2
+top.tb_cpu.i_system.i_cpu.i_registers.rd_en_i
 @22
 #{top.tb_cpu.i_system.i_cpu.i_registers.src_reg_i[3:0]} top.tb_cpu.i_system.i_cpu.i_registers.src_reg_i[3] top.tb_cpu.i_system.i_cpu.i_registers.src_reg_i[2] top.tb_cpu.i_system.i_cpu.i_registers.src_reg_i[1] top.tb_cpu.i_system.i_cpu.i_registers.src_reg_i[0]
 #{top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[15:0]} top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[15] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[14] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[13] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[12] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[11] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[10] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[9] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[8] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[7] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[6] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[5] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[4] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[3] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[2] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[1] top.tb_cpu.i_system.i_cpu.i_registers.src_val_o[0]
@@ -239,12 +241,13 @@ top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_en_i
 @22
 #{top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[15:0]} top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[15] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[14] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[13] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[12] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[11] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[10] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[9] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[8] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[7] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[6] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[5] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[4] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[3] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[2] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[1] top.tb_cpu.i_system.i_cpu.i_registers.wr_r14_i[0]
 @28
+[color] 2
 top.tb_cpu.i_system.i_cpu.i_registers.wr_en_i
 @22
 #{top.tb_cpu.i_system.i_cpu.i_registers.wr_addr_i[3:0]} top.tb_cpu.i_system.i_cpu.i_registers.wr_addr_i[3] top.tb_cpu.i_system.i_cpu.i_registers.wr_addr_i[2] top.tb_cpu.i_system.i_cpu.i_registers.wr_addr_i[1] top.tb_cpu.i_system.i_cpu.i_registers.wr_addr_i[0]
 #{top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[15:0]} top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[15] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[14] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[13] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[12] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[11] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[10] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[9] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[8] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[7] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[6] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[5] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[4] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[3] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[2] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[1] top.tb_cpu.i_system.i_cpu.i_registers.wr_val_i[0]
 #{top.tb_cpu.i_system.i_cpu.i_registers.r14[15:0]} top.tb_cpu.i_system.i_cpu.i_registers.r14[15] top.tb_cpu.i_system.i_cpu.i_registers.r14[14] top.tb_cpu.i_system.i_cpu.i_registers.r14[13] top.tb_cpu.i_system.i_cpu.i_registers.r14[12] top.tb_cpu.i_system.i_cpu.i_registers.r14[11] top.tb_cpu.i_system.i_cpu.i_registers.r14[10] top.tb_cpu.i_system.i_cpu.i_registers.r14[9] top.tb_cpu.i_system.i_cpu.i_registers.r14[8] top.tb_cpu.i_system.i_cpu.i_registers.r14[7] top.tb_cpu.i_system.i_cpu.i_registers.r14[6] top.tb_cpu.i_system.i_cpu.i_registers.r14[5] top.tb_cpu.i_system.i_cpu.i_registers.r14[4] top.tb_cpu.i_system.i_cpu.i_registers.r14[3] top.tb_cpu.i_system.i_cpu.i_registers.r14[2] top.tb_cpu.i_system.i_cpu.i_registers.r14[1] top.tb_cpu.i_system.i_cpu.i_registers.r14[0]
-@1401200
+@1000200
 -registers
 [pattern_trace] 1
 [pattern_trace] 0

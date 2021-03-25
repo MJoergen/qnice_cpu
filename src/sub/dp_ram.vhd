@@ -22,6 +22,7 @@ entity dp_ram is
       wr_data_i : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
       wr_en_i   : in  std_logic;
       -- Read interface
+      rd_en_i   : in  std_logic;
       rd_addr_i : in  std_logic_vector(G_ADDR_SIZE-1 downto 0);
       rd_data_o : out std_logic_vector(G_DATA_SIZE-1 downto 0)
    );
@@ -57,14 +58,18 @@ begin
       p_read_falling : process (clk_i)
       begin
          if falling_edge(clk_i) then
-            rd_data <= dp_ram_r(to_integer(rd_addr_i));
+            if rd_en_i = '1' then
+               rd_data <= dp_ram_r(to_integer(rd_addr_i));
+            end if;
          end if;
       end process p_read_falling;
 
       p_read_rising : process (clk_i)
       begin
          if rising_edge(clk_i) then
-            rd_data_o <= rd_data;
+            if rd_en_i = '1' then
+               rd_data_o <= rd_data;
+            end if;
          end if;
       end process p_read_rising;
 
@@ -75,7 +80,9 @@ begin
       p_read : process (clk_i)
       begin
          if rising_edge(clk_i) then
-            rd_data_o <= dp_ram_r(to_integer(rd_addr_i));
+            if rd_en_i = '1' then
+               rd_data_o <= dp_ram_r(to_integer(rd_addr_i));
+            end if;
          end if;
       end process p_read;
 
