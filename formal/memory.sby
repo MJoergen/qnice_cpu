@@ -18,7 +18,7 @@ prep -top memory
 [files]
 memory.psl
 ../src/cpu_constants.vhd
-../src/memory.vhd
+../src/memory/memory.vhd
 ../src/sub/one_stage_buffer.vhd
 ../src/sub/one_stage_fifo.vhd
 

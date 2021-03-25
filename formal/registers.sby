@@ -18,6 +18,6 @@ prep -top registers
 [files]
 registers.psl
 ../src/cpu_constants.vhd
-../src/registers.vhd
+../src/registers/registers.vhd
 ../src/sub/dp_ram.vhd
 

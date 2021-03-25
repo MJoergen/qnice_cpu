@@ -24,8 +24,8 @@ SOURCES += src/decode/decode_serialized.vhd
 SOURCES += src/execute/alu_data.vhd
 SOURCES += src/execute/alu_flags.vhd
 SOURCES += src/execute/execute.vhd
-SOURCES += src/registers.vhd
-SOURCES += src/memory.vhd
+SOURCES += src/registers/registers.vhd
+SOURCES += src/memory/memory.vhd
 SOURCES += src/debug.vhd
 SOURCES += src/cpu.vhd
 

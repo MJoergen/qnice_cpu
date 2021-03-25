@@ -54,6 +54,8 @@ For more detailed information about the design look here:
 * [FETCH](src/fetch/README.md)
 * [DECODE](src/decode/README.md)
 * [EXECUTE](src/execute/README.md)
+* [REGISTERS](src/registers/README.md)
+* [MEMORY](src/memory/README.md)
 
 ## Interleaving
 Analyzing the timing of a QNICE assembly program is not simple, due to the
