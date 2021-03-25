@@ -92,19 +92,23 @@ begin
 
 
    i_icache : entity work.icache
+      generic map (
+         G_ADDR_SIZE => 16,
+         G_DATA_SIZE => 16
+      )
       port map (
-         clk_i           => clk_i,
-         rst_i           => icache_rst,
-         fetch_valid_i   => pause2icache_valid,
-         fetch_ready_o   => pause2icache_ready,
-         fetch_addr_i    => pause2icache_addr,
-         fetch_data_i    => pause2icache_data,
-         decode_valid_o  => m_valid_o,
-         decode_ready_i  => m_ready_i,
-         decode_double_o => m_double_o,
-         decode_addr_o   => m_addr_o,
-         decode_data_o   => m_data_o,
-         decode_double_i => m_double_i
+         clk_i      => clk_i,
+         rst_i      => icache_rst,
+         s_valid_i  => pause2icache_valid,
+         s_ready_o  => pause2icache_ready,
+         s_addr_i   => pause2icache_addr,
+         s_data_i   => pause2icache_data,
+         m_valid_o  => m_valid_o,
+         m_ready_i  => m_ready_i,
+         m_double_o => m_double_o,
+         m_addr_o   => m_addr_o,
+         m_data_o   => m_data_o,
+         m_double_i => m_double_i
       ); -- i_icache
 
 end architecture synthesis;
