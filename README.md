@@ -74,7 +74,8 @@ instructions `MOVE @R0, @R1` that again take two clock cycles each. The final
 part contains alternating instructions `MOVE 0x0000, R0` and `MOVE @R0, @R1`,
 and this sequence of two instructions take a total of three instructions to
 execute. So the pair of instructions are faster than the sum of each individual
-instruction.
+instruction, because the instruction and data memories are operating
+simultaneously.
 
 
 ## Makefile
