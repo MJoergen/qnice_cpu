@@ -258,23 +258,22 @@ begin
       ); -- i_memory
 
 
-   ------------------------------------------------------------
-   -- Debug output
-   ------------------------------------------------------------
-
-   p_debug : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         if not rst_i and exe2reg_we then
-            report "Write value 0x" & to_hstring(exe2reg_val) & " to register " & to_hstring(exe2reg_addr);
-         end if;
-
-         if not rst_i and wbd_stb_o and wbd_we_o and not wbd_stall_i then
-            report "Write value 0x" & to_hstring(wbd_dat_o) & " to memory 0x" & to_hstring(wbd_addr_o);
-         end if;
-      end if;
-   end process p_debug;
+-- pragma synthesis_off
+   i_debug : entity work.debug
+      generic map (
+         G_FILE_NAME => "writes.txt"
+      )
+      port map (
+         clk_i      => clk_i,
+         rst_i      => rst_i,
+         reg_we_i   => exe2reg_we,
+         reg_addr_i => exe2reg_addr,
+         reg_data_i => exe2reg_val,
+         mem_we_i   => std_logic(wbd_stb_o and wbd_we_o and not wbd_stall_i),
+         mem_addr_i => wbd_addr_o,
+         mem_data_i => wbd_dat_o
+      ); -- i_debug
+-- pragma synthesis_on
 
 end architecture synthesis;
-
 

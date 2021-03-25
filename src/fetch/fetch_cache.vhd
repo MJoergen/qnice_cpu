@@ -1,6 +1,9 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
+-- The FETCH module consists of a simpler one-word-at-a-time file fetch.vhd and
+-- a simple instruction cache icache.vhd.
+
 entity fetch_cache is
    port (
       clk_i       : in  std_logic;
@@ -67,6 +70,8 @@ begin
       ); -- i_fetch
 
 
+   -- This block is just for debugging.
+   -- Setting the value of G_PAUSE_SIZE to -8 generates pauses between each fetched word.
    i_axi_pause : entity work.axi_pause
       generic map (
          G_TDATA_SIZE => 32,

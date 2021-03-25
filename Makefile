@@ -26,6 +26,7 @@ SOURCES += src/execute/alu_flags.vhd
 SOURCES += src/execute/execute.vhd
 SOURCES += src/registers.vhd
 SOURCES += src/memory.vhd
+SOURCES += src/debug.vhd
 SOURCES += src/cpu.vhd
 
 TEST_SOURCES += test/tdp_ram.vhd

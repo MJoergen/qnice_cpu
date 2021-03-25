@@ -42,6 +42,7 @@ package cpu_constants is
    constant C_OPCODE_CTRL : integer := 14;
    constant C_OPCODE_JMP  : integer := 15;
 
+   -- Control instructions
    constant C_CTRL_HALT  : integer := 0;
    constant C_CTRL_RTI   : integer := 1;
    constant C_CTRL_INT   : integer := 2;
