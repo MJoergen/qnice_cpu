@@ -261,7 +261,7 @@ begin
 -- pragma synthesis_off
    i_debug : entity work.debug
       generic map (
-         G_FILE_NAME => "writes.txt"
+         G_FILE_NAME => "test/writes.txt"
       )
       port map (
          clk_i      => clk_i,
