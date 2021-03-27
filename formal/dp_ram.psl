@@ -42,10 +42,28 @@ vunit i_dp_ram(dp_ram(synthesis))
    -- ASSUMPTIONS ABOUT INPUTS
    ----------------------------------------------
 
+   signal f_falling_rd_en   : std_logic;
+   signal f_falling_rd_addr : std_logic_vector(G_ADDR_SIZE-1 downto 0);
+
+   p_falling : process (clk_i)
+   begin
+      if falling_edge(clk_i) then
+         f_falling_rd_en   <= rd_en_i;
+         f_falling_rd_addr <= rd_addr_i;
+      end if;
+   end process p_falling;
+
+   -- Here we make sure that the input signals only transition on the rising
+   -- clock edge, not on the falling clock edge.
+   assume always {not clk_i} |-> {f_falling_rd_en = rd_en_i and f_falling_rd_addr = rd_addr_i};
+
 
    ----------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    ----------------------------------------------
+
+   -- Useful for debugging, to make sure that the rd_en_i input signal is able to toggle.
+   f_toggle : cover {rd_en_i = '1'; rd_en_i = '0'; rd_en_i = '1'};
 
 
    ----------------------------------------------

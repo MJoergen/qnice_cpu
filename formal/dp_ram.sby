@@ -5,14 +5,16 @@ cover
 [options]
 bmc: mode bmc
 bmc: depth 6
+bmc: multiclock on
 cover: mode cover
 cover: depth 6
+cover: multiclock on
 
 [engines]
 smtbmc
 
 [script]
-ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_RAM_STYLE=distributed dp_ram.vhd dp_ram.psl -e dp_ram
+ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_RAM_STYLE=block dp_ram.vhd dp_ram.psl -e dp_ram
 prep -top dp_ram
 
 [files]
