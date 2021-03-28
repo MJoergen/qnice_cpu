@@ -1,0 +1,22 @@
+[tasks]
+cover
+bmc
+
+[options]
+cover: mode cover
+cover: depth 10
+cover: append 3
+bmc: mode bmc
+bmc: depth 10
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 icache.vhd icache.psl -e icache
+prep -top icache
+
+[files]
+icache.psl
+../src/fetch/icache.vhd
+

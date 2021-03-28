@@ -10,6 +10,7 @@ DUTS += memory
 DUTS += fetch
 DUTS += registers
 DUTS += dp_ram
+DUTS += icache
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))

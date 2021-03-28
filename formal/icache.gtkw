@@ -1,0 +1,38 @@
+[*]
+[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
+[*] Sun Mar 28 17:42:06 2021
+[*]
+[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/icache_bmc/engine_0/trace.vcd"
+[dumpfile_mtime] "Sun Mar 28 17:40:49 2021"
+[dumpfile_size] 1061
+[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/icache.gtkw"
+[timestart] 0
+[size] 1373 995
+[pos] -292 -218
+*-2.746155 5 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 377
+[signals_width] 228
+[sst_expanded] 1
+[sst_vpaned_height] 281
+@28
+icache.clk_i
+icache.rst_i
+[color] 2
+icache.s_valid_i
+[color] 7
+icache.s_ready_o
+@22
+icache.s_addr_i[3:0]
+icache.s_data_i[7:0]
+@28
+[color] 2
+icache.m_valid_o
+[color] 7
+icache.m_ready_i
+icache.m_double_o
+icache.m_double_i
+@22
+icache.m_addr_o[3:0]
+icache.m_data_o[15:0]
+[pattern_trace] 1
+[pattern_trace] 0

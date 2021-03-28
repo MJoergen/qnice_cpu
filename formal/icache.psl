@@ -1,0 +1,45 @@
+vunit i_icache(icache(synthesis))
+{
+
+   -- set all declarations to run on clk
+   default clock is rising_edge(clk_i);
+
+
+   --------------------------------------------
+   -- INTERNAL ASSERTIONS
+   --------------------------------------------
+
+
+   ---------------------------------------
+   -- PROPERTIES OF THE OUTPUT INTERFACE
+   ---------------------------------------
+
+   f_stable_double : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '1'}
+                        |=> {stable(m_valid_o) and stable(m_double_o) and stable(m_addr_o) and stable(m_data_o)} abort rst_i;
+
+   f_stable_single : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '0'}
+                        |=> {stable(m_valid_o) and stable(m_addr_o) and stable(m_data_o(7 downto 0))} abort rst_i;
+
+
+   -----------------------------
+   -- ASSUMPTIONS ABOUT INPUTS
+   -----------------------------
+
+
+   --------------------------------------------
+   -- COVER STATEMENTS TO VERIFY REACHABILITY
+   --------------------------------------------
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
+   ----------------------------------------------
+
+
+} -- vunit i_icache(icache(synthesis))
+
