@@ -28,6 +28,10 @@ vunit i_registers(registers(synthesis))
    f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(src_val_o)};
    f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(dst_val_o)};
 
+   -- Write before read
+   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(src_reg_i) and wr_addr_i /= 14} |=> {src_val_o = prev(wr_val_i)};
+   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(dst_reg_i) and wr_addr_i /= 14} |=> {dst_val_o = prev(wr_val_i)};
+
 
    ----------------------------------------------
    -- ASSUMPTIONS ABOUT INPUTS
