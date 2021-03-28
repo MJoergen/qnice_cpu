@@ -4,10 +4,10 @@ cover
 
 [options]
 bmc: mode bmc
-bmc: depth 6
+bmc: depth 8
 bmc: multiclock on
 cover: mode cover
-cover: depth 6
+cover: depth 8
 cover: multiclock on
 
 [engines]
