@@ -24,15 +24,39 @@ vunit i_registers(registers(synthesis))
    f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = src_reg_i and wr_addr_i /= 14} |=> {src_val_o = prev(wr_val_i)};
    f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = dst_reg_i and wr_addr_i /= 14} |=> {dst_val_o = prev(wr_val_i)};
 
+   -- Output only changes when rd_en_i is high (or during write-before-read)
+   f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(src_val_o)};
+   f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(dst_val_o)};
+
 
    ----------------------------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    ----------------------------------------------
 
+   signal f_falling_rd_en   : std_logic;
+   signal f_falling_src_reg : std_logic_vector(3 downto 0);
+   signal f_falling_dst_reg : std_logic_vector(3 downto 0);
+
+   p_falling : process (clk_i)
+   begin
+      if falling_edge(clk_i) then
+         f_falling_rd_en   <= rd_en_i;
+         f_falling_src_reg <= src_reg_i;
+         f_falling_dst_reg <= dst_reg_i;
+      end if;
+   end process p_falling;
+
+   -- Here we make sure that the input signals only transition on the rising
+   -- clock edge, not on the falling clock edge.
+   assume always {not clk_i} |-> {f_falling_rd_en = rd_en_i and f_falling_src_reg = src_reg_i and f_falling_dst_reg = dst_reg_i};
+
 
    ----------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    ----------------------------------------------
+
+   -- Useful for debugging, to make sure that the rd_en_i input signal is able to toggle.
+   f_toggle : cover {rd_en_i = '1'; rd_en_i = '0'; rd_en_i = '1'};
 
 
    ----------------------------------------------
