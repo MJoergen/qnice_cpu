@@ -1,20 +1,20 @@
 [*]
 [*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Thu Mar 25 13:35:50 2021
+[*] Sun Mar 28 16:37:16 2021
 [*]
 [dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/registers_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Thu Mar 25 13:33:04 2021"
-[dumpfile_size] 5251
+[dumpfile_mtime] "Sun Mar 28 16:35:24 2021"
+[dumpfile_size] 8695
 [savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/registers.gtkw"
 [timestart] 0
-[size] 1411 903
+[size] 1516 1002
 [pos] 0 5
-*-2.616213 7 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-3.683995 7 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] registers.
 [sst_width] 427
 [signals_width] 299
 [sst_expanded] 1
-[sst_vpaned_height] 249
+[sst_vpaned_height] 281
 @800200
 -registers
 @28
@@ -41,7 +41,7 @@ registers.dst_reg_i[3:0]
 registers.dst_val_o[15:0]
 @1000200
 -registers
-@800200
+@c00200
 -ram_upper_dst
 @28
 registers.i_ram_upper_dst.clk_i
@@ -50,15 +50,14 @@ registers.i_ram_upper_dst.wr_en_i
 registers.i_ram_upper_dst.wr_addr_i[2:0]
 @22
 registers.i_ram_upper_dst.wr_data_i[15:0]
-@29
-registers.i_ram_upper_dst.rd_en_i
 @28
+registers.i_ram_upper_dst.rd_en_i
 registers.i_ram_upper_dst.rd_addr_i[2:0]
 @22
 registers.i_ram_upper_dst.rd_data_o[15:0]
-@1000200
+@1401200
 -ram_upper_dst
-@800200
+@c00200
 -ram_lower_dst
 @28
 registers.i_ram_lower_dst.clk_i
@@ -73,7 +72,21 @@ registers.i_ram_lower_dst.rd_en_i
 registers.i_ram_lower_dst.rd_addr_i[3:0]
 registers.i_ram_lower_dst.rd_data_o[15:0]
 registers.i_ram_lower_dst.rd_data[15:0]
-@1000200
+@1401200
 -ram_lower_dst
+@800200
+-ram_lower_src
+@28
+registers.i_ram_lower_src.wr_en_i
+@22
+registers.i_ram_lower_src.wr_addr_i[3:0]
+registers.i_ram_lower_src.wr_data_i[15:0]
+@28
+registers.i_ram_lower_src.rd_en_i
+@22
+registers.i_ram_lower_src.rd_addr_i[3:0]
+registers.i_ram_lower_src.rd_data_o[15:0]
+@1000200
+-ram_lower_src
 [pattern_trace] 1
 [pattern_trace] 0

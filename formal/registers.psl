@@ -33,6 +33,31 @@ vunit i_registers(registers(synthesis))
    f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(src_reg_i)} |=> {src_val_o = prev(wr_val_i)};
    f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(dst_reg_i)} |=> {dst_val_o = prev(wr_val_i)};
 
+   signal c_addr : std_logic_vector(3 downto 0);
+   attribute anyconst : boolean;
+   attribute anyconst of c_addr : signal is true;
+
+   signal f_data    : std_logic_vector(15 downto 0);
+   signal f_written : std_logic := '0';
+
+   p_written : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if wr_en_i = '1' and wr_addr_i = c_addr then
+            f_data    <= wr_val_i;
+            f_written <= '1';
+         end if;
+
+         if (wr_en_i = '1' and wr_addr_i = 14) or wr_r14_en_i = '1' or rst_i = '1' then
+            f_written <= '0';
+         end if;
+      end if;
+   end process p_written;
+
+   -- We can read back last value written to any given address
+   f_read_back_src : assert always {f_written = '1' and src_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {src_val_o = f_data};
+   f_read_back_dst : assert always {f_written = '1' and dst_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {dst_val_o = f_data};
+
 
    ----------------------------------------------
    -- ASSUMPTIONS ABOUT INPUTS
