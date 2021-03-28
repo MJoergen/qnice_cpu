@@ -6,60 +6,6 @@ vunit i_registers(registers(synthesis))
 
 
    ----------------------------------------------
-   -- INTERNAL ASSERTIONS
-   ----------------------------------------------
-
-
-   ----------------------------------------------
-   -- ASSERTIONS ON OUTPUTS
-   ----------------------------------------------
-
-   signal f_write_to_r14 : std_logic;
-   f_write_to_r14 <= '1' when wr_en_i = '1' and wr_addr_i = 14 else '0';
-
-   -- Verify correct R14 behaviour: wr_en_i takes priority over wr_r14_en_i.
-   f_r14_a : assert always {wr_r14_en_i and not f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_r14_i) or X"0001")};
-   f_r14_b : assert always {f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_val_i) or X"0001")};
-
-   -- Write before read
-   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = src_reg_i} |=> {src_val_o = prev(wr_val_i)};
-   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = dst_reg_i} |=> {dst_val_o = prev(wr_val_i)};
-
-   -- Output only changes when rd_en_i is high (or during write-before-read)
-   f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(src_val_o)};
-   f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(dst_val_o)};
-
-   -- Write before read
-   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(src_reg_i)} |=> {src_val_o = prev(wr_val_i)};
-   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(dst_reg_i)} |=> {dst_val_o = prev(wr_val_i)};
-
-   signal c_addr : std_logic_vector(3 downto 0);
-   attribute anyconst : boolean;
-   attribute anyconst of c_addr : signal is true;
-
-   signal f_data    : std_logic_vector(15 downto 0);
-   signal f_written : std_logic := '0';
-
-   p_written : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         if wr_en_i = '1' and wr_addr_i = c_addr then
-            f_data    <= wr_val_i;
-            f_written <= '1';
-         end if;
-
-         if (wr_en_i = '1' and wr_addr_i = 14) or wr_r14_en_i = '1' or rst_i = '1' then
-            f_written <= '0';
-         end if;
-      end if;
-   end process p_written;
-
-   -- We can read back last value written to any given address
-   f_read_back_src : assert always {f_written = '1' and src_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {src_val_o = f_data};
-   f_read_back_dst : assert always {f_written = '1' and dst_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {dst_val_o = f_data};
-
-
-   ----------------------------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    ----------------------------------------------
 
@@ -79,6 +25,61 @@ vunit i_registers(registers(synthesis))
    -- Here we make sure that the input signals only transition on the rising
    -- clock edge, not on the falling clock edge.
    assume always {not clk_i} |-> {f_falling_rd_en = rd_en_i and f_falling_src_reg = src_reg_i and f_falling_dst_reg = dst_reg_i};
+
+
+   ----------------------------------------------
+   -- ASSERTIONS ON OUTPUTS
+   ----------------------------------------------
+
+   signal f_write_to_r14 : std_logic;
+   f_write_to_r14 <= '1' when wr_en_i = '1' and wr_addr_i = 14 else '0';
+
+   -- Verify correct R14 behaviour: wr_en_i takes priority over wr_r14_en_i.
+   f_r14_a : assert always {wr_r14_en_i and not f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_r14_i) or X"0001")};
+   f_r14_b : assert always {f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_val_i) or X"0001")};
+   f_r14_c : assert always {rst_i} |=> {r14_o = X"0001"};
+
+
+   signal c_addr : std_logic_vector(3 downto 0);
+   attribute anyconst : boolean;
+   attribute anyconst of c_addr : signal is true;
+
+   signal f_data    : std_logic_vector(15 downto 0);
+   signal f_written : std_logic := '0';
+
+   p_written : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         -- Store value written
+         if wr_en_i = '1' and wr_addr_i = c_addr then
+            f_data    <= wr_val_i;
+            f_written <= '1';
+         end if;
+
+         -- Clear in case R14 is updated.
+         if (wr_en_i = '1' and wr_addr_i = 14) or wr_r14_en_i = '1' or rst_i = '1' then
+            f_written <= '0';
+         end if;
+      end if;
+   end process p_written;
+
+   -- We can read back last value written to any given address
+   f_read_back_src : assert always {f_written = '1' and src_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {src_val_o = f_data};
+   f_read_back_dst : assert always {f_written = '1' and dst_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {dst_val_o = f_data};
+
+
+   -- Write before read
+   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = src_reg_i} |=> {src_val_o = prev(wr_val_i)};
+   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = dst_reg_i} |=> {dst_val_o = prev(wr_val_i)};
+
+   -- Write before read
+   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(src_reg_i)} |=> {src_val_o = prev(wr_val_i)};
+   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(dst_reg_i)} |=> {dst_val_o = prev(wr_val_i)};
+
+
+   -- Output only changes when rd_en_i is high (or during write-before-read)
+   f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(src_val_o)};
+   f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(dst_val_o)};
 
 
    ----------------------------------------------
