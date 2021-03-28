@@ -15,10 +15,79 @@ vunit i_icache(icache(synthesis))
    ---------------------------------------
 
    f_stable_double : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '1'}
-                        |=> {stable(m_valid_o) and stable(m_double_o) and stable(m_addr_o) and stable(m_data_o)} abort rst_i;
+                               |=> {stable(m_valid_o) and stable(m_double_o) and stable(m_addr_o) and stable(m_data_o)} abort rst_i;
 
    f_stable_single : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '0'}
-                        |=> {stable(m_valid_o) and stable(m_addr_o) and stable(m_data_o(7 downto 0))} abort rst_i;
+                               |=> {stable(m_valid_o) and stable(m_addr_o) and stable(m_data_o(7 downto 0))} abort rst_i;
+
+   f_reset_sync : assert always {rst_i = '1'}
+                            |=> {m_valid_o = '0' and s_ready_o = '1'};
+
+   f_reset_comb : assert always {rst_i = '1'}
+                            |-> {m_valid_o = '0'};
+
+
+   signal f_count : integer range 0 to 2 := 0;
+
+   -- Keep track of amount of data flowing into and out of the FIFO
+   p_count : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         -- Data flowing in, but not out.
+         if s_valid_i and s_ready_o and not (m_valid_o and m_ready_i) then
+            f_count <= f_count + 1;
+         end if;
+
+         -- Data flowing in, and two out.
+         if s_valid_i and s_ready_o and (m_valid_o and m_ready_i and m_double_o and m_double_i) then
+            f_count <= f_count - 1;
+         end if;
+
+         -- Two data flowing out, but not in.
+         if m_valid_o and m_ready_i and m_double_o and m_double_i and not (s_valid_i and s_ready_o) then
+            f_count <= f_count - 2;
+         end if;
+
+         -- One data flowing out, but not in.
+         if m_valid_o and m_ready_i and not (m_double_o and m_double_i) and not (s_valid_i and s_ready_o) then
+            f_count <= f_count - 1;
+         end if;
+
+         if rst_i then
+            f_count <= 0;
+         end if;
+      end if;
+   end process p_count;
+
+   f_zero : assert always {f_count = 0} |-> {s_ready_o = '1' and m_valid_o = '0'} abort rst_i;
+   f_one  : assert always {f_count = 1} |-> {s_ready_o = '1' and m_valid_o = '1' and m_double_o = '0'} abort rst_i;
+   f_two  : assert always {f_count = 2} |-> {s_ready_o = m_ready_i and m_valid_o = '1' and m_double_o = '1'} abort rst_i;
+   f_three : assert always {f_count <= 2};
+
+
+   f_empty : assert always {f_count = 0 and s_valid_i = '0' and rst_i = '0'}
+                       |=> {f_count = 0} abort rst_i;
+
+   f_empty_in : assert always {f_count = 0 and s_valid_i = '1' and rst_i = '0'}
+                          |=> {f_count = 1 and m_data_o(7 downto 0) = prev(s_data_i)} abort rst_i;
+
+   f_single_in : assert always {f_count = 1 and s_valid_i = '1' and m_ready_i = '0' and rst_i = '0'}
+                           |=> {f_count = 2 and m_data_o(15 downto 8) = prev(s_data_i)} abort rst_i;
+
+   f_single_in_out : assert always {f_count = 1 and s_valid_i = '1' and m_ready_i = '1' and rst_i = '0'}
+                               |=> {f_count = 1 and m_data_o(7 downto 0) = prev(s_data_i)} abort rst_i;
+
+   f_double_single_out : assert always {f_count = 2 and s_valid_i = '0' and m_ready_i = '1' and m_double_i = '0' and rst_i = '0'}
+                                   |=> {f_count = 1 and m_data_o(7 downto 0) = prev(m_data_o(15 downto 8))} abort rst_i;
+
+   f_double_double_out : assert always {f_count = 2 and s_valid_i = '0' and m_ready_i = '1' and m_double_i = '1' and rst_i = '0'}
+                                   |=> {f_count = 0} abort rst_i;
+
+   f_double_in_single_out : assert always {f_count = 2 and s_valid_i = '1' and m_ready_i = '1' and m_double_i = '0' and rst_i = '0'}
+                                      |=> {f_count = 2 and m_data_o(7 downto 0) = prev(m_data_o(15 downto 8)) and m_data_o(15 downto 8) = prev(s_data_i)} abort rst_i;
+
+   f_double_in_double_out : assert always {f_count = 2 and s_valid_i = '1' and m_ready_i = '1' and m_double_i = '1' and rst_i = '0'}
+                                      |=> {f_count = 1 and m_data_o(7 downto 0) = prev(s_data_i)} abort rst_i;
 
 
    -----------------------------
@@ -30,6 +99,9 @@ vunit i_icache(icache(synthesis))
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    --------------------------------------------
 
+   -- Make sure FIFO can transition from full to empty.
+   f_full_to_empty : cover {f_count = 2; f_count = 1; f_count = 0};
+
 
    ----------------------------------------------
    -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
@@ -39,7 +111,6 @@ vunit i_icache(icache(synthesis))
    ----------------------------------------------
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
    ----------------------------------------------
-
 
 } -- vunit i_icache(icache(synthesis))
 
