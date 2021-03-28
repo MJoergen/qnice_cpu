@@ -5,7 +5,7 @@ connected to the DECODE stage, and a single write port connected to the EXECUTE
 stage.
 
 The only register that is treated in a special way is the processor Status
-Register (R14). This is because this registed is usually written to at the end
+Register (R14). This is because this register is usually written to at the end
 of each instruction together with any optional register writes.
 
 The Stack Pointer (R13) is treated like a normal register (this is handled in
@@ -53,21 +53,22 @@ write. This is shown in the diagram below.
 
 ![Write-Before-Read](write_before_read.png)
 
-Here we see the execution of the :
+Here we see the execution of the `MOVE @--R1, @R1` instruction.
 * In the first clock cycle the DECODE stage reads from register 1.
 * In the second clock cycle the result of the read operation (`0AF6`) is
   presented on `src_val_o` and `dst_val_o`. Simultaneously, a write (`0AF5`) is
   being performed to register 1, but no new read is issued.
-* Nevertheless, despite the lack of a read request, the outputs are updated
-  with the new value just written.
+* In the third clock cycle, despite the lack of a read request, the outputs are
+  updated with the new value just written.
 
-This feature is used during the `MOVE @--R1, @R1` instruction.
 
 Here is another example with a similar behaviour:
 
 ![Write-Before-Read-2](write_before_read_2.png)
 
-This is during execution of the `SUB @R1++, @R1` instruction.
+This is during execution of the `SUB @R1++, @R1` instruction.  The first cycle
+shows a read from register 1, the second cycle shows a write to register 1, and
+cycles 3 and 4 both present the new value, despite no read request.
 
 
 ## Implementation
