@@ -8,31 +8,30 @@ use work.cpu_constants.all;
 --
 -- There is a one-clock-cycle delay when reading.
 --
--- It supports Write-Before-Read, which means
--- that if one reads from and write to the same
--- register in a given clock cycle, then the next
--- clock cycle gives the NEW value, i.e. the one just written.
+-- It supports Write-Before-Read, which means that if one reads from and writes
+-- to the same register in a given clock cycle, then the next clock cycle gives
+-- the NEW value, i.e. the one just written.
 
 entity registers is
    generic (
       G_REGISTER_BANK_WIDTH : integer
    );
    port (
-      clk_i         : in  std_logic;
-      rst_i         : in  std_logic;
-      -- Read interface
-      rd_en_i       : in  std_logic;
-      src_reg_i     : in  std_logic_vector(3 downto 0);
-      src_val_o     : out std_logic_vector(15 downto 0);
-      dst_reg_i     : in  std_logic_vector(3 downto 0);
-      dst_val_o     : out std_logic_vector(15 downto 0);
-      r14_o         : out std_logic_vector(15 downto 0);
-      -- Write interface
-      wr_r14_en_i   : in  std_logic;
-      wr_r14_i      : in  std_logic_vector(15 downto 0);
-      wr_en_i       : in  std_logic;
-      wr_addr_i     : in  std_logic_vector(3 downto 0);
-      wr_val_i      : in  std_logic_vector(15 downto 0)
+      clk_i       : in  std_logic;
+      rst_i       : in  std_logic;
+      -- Read interface, connected to DECODE stage
+      rd_en_i     : in  std_logic;
+      src_reg_i   : in  std_logic_vector(3 downto 0); -- Only valid when rd_en_i = '1'
+      src_val_o   : out std_logic_vector(15 downto 0);
+      dst_reg_i   : in  std_logic_vector(3 downto 0); -- Only valid when rd_en_i = '1'
+      dst_val_o   : out std_logic_vector(15 downto 0);
+      r14_o       : out std_logic_vector(15 downto 0);
+      -- Write interface, connected to EXECUTE stage
+      wr_r14_en_i : in  std_logic;
+      wr_r14_i    : in  std_logic_vector(15 downto 0);
+      wr_en_i     : in  std_logic;
+      wr_addr_i   : in  std_logic_vector(3 downto 0);
+      wr_val_i    : in  std_logic_vector(15 downto 0)
    );
 end entity registers;
 

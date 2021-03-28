@@ -17,6 +17,7 @@ vunit i_registers(registers(synthesis))
    signal f_write_to_r14 : std_logic;
    f_write_to_r14 <= '1' when wr_en_i = '1' and wr_addr_i = 14 else '0';
 
+   -- Verify correct R14 behaviour: wr_en_i takes priority over wr_r14_en_i.
    f_r14_a : assert always {wr_r14_en_i and not f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_r14_i) or X"0001")};
    f_r14_b : assert always {f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_val_i) or X"0001")};
 
