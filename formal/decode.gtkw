@@ -1,0 +1,55 @@
+[*]
+[*] GTKWave Analyzer v3.3.86 (w)1999-2017 BSI
+[*] Mon Mar 29 13:05:47 2021
+[*]
+[dumpfile] "/home/mfj/git/MJoergen/qnice_cpu/formal/decode_bmc/engine_0/trace.vcd"
+[dumpfile_mtime] "Mon Mar 29 13:03:20 2021"
+[dumpfile_size] 3177
+[savefile] "/home/mfj/git/MJoergen/qnice_cpu/formal/decode.gtkw"
+[timestart] 0
+[size] 1513 894
+[pos] -1 -1
+*-2.667667 2 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 311
+[signals_width] 311
+[sst_expanded] 1
+[sst_vpaned_height] 77
+@28
+decode.clk_i
+decode.rst_i
+[color] 2
+decode.fetch_valid_i
+[color] 7
+decode.fetch_ready_o
+decode.fetch_double_o
+decode.fetch_double_i
+@22
+decode.fetch_addr_i[15:0]
+decode.fetch_data_i[31:0]
+@28
+[color] 2
+decode.exe_valid_o
+[color] 7
+decode.exe_ready_i
+@22
+decode.exe_addr_o[15:0]
+decode.exe_inst_o[15:0]
+decode.exe_immediate_o[15:0]
+decode.exe_microcodes_o[35:0]
+decode.exe_src_val_o[15:0]
+@28
+decode.exe_src_mode_o[1:0]
+decode.exe_src_imm_o
+@22
+decode.exe_src_addr_o[3:0]
+decode.exe_res_reg_o[3:0]
+decode.exe_dst_val_o[15:0]
+@28
+decode.exe_dst_mode_o[1:0]
+decode.exe_dst_imm_o
+@22
+decode.exe_dst_addr_o[3:0]
+decode.exe_addr_o[15:0]
+decode.exe_r14_o[15:0]
+[pattern_trace] 1
+[pattern_trace] 0

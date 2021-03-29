@@ -1,0 +1,23 @@
+[tasks]
+cover
+bmc
+
+[options]
+cover: mode cover
+cover: depth 10
+bmc: mode bmc
+bmc: depth 10
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 decode.vhd microcode.vhd cpu_constants.vhd decode.psl -e decode
+prep -top decode
+
+[files]
+decode.psl
+../src/cpu_constants.vhd
+../src/decode/microcode.vhd
+../src/decode/decode.vhd
+
