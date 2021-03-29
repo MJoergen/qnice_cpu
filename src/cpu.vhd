@@ -25,7 +25,10 @@ entity cpu is
       wbd_we_o    : out std_logic;
       wbd_dat_o   : out std_logic_vector(15 downto 0);
       wbd_ack_i   : in  std_logic;
-      wbd_data_i  : in  std_logic_vector(15 downto 0)
+      wbd_data_i  : in  std_logic_vector(15 downto 0);
+
+      int_req_i   : in  std_logic;
+      int_grant_o : out std_logic
    );
 end entity cpu;
 
@@ -274,6 +277,8 @@ begin
          mem_data_i => wbd_dat_o
       ); -- i_debug
 -- pragma synthesis_on
+
+   int_grant_o <= '0';
 
 end architecture synthesis;
 

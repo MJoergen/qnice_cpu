@@ -31,6 +31,7 @@ SOURCES += src/cpu.vhd
 
 TEST_SOURCES += test/tdp_ram.vhd
 TEST_SOURCES += test/wb_tdp_mem.vhd
+TEST_SOURCES += test/timer.vhd
 TEST_SOURCES += test/system.vhd
 
 TEST ?= prog
