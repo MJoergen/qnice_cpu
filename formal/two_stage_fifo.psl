@@ -61,11 +61,15 @@ vunit i_two_stage_fifo(two_stage_fifo(synthesis))
    signal f_sampled_out_d1 : std_logic := '0';
    signal f_sampled_out_d2 : std_logic := '0';
 
-   -- Make sure d2 enters after d1.
-   f_fifo_ordering_in : assume always {f_sampled_in_d2} |-> {f_sampled_in_d1};
+   -- Verify FIFO doesn't emit garbage
+   f_fifo_no_garbage_1 : assert always {not f_sampled_in_d1} |-> {not f_sampled_out_d1};
+   f_fifo_no_garbage_2 : assert always {not f_sampled_in_d2} |-> {not f_sampled_out_d2};
 
    -- Verify the FIFO preserves ordering, i.e. d2 leaves after d1.
-   f_fifo_ordering_out : assert always {f_sampled_out_d2} |-> {f_sampled_out_d1};
+   f_fifo_ordering_out : assert always {f_sampled_in_d1 and not f_sampled_in_d2 and not rst_i;
+                                        (not rst_i)[*];
+                                        f_sampled_out_d2 and not rst_i}
+                                   |-> {f_sampled_out_d1};
 
 
    -- Two random values to be pushed into the FIFO
@@ -73,8 +77,9 @@ vunit i_two_stage_fifo(two_stage_fifo(synthesis))
    signal f_value_d2 : std_logic_vector(G_DATA_SIZE - 1 downto 0);
    attribute anyconst : boolean;
    attribute anyconst of f_value_d1 : signal is true;
-   attribute anyconst of f_value_d2 : signal is true;
-   assume f_value_d1 /= f_value_d2;
+
+   f_value_d2 <= not f_value_d1; -- This just forces D1 and D2 to be different.
+
 
    p_sampled : process (clk_i)
    begin
