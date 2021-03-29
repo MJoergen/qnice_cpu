@@ -22,6 +22,9 @@ architecture synthesis of alu_data is
    signal res_shr  : std_logic_vector(16 downto 0);
    signal res_shl  : std_logic_vector(16 downto 0);
 
+   signal addend : std_logic_vector(16 downto 0);
+   signal carry  : std_logic;
+
 begin
 
    -- dst << src, fill with X, shift to C
@@ -68,15 +71,22 @@ begin
    end process p_shift_right;
 
 
-   p_res_data : process (src_data_i, dst_data_i, opcode_i, sr_i, res_shl, res_shr)
+   addend <= "1" & not src_data_i when unsigned(opcode_i) = C_OPCODE_SUB or unsigned(opcode_i) = C_OPCODE_SUBC else
+             "0" & src_data_i;
+   carry <= sr_i(C_SR_C) when unsigned(opcode_i) = C_OPCODE_ADDC else
+            not sr_i(C_SR_C) when unsigned(opcode_i) = C_OPCODE_SUBC else
+            '1' when unsigned(opcode_i) = C_OPCODE_SUB else
+            '0';
+
+   p_res_data : process (src_data_i, dst_data_i, opcode_i, sr_i, res_shl, res_shr, addend, carry)
    begin
       res_data <= ("0" & src_data_i);  -- Default value to avoid latches
       case to_integer(unsigned(opcode_i)) is
          when C_OPCODE_MOVE => res_data <= "0" & src_data_i;
-         when C_OPCODE_ADD  => res_data <= std_logic_vector(("0" & unsigned(dst_data_i)) + ("0" & unsigned(src_data_i)));
-         when C_OPCODE_ADDC => res_data <= std_logic_vector(("0" & unsigned(dst_data_i)) + ("0" & unsigned(src_data_i)) + (X"0000" & sr_i(C_SR_C)));
-         when C_OPCODE_SUB  => res_data <= std_logic_vector(("0" & unsigned(dst_data_i)) - ("0" & unsigned(src_data_i)));
-         when C_OPCODE_SUBC => res_data <= std_logic_vector(("0" & unsigned(dst_data_i)) - ("0" & unsigned(src_data_i)) - (X"0000" & sr_i(C_SR_C)));
+         when C_OPCODE_ADD  |
+              C_OPCODE_ADDC |
+              C_OPCODE_SUB  |
+              C_OPCODE_SUBC => res_data <= std_logic_vector(("0" & unsigned(dst_data_i)) + unsigned(addend) + unsigned'('0'&carry));
          when C_OPCODE_SHL  => res_data <= res_shl(16) & (res_shl(15 downto 0));
          when C_OPCODE_SHR  => res_data <= res_shr(0) & (res_shr(16 downto 1));
          when C_OPCODE_SWAP => res_data <= "0" & (src_data_i(7 downto 0) & src_data_i(15 downto 8));
