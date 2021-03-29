@@ -114,11 +114,11 @@ The current synthesis report shows the following utilization:
 
 |   Name    | LUTs | Regs | Slices |
 | --------- | ---- | ---- | ------ |
-| Fetch     |   83 |  152 |    57  |
-| Decode    |   73 |   76 |    37  |
-| Execute   |  524 |    0 |   190  |
-| Registers |  110 |  141 |    65  |
-| Memory    |   43 |   37 |    43  |
-| TOTAL     |  833 |  406 |   280  |
+| Fetch     |   67 |  152 |    42  |
+| Decode    |   73 |   76 |    40  |
+| Execute   |  494 |    0 |   179  |
+| Registers |  105 |  142 |    54  |
+| Memory    |   43 |   37 |    32  |
+| TOTAL     |  782 |  407 |   267  |
 
 
