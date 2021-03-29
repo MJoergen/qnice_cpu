@@ -1,6 +1,14 @@
 # DECODE
 
+## Instruction format
+
+|  15-12 |     11-8 |       7-6 |      5-2 |       1-0 |
+| ------ | -------- | --------- | -------- | --------- |
+| opcode | src\_reg | src\_mode | dst\_reg | dst\_mode |
+
+
 ## Interfaces
+
 ```
 -- From Instruction fetch
 fetch_valid_i    : in  std_logic;
