@@ -29,6 +29,8 @@ vunit i_icache(icache(synthesis))
 
    signal f_count : integer range 0 to 2 := 0;
 
+   assert count = f_count;
+
    -- Keep track of amount of data flowing into and out of the FIFO
    p_count : process (clk_i)
    begin

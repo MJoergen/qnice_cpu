@@ -29,70 +29,81 @@ end entity icache;
 
 architecture synthesis of icache is
 
-   signal addr : std_logic_vector(2*G_ADDR_SIZE-1 downto 0) := (others => '0');
-   signal data : std_logic_vector(2*G_DATA_SIZE-1 downto 0) := (others => '0');
+   signal count : integer range 0 to 2;
 
-   type STATE_t is (ZERO_ST, ONE_ST, TWO_ST);
-   signal state : STATE_t := ZERO_ST;
+   signal m_addr   : std_logic_vector(2*G_ADDR_SIZE-1 downto 0) := (others => '0');
+   signal m_data   : std_logic_vector(2*G_DATA_SIZE-1 downto 0) := (others => '0');
+   signal m_valid  : std_logic := '0';
+   signal m_double : std_logic := '0';
 
 begin
 
-   m_valid_o  <= not rst_i when state = ONE_ST or state = TWO_ST else '0';
-   m_double_o <= '1' when state = TWO_ST else '0';
-   m_addr_o   <= addr(G_ADDR_SIZE-1 downto 0);
-   m_data_o   <= data;
+   count <= 0 when m_valid_o = '0' else
+            1 when m_valid_o = '1' and m_double_o = '0' else
+            2;
 
-   s_ready_o <= '1' when state = ZERO_ST or state = ONE_ST or (state = TWO_ST and m_ready_i = '1')
+   s_ready_o <= '1' when count = 0 or count = 1 or (count = 2 and m_ready_i = '1')
                     else '0';
+
+   m_valid_o  <= m_valid and not rst_i;
+   m_double_o <= m_double;
+   m_addr_o   <= m_addr(G_ADDR_SIZE-1 downto 0);
+   m_data_o   <= m_data;
 
    p_fsm : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         case state is
-            when ZERO_ST =>
+         case count is
+            when 0 =>
                if s_valid_i and s_ready_o then
-                  addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
-                  data(G_DATA_SIZE-1 downto 0) <= s_data_i;
-                  state <= ONE_ST;
+                  m_addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
+                  m_data(G_DATA_SIZE-1 downto 0) <= s_data_i;
+                  m_valid  <= '1';
+                  m_double <= '0';
                end if;
 
-            when ONE_ST =>
+            when 1 =>
                if m_ready_i then
-                  state <= ZERO_ST;
+                  m_valid <= '0';
                end if;
 
                if s_valid_i and s_ready_o then
                   if m_ready_i then
-                     addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
-                     data(G_DATA_SIZE-1 downto 0) <= s_data_i;
-                     state <= ONE_ST;
+                     m_addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
+                     m_data(G_DATA_SIZE-1 downto 0) <= s_data_i;
+                     m_valid  <= '1';
+                     m_double <= '0';
                   else
-                     addr(2*G_ADDR_SIZE-1 downto G_ADDR_SIZE) <= s_addr_i;
-                     data(2*G_DATA_SIZE-1 downto G_DATA_SIZE) <= s_data_i;
-                     state <= TWO_ST;
+                     m_addr(2*G_ADDR_SIZE-1 downto G_ADDR_SIZE) <= s_addr_i;
+                     m_data(2*G_DATA_SIZE-1 downto G_DATA_SIZE) <= s_data_i;
+                     m_valid  <= '1';
+                     m_double <= '1';
                   end if;
                end if;
 
-            when TWO_ST =>
+            when 2 =>
                if m_ready_i then
                   if m_double_i then
-                     state <= ZERO_ST;
+                     m_valid <= '0';
                   else
-                     addr(G_ADDR_SIZE-1 downto 0) <= addr(2*G_ADDR_SIZE-1 downto G_ADDR_SIZE);
-                     data(G_DATA_SIZE-1 downto 0) <= data(2*G_DATA_SIZE-1 downto G_DATA_SIZE);
-                     state <= ONE_ST;
+                     m_addr(G_ADDR_SIZE-1 downto 0) <= m_addr(2*G_ADDR_SIZE-1 downto G_ADDR_SIZE);
+                     m_data(G_DATA_SIZE-1 downto 0) <= m_data(2*G_DATA_SIZE-1 downto G_DATA_SIZE);
+                     m_valid  <= '1';
+                     m_double <= '0';
                   end if;
                end if;
 
                if s_valid_i and s_ready_o then
                   if m_double_i then
-                     addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
-                     data(G_DATA_SIZE-1 downto 0) <= s_data_i;
-                     state <= ONE_ST;
+                     m_addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
+                     m_data(G_DATA_SIZE-1 downto 0) <= s_data_i;
+                     m_valid  <= '1';
+                     m_double <= '0';
                   else
-                     addr(2*G_ADDR_SIZE-1 downto G_ADDR_SIZE) <= s_addr_i;
-                     data(2*G_DATA_SIZE-1 downto G_DATA_SIZE) <= s_data_i;
-                     state <= TWO_ST;
+                     m_addr(2*G_ADDR_SIZE-1 downto G_ADDR_SIZE) <= s_addr_i;
+                     m_data(2*G_DATA_SIZE-1 downto G_DATA_SIZE) <= s_data_i;
+                     m_valid  <= '1';
+                     m_double <= '1';
                   end if;
                end if;
 
@@ -100,7 +111,7 @@ begin
          end case;
 
          if rst_i then
-            state <= ZERO_ST;
+            m_valid <= '0';
          end if;
       end if;
    end process p_fsm;
