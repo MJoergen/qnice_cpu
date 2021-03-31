@@ -28,6 +28,7 @@ reads (from `@R0` and `@R1`) and one memory write (to `@R1`). Since only one
 memory operation is possible in each clock cycle, such an instruction will
 need to be serialized and will take a total of three clock cycles.
 
+## Documentation
 Please go to the [doc](doc) directory for more in-depth descrition of the
 architecture and the design.
 
