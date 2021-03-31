@@ -73,8 +73,6 @@ simultaneously.
 
 ## Optimizations
 I have a few ideas for cycle optimizations at the moment:
-* Make the instruction cache combinatorial. This will reduce the latency
-  through the module, thus improving the performance of branches.
 * Make the fetch module not clear `wbi_cyc_o` at every branch. This will reduce
   the branch penalty by one clock cycle.
 
@@ -82,7 +80,6 @@ I have a few ideas for cycle optimizations at the moment:
 ## TODO
 * Add remaining formal verification.
 * Add interrupts.
-* Timing optimizations.
 
 
 ## Utilization
