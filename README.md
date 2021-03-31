@@ -1,5 +1,8 @@
 # A pipelined implementation of the QNICE CPU
 
+The reason for this implementation is to increase the performance of the QNICE
+CPU, and to use techniques from formal verification to prove its correctness.
+
 This version of the QNICE CPU (from the [QNICE-FPGA
 project](https://github.com/sy2002/QNICE-FPGA)) is not a drop-in replacement,
 for the following three reasons:
@@ -26,7 +29,7 @@ memory operation is possible in each clock cycle, such an instruction will
 need to be serialized and will take a total of three clock cycles.
 
 Please go to the [doc](doc) directory for more in-depth descrition of the
-arhictecture and the design.
+architecture and the design.
 
 ## Makefile
 The current makefile supports the following targets:
