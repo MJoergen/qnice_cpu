@@ -131,6 +131,7 @@ begin
 
    inst_done_o <= dec_valid_i and dec_ready_o and dec_microcodes_i(C_LAST);
 
+-- pragma synthesis_off
    p_debug : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -139,6 +140,7 @@ begin
          end if;
       end if;
    end process p_debug;
+-- pragma synthesis_on
 
 
    ------------------------------------------------------------

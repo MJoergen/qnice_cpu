@@ -24,6 +24,15 @@ and up to three clock cycles in the DECODE stage. The EXECUTE stage is purely
 combinatorial.
 
 
+## Detailed design description
+For more detailed information about the design look here:
+* [FETCH](../src/fetch/README.md)
+* [DECODE](../src/decode/README.md)
+* [EXECUTE](../src/execute/README.md)
+* [REGISTERS](../src/registers/README.md)
+* [MEMORY](../src/memory/README.md)
+
+
 ## Wishbone
 I think it's worh while to give here a short summary of the Wishbone protocol.
 Any wishbone slave (e.g. the memory) must have the following signals.
@@ -33,19 +42,22 @@ wb_stb_i   : out std_logic;
 wb_stall_o : in  std_logic;
 wb_addr_i  : out std_logic_vector(15 downto 0);
 wb_we_i    : out std_logic;
-wb_dat_i   : out std_logic_vector(15 downto 0);
+wb_data_i  : out std_logic_vector(15 downto 0);
 wb_ack_o   : in  std_logic;
 wb_data_o  : in  std_logic_vector(15 downto 0)
 ```
 
+A write transaction is indicated by the CPU asserting all three signals
+`wb_cyc_i`, `wb_stb_i`, and `wb_we_i` simultaneously together with the address
+and data signals `wb_addr_i` and `wb_data_i`. The signal `wb_stall_o` is used
+to indicate the end of the transaction. When `wb_stall_o` the slave has accepted
+the transaction.
 
-## Detailed design description
-For more detailed information about the design look here:
-* [FETCH](../src/fetch/README.md)
-* [DECODE](../src/decode/README.md)
-* [EXECUTE](../src/execute/README.md)
-* [REGISTERS](../src/registers/README.md)
-* [MEMORY](../src/memory/README.md)
+A write transaction is indicated by the CPU asserting the two signals
+`wb_cyc_i` and `wb_stb_i`, and de-asserting `wb_we_i`. Again the signal
+`wb_stall_o` is used to indicate the end of the transaction. When `wb_stall_o`
+the slave has accepted the transaction.  When the data is ready, the slave
+drives the data but `wb_data_o` and asserts the signal `wb_ack_o`.
 
 
 ## Interleaving
