@@ -93,14 +93,14 @@ begin
    a_wr_en      <= wb_a_cyc_i and wb_a_stb_i and wb_a_we_i and not wb_a_stall_o;
    a_wr_data    <= wb_a_data_i;
    a_addr       <= wb_a_addr_i;
-   wb_a_data_o  <= a_rd_data;
+   wb_a_data_o  <= a_rd_data when wb_a_cyc_i = '1' else (others => '0');
    wb_a_stall_o <= '0';
    wb_a_ack_o   <= wb_a_ack;
 
    b_wr_en      <= wb_b_cyc_i and wb_b_stb_i and wb_b_we_i and not wb_b_stall_o;
    b_wr_data    <= wb_b_data_i;
    b_addr       <= wb_b_addr_i;
-   wb_b_data_o  <= b_rd_data;
+   wb_b_data_o  <= b_rd_data when wb_b_cyc_i = '1' else (others => '0');
    wb_b_stall_o <= '0';
    wb_b_ack_o   <= wb_b_ack;
 

@@ -9,6 +9,9 @@ entity cpu is
       clk_i       : in  std_logic;
       rst_i       : in  std_logic;
 
+      int_n_i     : in  std_logic;
+      grant_n_o   : out std_logic;
+
       -- Instruction Memory
       wbi_cyc_o   : out std_logic;
       wbi_stb_o   : out std_logic;
@@ -30,6 +33,10 @@ entity cpu is
 end entity cpu;
 
 architecture synthesis of cpu is
+   signal int2fetch_valid : std_logic;
+   signal int2fetch_addr  : std_logic_vector(15 downto 0);
+   signal fetch_valid     : std_logic;
+   signal fetch_addr      : std_logic_vector(15 downto 0);
 
    -- FETCH to DECODE
    signal fetch2decode_valid          : std_logic;
@@ -101,8 +108,8 @@ begin
       port map (
          clk_i       => clk_i,
          rst_i       => rst_i,
-         s_valid_i   => exe2fetch_valid,
-         s_addr_i    => exe2fetch_addr,
+         s_valid_i   => fetch_valid,
+         s_addr_i    => fetch_addr,
          wbi_cyc_o   => wbi_cyc_o,
          wbi_stb_o   => wbi_stb_o,
          wbi_stall_i => wbi_stall_i,
@@ -235,7 +242,7 @@ begin
    i_memory : entity work.memory
       port map (
          clk_i        => clk_i,
-         rst_i        => rst_i,
+         rst_i        => rst_i or not grant_n_o,
          mreq_valid_i => exe2mem_req_valid,
          mreq_ready_o => exe2mem_req_ready,
          mreq_op_i    => exe2mem_req_op,
@@ -256,6 +263,19 @@ begin
          wb_ack_i     => wbd_ack_i,
          wb_data_i    => wbd_data_i
       ); -- i_memory
+
+   p_interrupt : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         grant_n_o <= int_n_i;
+      end if;
+   end process p_interrupt;
+
+   int2fetch_valid <= int_n_i and not grant_n_o;
+   int2fetch_addr  <= wbd_data_i;
+
+   fetch_valid <= int2fetch_valid or exe2fetch_valid;
+   fetch_addr  <= int2fetch_addr when int2fetch_valid = '1' else exe2fetch_addr;
 
 
 -- pragma synthesis_off

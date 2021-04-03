@@ -29,6 +29,10 @@ SOURCES += src/memory/memory.vhd
 SOURCES += src/debug.vhd
 SOURCES += src/cpu.vhd
 
+TEST_SOURCES += test/timer_count.vhd
+TEST_SOURCES += test/timer_csr.vhd
+TEST_SOURCES += test/timer.vhd
+TEST_SOURCES += test/daisy_chain.vhd
 TEST_SOURCES += test/tdp_ram.vhd
 TEST_SOURCES += test/wb_tdp_mem.vhd
 TEST_SOURCES += test/system.vhd
