@@ -11,7 +11,7 @@ DUTS += fetch
 DUTS += registers
 DUTS += dp_ram
 DUTS += icache
-DUTS += decode
+DUTS += decode_execute
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))

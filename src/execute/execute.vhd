@@ -86,7 +86,7 @@ begin
    wait_for_mem_src <= dec_valid_i and mem_src_ready_o and not mem_src_valid_i;
    wait_for_mem_dst <= dec_valid_i and mem_dst_ready_o and not mem_dst_valid_i;
 
-   dec_ready_o <= not (wait_for_mem_src or wait_for_mem_dst);
+   dec_ready_o <= mem_req_ready_i and not (wait_for_mem_src or wait_for_mem_dst);
 
 
    ------------------------------------------------------------

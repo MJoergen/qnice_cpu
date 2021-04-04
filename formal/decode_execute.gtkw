@@ -1,0 +1,46 @@
+[*]
+[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
+[*] Sun Apr  4 19:54:14 2021
+[*]
+[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/decode_execute_bmc/engine_0/trace.vcd"
+[dumpfile_mtime] "Sun Apr  4 19:52:23 2021"
+[dumpfile_size] 20885
+[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/decode_execute.gtkw"
+[timestart] 0
+[size] 1468 822
+[pos] 0 3
+*-3.521628 26 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] decode_execute.
+[sst_width] 366
+[signals_width] 341
+[sst_expanded] 1
+[sst_vpaned_height] 221
+@28
+decode_execute.clk_i
+decode_execute.rst_i
+[color] 2
+decode_execute.fetch_valid_i
+[color] 7
+decode_execute.fetch_ready_o
+decode_execute.fetch_double_i
+decode_execute.fetch_double_o
+@22
+decode_execute.fetch_addr_i[15:0]
+decode_execute.fetch_data_i[31:0]
+@28
+[color] 2
+decode_execute.mem_req_valid_o
+[color] 7
+decode_execute.mem_req_ready_i
+[color] 2
+decode_execute.mem_dst_valid_i
+[color] 7
+decode_execute.mem_dst_ready_o
+[color] 2
+decode_execute.mem_src_valid_i
+[color] 7
+decode_execute.mem_src_ready_o
+@23
+decode_execute.decode2exe_microcodes[11:0]
+[pattern_trace] 1
+[pattern_trace] 0
