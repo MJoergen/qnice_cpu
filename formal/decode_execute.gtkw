@@ -1,20 +1,21 @@
 [*]
 [*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Sun Apr  4 19:54:14 2021
+[*] Mon Apr  5 10:21:23 2021
 [*]
 [dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/decode_execute_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Sun Apr  4 19:52:23 2021"
-[dumpfile_size] 20885
+[dumpfile_mtime] "Mon Apr  5 10:17:05 2021"
+[dumpfile_size] 24437
 [savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/decode_execute.gtkw"
 [timestart] 0
-[size] 1468 822
+[size] 1551 937
 [pos] 0 3
-*-3.521628 26 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-3.836501 37 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] decode_execute.
+[treeopen] decode_execute.i_decode_serialized.
 [sst_width] 366
-[signals_width] 341
+[signals_width] 395
 [sst_expanded] 1
-[sst_vpaned_height] 221
+[sst_vpaned_height] 259
 @28
 decode_execute.clk_i
 decode_execute.rst_i
@@ -32,15 +33,47 @@ decode_execute.fetch_data_i[31:0]
 decode_execute.mem_req_valid_o
 [color] 7
 decode_execute.mem_req_ready_i
-[color] 2
-decode_execute.mem_dst_valid_i
-[color] 7
-decode_execute.mem_dst_ready_o
+decode_execute.mem_req_op_o[2:0]
 [color] 2
 decode_execute.mem_src_valid_i
 [color] 7
 decode_execute.mem_src_ready_o
-@23
+[color] 2
+decode_execute.mem_dst_valid_i
+[color] 7
+decode_execute.mem_dst_ready_o
+@800200
+-Internal
+@28
+[color] 2
+decode_execute.decode2exe_valid
+[color] 7
+decode_execute.decode2exe_ready
+@22
 decode_execute.decode2exe_microcodes[11:0]
+@1000200
+-Internal
+@800200
+-serializer
+@28
+decode_execute.i_decode_serialized.i_serializer.clk_i
+decode_execute.i_decode_serialized.i_serializer.rst_i
+[color] 2
+decode_execute.i_decode_serialized.i_serializer.s_valid_i
+[color] 7
+decode_execute.i_decode_serialized.i_serializer.s_ready_o
+@22
+decode_execute.i_decode_serialized.i_serializer.s_data_i[35:0]
+decode_execute.i_decode_serialized.i_serializer.s_user_i[113:0]
+@28
+[color] 2
+decode_execute.i_decode_serialized.i_serializer.m_valid_o
+[color] 7
+decode_execute.i_decode_serialized.i_serializer.m_ready_i
+@22
+decode_execute.i_decode_serialized.i_serializer.m_data_o[11:0]
+decode_execute.i_decode_serialized.i_serializer.m_user_o[113:0]
+@1000200
+-serializer
 [pattern_trace] 1
 [pattern_trace] 0

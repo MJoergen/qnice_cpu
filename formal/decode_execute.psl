@@ -30,7 +30,10 @@ vunit i_decode_execute(decode_execute(synthesis))
    -- Always start in reset
    assume rst_i;
 
-   --assume always {fetch_ready_o} |=> {stable(fetch_data_i(15 downto 0))};
+   assume always {fetch_valid_i and not fetch_ready_o} |=> {stable(fetch_valid_i) and stable(fetch_addr_i) and stable(fetch_data_i(15 downto 0))};
+
+   assume always {mem_src_valid_i and not mem_src_ready_o} |=> {stable(mem_src_valid_i) and stable(mem_src_data_i)};
+   assume always {mem_dst_valid_i and not mem_dst_ready_o} |=> {stable(mem_dst_valid_i) and stable(mem_dst_data_i)};
 
 
    --------------------------------------------
