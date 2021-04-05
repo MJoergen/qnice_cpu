@@ -1,0 +1,21 @@
+[tasks]
+cover
+bmc
+
+[options]
+cover: mode cover
+cover: depth 10
+bmc: mode bmc
+bmc: depth 10
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 -gG_DATA_SIZE=8 -gG_USER_SIZE=4 serializer.vhd serializer.psl -e serializer
+prep -top serializer
+
+[files]
+serializer.psl
+../src/decode/serializer.vhd
+
