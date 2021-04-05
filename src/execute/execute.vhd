@@ -104,6 +104,9 @@ begin
                   mem_dst_data_i when dec_microcodes_i(C_MEM_WAIT_DST) = '1' else
                   dec_dst_val_i;
 
+   -- TBD: Possible timing optimization: Put registers on inputs to ALU.
+   -- Potential improvement: Large
+
    i_alu_data : entity work.alu_data
       port map (
          clk_i      => clk_i,
