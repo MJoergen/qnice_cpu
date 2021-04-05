@@ -14,13 +14,51 @@ vunit i_decode_execute(decode_execute(synthesis))
    -- PROPERTIES OF THE OUTPUT INTERFACE
    ---------------------------------------
 
+   -- Don't accept single word, when we want two.
    f_fetch_double : assert always {fetch_double_o and not fetch_double_i} |-> {not fetch_ready_o};
 
+   -- Memory request data must stay stable.
    f_mem_req_stable : assert always {mem_req_valid_o and not mem_req_ready_i and not rst_i} |=>
       {stable(mem_req_op_o) and stable(mem_req_addr_o) and stable(mem_req_data_o)};
 
+   -- Memory response ready signal must stay stable.
    f_mem_src_ready_stable : assert always {mem_src_ready_o and not mem_src_valid_i and not rst_i} |=> {stable(mem_src_ready_o)};
    f_mem_dst_ready_stable : assert always {mem_dst_ready_o and not mem_dst_valid_i and not rst_i} |=> {stable(mem_dst_ready_o)};
+
+   f_r14_bit0 : assert always {reg_r14_o(0) = '1'};
+
+   signal c_src_reg : std_logic_vector(3 downto 0);
+   signal c_src_val : std_logic_vector(15 downto 0);
+   signal c_dst_reg : std_logic_vector(3 downto 0);
+   signal c_dst_val : std_logic_vector(15 downto 0);
+   attribute anyconst : boolean;
+   attribute anyconst of c_src_reg : signal is true;
+   attribute anyconst of c_src_val : signal is true;
+   attribute anyconst of c_dst_reg : signal is true;
+   attribute anyconst of c_dst_val : signal is true;
+
+   signal f_move_reg_reg : std_logic;
+   signal f_reg_read : std_logic;
+   signal f_reg_write : std_logic;
+
+   f_move_reg_reg <= '1' when fetch_data_i(15 downto 12) = C_OPCODE_MOVE and
+                              fetch_data_i(11 downto 8) = c_src_reg and
+                              fetch_data_i(7 downto 6) = C_MODE_REG and
+                              fetch_data_i(5 downto 2) = c_dst_reg and
+                              fetch_data_i(1 downto 0) = C_MODE_REG else '0';
+
+   f_reg_read <= '1' when reg_rd_en_o = '1' and reg_src_reg_o=c_src_reg and reg_dst_reg_o=c_dst_reg else '0';
+   f_reg_write <= '1' when reg_we_o = '1' and reg_addr_o = c_dst_reg and reg_val_o = c_src_val else '0';
+
+   f_mov_r_r : assert always {fetch_valid_i = '1' and fetch_ready_o = '1' and
+                              f_move_reg_reg = '1' and
+                              c_src_reg /= 15} |->
+
+                             {f_reg_read = '1';
+
+                              mem_req_valid_o = '0' and
+                              reg_r14_we_o = '1' and
+                              f_reg_write = '1'};
 
 
    -----------------------------
@@ -29,11 +67,57 @@ vunit i_decode_execute(decode_execute(synthesis))
 
    -- Always start in reset
    assume rst_i;
+   assume not fetch_valid_i;
+   assume always {true} |=> not rst_i;
 
    assume always {fetch_valid_i and not fetch_ready_o} |=> {stable(fetch_valid_i) and stable(fetch_addr_i) and stable(fetch_data_i(15 downto 0))};
 
    assume always {mem_src_valid_i and not mem_src_ready_o} |=> {stable(mem_src_valid_i) and stable(mem_src_data_i)};
    assume always {mem_dst_valid_i and not mem_dst_ready_o} |=> {stable(mem_dst_valid_i) and stable(mem_dst_data_i)};
+
+   assume always {reg_rd_en_o = '1' and reg_src_reg_o=c_src_reg} |=> {reg_src_val_i = c_src_val};
+   assume always {reg_rd_en_o = '1' and reg_dst_reg_o=c_dst_reg} |=> {reg_dst_val_i = c_dst_val};
+   assume always {reg_rd_en_o = '0'} |=> {stable(reg_src_val_i) and stable(reg_dst_val_i)};
+
+   assume always {reg_r14_we_o = '0'} |=> {stable(reg_r14_i)};
+
+   signal f_mem_src_request    : std_logic;
+   signal f_mem_src_response   : std_logic;
+   signal f_mem_dst_request    : std_logic;
+   signal f_mem_dst_response   : std_logic;
+   signal f_mem_src_oustanding : std_logic;
+   signal f_mem_dst_oustanding : std_logic;
+
+   f_mem_src_request  <= mem_req_valid_o and mem_req_ready_i and mem_req_op_o(C_MEM_READ_SRC);
+   f_mem_src_response <= mem_src_valid_i and mem_src_ready_o;
+   f_mem_dst_request  <= mem_req_valid_o and mem_req_ready_i and mem_req_op_o(C_MEM_READ_DST);
+   f_mem_dst_response <= mem_dst_valid_i and mem_dst_ready_o;
+
+   p_memory : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if f_mem_src_request and not f_mem_src_response then
+            f_mem_src_oustanding <= '1';
+         end if;
+         if not f_mem_src_request and f_mem_src_response then
+            f_mem_src_oustanding <= '0';
+         end if;
+         if f_mem_dst_request and not f_mem_dst_response then
+            f_mem_dst_oustanding <= '1';
+         end if;
+         if not f_mem_dst_request and f_mem_dst_response then
+            f_mem_dst_oustanding <= '0';
+         end if;
+      end if;
+   end process p_memory;
+
+   assume always {f_mem_src_oustanding} |-> {not f_mem_src_request};
+   assume always {mem_src_valid_i}      |-> {f_mem_src_oustanding};
+   assume always {f_mem_dst_oustanding} |-> {not f_mem_dst_request};
+   assume always {mem_dst_valid_i}      |-> {f_mem_dst_oustanding};
+
+   assume always {mem_req_ready_i and not mem_req_valid_o} |=> {stable(mem_req_ready_i)};
+
 
 
    --------------------------------------------

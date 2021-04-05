@@ -1,21 +1,20 @@
 [*]
 [*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Mon Apr  5 10:21:23 2021
+[*] Mon Apr  5 19:35:07 2021
 [*]
 [dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/decode_execute_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Mon Apr  5 10:17:05 2021"
-[dumpfile_size] 24437
+[dumpfile_mtime] "Mon Apr  5 19:33:33 2021"
+[dumpfile_size] 26001
 [savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/decode_execute.gtkw"
 [timestart] 0
-[size] 1551 937
+[size] 1617 1120
 [pos] 0 3
-*-3.836501 37 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-3.836501 16 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] decode_execute.
-[treeopen] decode_execute.i_decode_serialized.
 [sst_width] 366
 [signals_width] 395
 [sst_expanded] 1
-[sst_vpaned_height] 259
+[sst_vpaned_height] 319
 @28
 decode_execute.clk_i
 decode_execute.rst_i
@@ -29,19 +28,46 @@ decode_execute.fetch_double_o
 decode_execute.fetch_addr_i[15:0]
 decode_execute.fetch_data_i[31:0]
 @28
+decode_execute.reg_rd_en_o
+@22
+decode_execute.reg_src_reg_o[3:0]
+decode_execute.reg_dst_reg_o[3:0]
+decode_execute.reg_src_val_i[15:0]
+decode_execute.reg_dst_val_i[15:0]
+@23
+decode_execute.reg_r14_i[15:0]
+@28
 [color] 2
 decode_execute.mem_req_valid_o
 [color] 7
 decode_execute.mem_req_ready_i
 decode_execute.mem_req_op_o[2:0]
+@22
+decode_execute.mem_req_addr_o[15:0]
+decode_execute.mem_req_data_o[15:0]
+@28
 [color] 2
 decode_execute.mem_src_valid_i
 [color] 7
 decode_execute.mem_src_ready_o
+@22
+decode_execute.mem_src_data_i[15:0]
+@28
 [color] 2
 decode_execute.mem_dst_valid_i
 [color] 7
 decode_execute.mem_dst_ready_o
+@22
+decode_execute.mem_dst_data_i[15:0]
+@28
+decode_execute.reg_we_o
+@22
+decode_execute.reg_addr_o[3:0]
+decode_execute.reg_val_o[15:0]
+@28
+decode_execute.reg_r14_we_o
+@22
+decode_execute.reg_r14_o[15:0]
 @800200
 -Internal
 @28
@@ -51,29 +77,22 @@ decode_execute.decode2exe_valid
 decode_execute.decode2exe_ready
 @22
 decode_execute.decode2exe_microcodes[11:0]
+@28
+decode_execute.decode2exe_src_mode[1:0]
+decode_execute.decode2exe_dst_mode[1:0]
+decode_execute.decode2exe_src_imm
+decode_execute.decode2exe_dst_imm
+@22
+decode_execute.i_execute.alu_src_val[15:0]
+decode_execute.i_execute.alu_dst_val[15:0]
 @1000200
 -Internal
-@800200
--serializer
 @28
-decode_execute.i_decode_serialized.i_serializer.clk_i
-decode_execute.i_decode_serialized.i_serializer.rst_i
-[color] 2
-decode_execute.i_decode_serialized.i_serializer.s_valid_i
-[color] 7
-decode_execute.i_decode_serialized.i_serializer.s_ready_o
+decode_execute.i_decode_execute.f_move_reg_reg
+decode_execute.i_decode_execute.f_reg_read
+decode_execute.i_decode_execute.f_reg_write
 @22
-decode_execute.i_decode_serialized.i_serializer.s_data_i[35:0]
-decode_execute.i_decode_serialized.i_serializer.s_user_i[113:0]
-@28
-[color] 2
-decode_execute.i_decode_serialized.i_serializer.m_valid_o
-[color] 7
-decode_execute.i_decode_serialized.i_serializer.m_ready_i
-@22
-decode_execute.i_decode_serialized.i_serializer.m_data_o[11:0]
-decode_execute.i_decode_serialized.i_serializer.m_user_o[113:0]
-@1000200
--serializer
+decode_execute.i_decode_execute.c_src_val[15:0]
+decode_execute.i_decode_execute.c_dst_val[15:0]
 [pattern_trace] 1
 [pattern_trace] 0
