@@ -29,7 +29,7 @@ architecture synthesis of serializer is
 
 begin
 
-   s_ready_o <= '0' when s_valid_i = '1' and m_data_o(m_data_o'left) = '0' else '1';
+   s_ready_o <= '0' when s_valid_i = '1' and m_data_o(G_DATA_SIZE-1) = '0' else m_ready_i;
 
    p_index : process (clk_i)
    begin
