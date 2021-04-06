@@ -208,6 +208,10 @@ begin
 
    r14_o <= r14;
 
+   -- TBD: Possible timing optimization: Make "wr_en_d = '1' and wr_addr_d =
+   -- src_reg_d" a single register.
+   -- Potential improvement: Small
+
    src_val_o <= wr_val_d         when wr_en_d = '1' and wr_addr_d = src_reg_d else
                 src_val_d        when rd_en_d = '0' else
                 r14              when src_reg_d = C_REG_SR else

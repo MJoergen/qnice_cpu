@@ -11,7 +11,8 @@ DUTS += fetch
 DUTS += registers
 DUTS += dp_ram
 DUTS += icache
-DUTS += decode
+DUTS += decode_execute
+DUTS += serializer
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))

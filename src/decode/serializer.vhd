@@ -2,27 +2,24 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std_unsigned.all;
 
-use work.cpu_constants.all;
-
 entity serializer is
    generic (
       G_DATA_SIZE : integer;
       G_USER_SIZE : integer
    );
    port (
-      clk_i      : in  std_logic;
-      rst_i      : in  std_logic;
+      clk_i     : in  std_logic;
+      rst_i     : in  std_logic;
 
-      -- From decode
-      s_valid_i  : in  std_logic;
-      s_ready_o  : out std_logic;
-      s_data_i   : in  std_logic_vector(3*G_DATA_SIZE-1 downto 0);
-      s_user_i   : in  std_logic_vector(G_USER_SIZE-1 downto 0);
+      s_valid_i : in  std_logic;
+      s_ready_o : out std_logic;
+      s_data_i  : in  std_logic_vector(3*G_DATA_SIZE-1 downto 0);
+      s_user_i  : in  std_logic_vector(G_USER_SIZE-1 downto 0);
 
-      m_valid_o  : out std_logic;
-      m_ready_i  : in  std_logic;
-      m_data_o   : out std_logic_vector(G_DATA_SIZE-1 downto 0);
-      m_user_o   : out std_logic_vector(G_USER_SIZE-1 downto 0)
+      m_valid_o : out std_logic;
+      m_ready_i : in  std_logic;
+      m_data_o  : out std_logic_vector(G_DATA_SIZE-1 downto 0);
+      m_user_o  : out std_logic_vector(G_USER_SIZE-1 downto 0)
    );
 end entity serializer;
 
@@ -32,7 +29,7 @@ architecture synthesis of serializer is
 
 begin
 
-   s_ready_o <= '0' when s_valid_i = '1' and m_data_o(C_LAST) = '0' else '1';
+   s_ready_o <= '0' when s_valid_i = '1' and m_data_o(G_DATA_SIZE-1) = '0' else '1';
 
    p_index : process (clk_i)
    begin

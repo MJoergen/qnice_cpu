@@ -1,0 +1,38 @@
+[*]
+[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
+[*] Mon Apr  5 13:57:40 2021
+[*]
+[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/serializer_bmc/engine_0/trace.vcd"
+[dumpfile_mtime] "Mon Apr  5 13:56:44 2021"
+[dumpfile_size] 1021
+[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/serializer.gtkw"
+[timestart] 0
+[size] 1479 875
+[pos] -1 -1
+*-2.976001 7 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 249
+[signals_width] 257
+[sst_expanded] 1
+[sst_vpaned_height] 239
+@28
+serializer.clk_i
+serializer.rst_i
+[color] 2
+serializer.s_valid_i
+[color] 7
+serializer.s_ready_o
+@22
+serializer.s_data_i[23:0]
+serializer.s_user_i[3:0]
+@28
+[color] 2
+serializer.m_valid_o
+[color] 7
+serializer.m_ready_i
+@22
+serializer.m_data_o[7:0]
+serializer.m_user_o[3:0]
+@29
+serializer.index[1:0]
+[pattern_trace] 1
+[pattern_trace] 0

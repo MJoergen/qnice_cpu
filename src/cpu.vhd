@@ -31,7 +31,7 @@ end entity cpu;
 
 architecture synthesis of cpu is
 
-   -- FETCH to DECODE
+   -- FETCH to DECODE/EXECUTE
    signal fetch2decode_valid          : std_logic;
    signal fetch2decode_ready          : std_logic;
    signal fetch2decode_double_valid   : std_logic;
@@ -39,29 +39,11 @@ architecture synthesis of cpu is
    signal fetch2decode_data           : std_logic_vector(31 downto 0);
    signal fetch2decode_double_consume : std_logic;
 
-   -- DECODE to EXECUTE
-   signal decode2exe_valid            : std_logic;
-   signal decode2exe_ready            : std_logic;
-   signal decode2exe_microcodes       : std_logic_vector(11 downto 0);
-   signal decode2exe_addr             : std_logic_vector(15 downto 0);
-   signal decode2exe_inst             : std_logic_vector(15 downto 0);
-   signal decode2exe_immediate        : std_logic_vector(15 downto 0);
-   signal decode2exe_src_addr         : std_logic_vector(3 downto 0);
-   signal decode2exe_src_mode         : std_logic_vector(1 downto 0);
-   signal decode2exe_src_val          : std_logic_vector(15 downto 0);
-   signal decode2exe_src_imm          : std_logic;
-   signal decode2exe_dst_addr         : std_logic_vector(3 downto 0);
-   signal decode2exe_dst_mode         : std_logic_vector(1 downto 0);
-   signal decode2exe_dst_val          : std_logic_vector(15 downto 0);
-   signal decode2exe_dst_imm          : std_logic;
-   signal decode2exe_res_reg          : std_logic_vector(3 downto 0);
-   signal decode2exe_r14              : std_logic_vector(15 downto 0);
-
    -- EXECUTE to FETCH
    signal exe2fetch_valid             : std_logic;
    signal exe2fetch_addr              : std_logic_vector(15 downto 0);
 
-   -- DECODE to register file
+   -- DECODE/EXECUTE read from register file
    signal decode2reg_rd_en            : std_logic;
    signal decode2reg_src_reg          : std_logic_vector(3 downto 0);
    signal decode2reg_src_val          : std_logic_vector(15 downto 0);
@@ -69,27 +51,27 @@ architecture synthesis of cpu is
    signal decode2reg_dst_val          : std_logic_vector(15 downto 0);
    signal reg2decode_r14              : std_logic_vector(15 downto 0);
 
-   -- EXECUTE to memory
+   -- DECODE/EXECUTE write to register file
+   signal exe2reg_r14_we              : std_logic;
+   signal exe2reg_r14                 : std_logic_vector(15 downto 0);
+   signal exe2reg_we                  : std_logic;
+   signal exe2reg_addr                : std_logic_vector(3 downto 0);
+   signal exe2reg_val                 : std_logic_vector(15 downto 0);
+
+   -- DECODE/EXECUTE request to memory
    signal exe2mem_req_valid           : std_logic;
    signal exe2mem_req_ready           : std_logic;
    signal exe2mem_req_op              : std_logic_vector(2 downto 0);
    signal exe2mem_req_addr            : std_logic_vector(15 downto 0);
    signal exe2mem_req_data            : std_logic_vector(15 downto 0);
 
-   -- Memory to EXECUTE
+   -- DECODE/EXECUTE response from memory
    signal mem2exe_src_valid           : std_logic;
    signal mem2exe_src_ready           : std_logic;
    signal mem2exe_src_data            : std_logic_vector(15 downto 0);
    signal mem2exe_dst_valid           : std_logic;
    signal mem2exe_dst_ready           : std_logic;
    signal mem2exe_dst_data            : std_logic_vector(15 downto 0);
-
-   -- EXECUTE to registers
-   signal exe2reg_r14_we              : std_logic;
-   signal exe2reg_r14                 : std_logic_vector(15 downto 0);
-   signal exe2reg_we                  : std_logic;
-   signal exe2reg_addr                : std_logic_vector(3 downto 0);
-   signal exe2reg_val                 : std_logic_vector(15 downto 0);
 
 begin
 
@@ -119,10 +101,10 @@ begin
 
 
    ------------------------------------------------------------
-   -- Instruction DECODE
+   -- Instruction DECODE and EXECUTE
    ------------------------------------------------------------
 
-   i_decode_serialized : entity work.decode_serialized
+   i_decode_execute : entity work.decode_execute
       port map (
          clk_i            => clk_i,
          rst_i            => rst_i,
@@ -133,54 +115,11 @@ begin
          fetch_data_i     => fetch2decode_data,
          fetch_double_o   => fetch2decode_double_consume,
          reg_rd_en_o      => decode2reg_rd_en,
-         reg_src_addr_o   => decode2reg_src_reg,
+         reg_src_reg_o    => decode2reg_src_reg,
          reg_src_val_i    => decode2reg_src_val,
-         reg_dst_addr_o   => decode2reg_dst_reg,
+         reg_dst_reg_o    => decode2reg_dst_reg,
          reg_dst_val_i    => decode2reg_dst_val,
          reg_r14_i        => reg2decode_r14,
-         exe_valid_o      => decode2exe_valid,
-         exe_ready_i      => decode2exe_ready,
-         exe_microcodes_o => decode2exe_microcodes,
-         exe_addr_o       => decode2exe_addr,
-         exe_inst_o       => decode2exe_inst,
-         exe_immediate_o  => decode2exe_immediate,
-         exe_src_addr_o   => decode2exe_src_addr,
-         exe_src_mode_o   => decode2exe_src_mode,
-         exe_src_val_o    => decode2exe_src_val,
-         exe_src_imm_o    => decode2exe_src_imm,
-         exe_dst_addr_o   => decode2exe_dst_addr,
-         exe_dst_mode_o   => decode2exe_dst_mode,
-         exe_dst_val_o    => decode2exe_dst_val,
-         exe_dst_imm_o    => decode2exe_dst_imm,
-         exe_res_reg_o    => decode2exe_res_reg,
-         exe_r14_o        => decode2exe_r14
-      ); -- i_decode_serialized
-
-
-   ------------------------------------------------------------
-   -- Instruction EXECUTE
-   ------------------------------------------------------------
-
-   i_execute : entity work.execute
-      port map (
-         clk_i            => clk_i,
-         rst_i            => rst_i,
-         dec_valid_i      => decode2exe_valid,
-         dec_ready_o      => decode2exe_ready,
-         dec_microcodes_i => decode2exe_microcodes,
-         dec_addr_i       => decode2exe_addr,
-         dec_inst_i       => decode2exe_inst,
-         dec_immediate_i  => decode2exe_immediate,
-         dec_src_addr_i   => decode2exe_src_addr,
-         dec_src_mode_i   => decode2exe_src_mode,
-         dec_src_val_i    => decode2exe_src_val,
-         dec_src_imm_i    => decode2exe_src_imm,
-         dec_dst_addr_i   => decode2exe_dst_addr,
-         dec_dst_mode_i   => decode2exe_dst_mode,
-         dec_dst_val_i    => decode2exe_dst_val,
-         dec_dst_imm_i    => decode2exe_dst_imm,
-         dec_res_reg_i    => decode2exe_res_reg,
-         dec_r14_i        => decode2exe_r14,
          mem_req_valid_o  => exe2mem_req_valid,
          mem_req_ready_i  => exe2mem_req_ready,
          mem_req_op_o     => exe2mem_req_op,
@@ -199,8 +138,7 @@ begin
          reg_we_o         => exe2reg_we,
          reg_addr_o       => exe2reg_addr,
          reg_val_o        => exe2reg_val
-      ); -- i_execute
-
+      ); -- i_decode_execute
 
 
    ------------------------------------------------------------

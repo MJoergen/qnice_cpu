@@ -1,0 +1,44 @@
+vunit i_serializer(serializer(synthesis))
+{
+
+   -- set all declarations to run on clk
+   default clock is rising_edge(clk_i);
+
+
+   --------------------------------------------
+   -- INTERNAL ASSERTIONS
+   --------------------------------------------
+
+
+   ---------------------------------------
+   -- PROPERTIES OF THE OUTPUT INTERFACE
+   ---------------------------------------
+
+   f_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o) and stable(m_user_o)};
+--   f_ready : assert always {s_ready_o and not s_valid_i} |=> {stable(s_ready_o)};
+
+
+   -----------------------------
+   -- ASSUMPTIONS ABOUT INPUTS
+   -----------------------------
+
+   assume always {s_valid_i and not s_ready_o} |=> {stable(s_valid_i) and stable(s_data_i) and stable(s_user_i)};
+
+
+   --------------------------------------------
+   -- COVER STATEMENTS TO VERIFY REACHABILITY
+   --------------------------------------------
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
+   ----------------------------------------------
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
+   ----------------------------------------------
+
+
+} -- vunit i_serializer(serializer(synthesis))
+
