@@ -56,6 +56,7 @@ end entity execute;
 
 architecture synthesis of execute is
 
+   signal wait_for_mem_req : std_logic;
    signal wait_for_mem_src : std_logic;
    signal wait_for_mem_dst : std_logic;
 
@@ -75,18 +76,18 @@ begin
    -- Get values read from memory
    ------------------------------------------------------------
 
-   mem_src_ready_o <= dec_valid_i and dec_microcodes_i(C_MEM_WAIT_SRC);
-   mem_dst_ready_o <= dec_valid_i and dec_microcodes_i(C_MEM_WAIT_DST);
+   wait_for_mem_req <= dec_valid_i and or(dec_microcodes_i(2 downto 0)) and not mem_req_ready_i;
+   wait_for_mem_src <= dec_valid_i and dec_microcodes_i(C_MEM_WAIT_SRC) and not mem_src_valid_i;
+   wait_for_mem_dst <= dec_valid_i and dec_microcodes_i(C_MEM_WAIT_DST) and not mem_dst_valid_i;
 
 
    ------------------------------------------------------------
    -- Back-pressure
    ------------------------------------------------------------
 
-   wait_for_mem_src <= dec_valid_i and mem_src_ready_o and not mem_src_valid_i;
-   wait_for_mem_dst <= dec_valid_i and mem_dst_ready_o and not mem_dst_valid_i;
-
-   dec_ready_o <= not (wait_for_mem_src or wait_for_mem_dst);
+   mem_src_ready_o <= dec_valid_i and dec_microcodes_i(C_MEM_WAIT_SRC) and not wait_for_mem_dst;
+   mem_dst_ready_o <= dec_valid_i and dec_microcodes_i(C_MEM_WAIT_DST) and not wait_for_mem_src;
+   dec_ready_o <= not (wait_for_mem_req or wait_for_mem_src or wait_for_mem_dst);
 
 
    ------------------------------------------------------------
