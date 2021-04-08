@@ -222,7 +222,7 @@ begin
    -- Update memory
    ------------------------------------------------------------
 
-   mem_req_valid_o <= dec_valid_i and dec_ready_o and or(mem_req_op_o);
+   mem_req_valid_o <= dec_valid_i and not wait_for_mem_src and not wait_for_mem_dst and or(mem_req_op_o);
    mem_req_op_o    <= dec_microcodes_i(2 downto 0);
    mem_req_data_o  <= dec_addr_i + 2 when mem_req_op_o /= 0 and dec_inst_i(R_OPCODE) = C_OPCODE_JMP and
                       (dec_src_imm_i = '1' or dec_dst_imm_i = '1') else

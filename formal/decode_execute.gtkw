@@ -1,10 +1,10 @@
 [*]
 [*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Mon Apr  5 19:35:07 2021
+[*] Thu Apr  8 05:59:56 2021
 [*]
 [dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/decode_execute_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Mon Apr  5 19:33:33 2021"
-[dumpfile_size] 26001
+[dumpfile_mtime] "Thu Apr  8 05:59:24 2021"
+[dumpfile_size] 26248
 [savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/decode_execute.gtkw"
 [timestart] 0
 [size] 1617 1120
@@ -34,7 +34,6 @@ decode_execute.reg_src_reg_o[3:0]
 decode_execute.reg_dst_reg_o[3:0]
 decode_execute.reg_src_val_i[15:0]
 decode_execute.reg_dst_val_i[15:0]
-@23
 decode_execute.reg_r14_i[15:0]
 @28
 [color] 2
@@ -85,6 +84,11 @@ decode_execute.decode2exe_dst_imm
 @22
 decode_execute.i_execute.alu_src_val[15:0]
 decode_execute.i_execute.alu_dst_val[15:0]
+@28
+decode_execute.i_execute.wait_for_mem_req
+decode_execute.i_execute.wait_for_mem_src
+@29
+decode_execute.i_execute.wait_for_mem_dst
 @1000200
 -Internal
 @28

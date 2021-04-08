@@ -6,13 +6,13 @@ DUTS += one_stage_fifo
 DUTS += two_stage_buffer
 DUTS += two_stage_fifo
 DUTS += pipe_concat
-DUTS += memory
-DUTS += fetch
-DUTS += registers
 DUTS += dp_ram
 DUTS += icache
-DUTS += decode_execute
+DUTS += memory
 DUTS += serializer
+DUTS += registers
+DUTS += fetch
+DUTS += decode_execute
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))
