@@ -1,0 +1,58 @@
+[*]
+[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
+[*] Thu Apr  8 07:18:35 2021
+[*]
+[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/memory_bmc/engine_0/trace.vcd"
+[dumpfile_mtime] "Thu Apr  8 07:16:30 2021"
+[dumpfile_size] 5596
+[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/memory.gtkw"
+[timestart] 0
+[size] 1920 1132
+[pos] -2371 -278
+*-3.711389 8 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] memory.
+[sst_width] 498
+[signals_width] 335
+[sst_expanded] 1
+[sst_vpaned_height] 328
+@28
+memory.clk_i
+memory.rst_i
+[color] 2
+memory.mreq_valid_i
+[color] 7
+memory.mreq_ready_o
+memory.mreq_op_i[2:0]
+@22
+memory.mreq_addr_i[15:0]
+memory.mreq_data_i[15:0]
+@28
+[color] 2
+memory.msrc_valid_o
+[color] 7
+memory.msrc_ready_i
+@22
+memory.msrc_data_o[15:0]
+@28
+[color] 2
+memory.mdst_valid_o
+[color] 7
+memory.mdst_ready_i
+@22
+memory.mdst_data_o[15:0]
+@28
+memory.wb_cyc_o
+memory.wb_stb_o
+memory.wb_stall_i
+@22
+memory.wb_addr_o[15:0]
+@28
+memory.wb_we_o
+@22
+memory.wb_dat_o[15:0]
+@28
+memory.wb_ack_i
+@22
+memory.wb_data_i[15:0]
+[pattern_trace] 1
+[pattern_trace] 0
