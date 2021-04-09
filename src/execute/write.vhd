@@ -61,6 +61,8 @@ architecture synthesis of write is
 
 begin
 
+   prep_ready_o <= '1';
+
    i_alu_data : entity work.alu_data
       port map (
          clk_i      => clk_i,

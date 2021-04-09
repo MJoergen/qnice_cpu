@@ -17,6 +17,8 @@ ghdl --std=08 decode.vhd \
    decode_serialized.vhd \
    alu_data.vhd \
    alu_flags.vhd \
+   prepare.vhd \
+   write.vhd \
    execute.vhd \
    decode_execute.vhd \
    microcode.vhd \
@@ -33,6 +35,8 @@ decode_execute.psl
 ../src/decode/decode_serialized.vhd
 ../src/execute/alu_data.vhd
 ../src/execute/alu_flags.vhd
+../src/execute/prepare.vhd
+../src/execute/write.vhd
 ../src/execute/execute.vhd
 ../src/decode_execute.vhd
 
