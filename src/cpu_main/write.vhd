@@ -40,9 +40,18 @@ architecture synthesis of write is
    signal alu_res_flags : std_logic_vector(15 downto 0);
    signal update_reg    : std_logic;
 
+   signal mem_addr    : std_logic_vector(15 downto 0);
+   signal mem_data    : std_logic_vector(15 downto 0);
+   signal mem_valid   : std_logic;
+
 begin
 
    prep_ready_o <= '1';
+
+
+   ------------------------------------------------------------
+   -- Instantiate ALU
+   ------------------------------------------------------------
 
    i_alu : entity work.alu
       port map (
@@ -58,8 +67,6 @@ begin
       ); -- i_alu
 
 
-   inst_done_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcodes(C_LAST);
-
 -- pragma synthesis_off
    p_debug : process (clk_i)
    begin
@@ -70,14 +77,6 @@ begin
       end if;
    end process p_debug;
 -- pragma synthesis_on
-
-
-   ------------------------------------------------------------
-   -- Update status register
-   ------------------------------------------------------------
-
-   reg_r14_o    <= alu_res_flags;
-   reg_r14_we_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcodes(C_LAST);
 
 
    ------------------------------------------------------------
@@ -135,28 +134,47 @@ begin
 
 
    ------------------------------------------------------------
-   -- Update memory
+   -- Writes to R15 are forwarded back to the fetch stage as well.
    ------------------------------------------------------------
 
-   -- Writes to R15 are forwarded back to the fetch stage as well.
    fetch_valid_o <= and(reg_addr_o) and reg_we_o;
    fetch_addr_o  <= reg_val_o;
 
 
    ------------------------------------------------------------
+   -- Update status register
+   ------------------------------------------------------------
+
+   reg_r14_o    <= alu_res_flags;
+   reg_r14_we_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcodes(C_LAST);
+
+
+   ------------------------------------------------------------
    -- Update memory
    ------------------------------------------------------------
 
+   mem_addr  <= prep_stage_i.src_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' and prep_stage_i.src_mode = C_MODE_PRE else
+                prep_stage_i.src_val   when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' else
+                prep_stage_i.dst_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '0' and prep_stage_i.dst_mode = C_MODE_PRE else
+                prep_stage_i.dst_val;
+   mem_data  <= prep_stage_i.addr + 2 when (prep_stage_i.src_imm = '1' or prep_stage_i.dst_imm = '1') else
+                prep_stage_i.addr + 1;
+   mem_valid <= '1' when or(prep_stage_i.microcodes(2 downto 0)) /= '0' and prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP else
+                '0';
+
+
    mem_req_valid_o <= prep_valid_i and or(mem_req_op_o);
    mem_req_op_o    <= prep_stage_i.microcodes(2 downto 0);
-   mem_req_data_o  <= prep_stage_i.addr + 2 when mem_req_op_o /= 0 and prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP and
-                      (prep_stage_i.src_imm = '1' or prep_stage_i.dst_imm = '1') else
-                      prep_stage_i.addr + 1 when mem_req_op_o /= 0 and prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP else
+   mem_req_data_o  <= mem_data when mem_valid = '1' else
                       alu_res_val;
-   mem_req_addr_o  <= prep_stage_i.src_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' and prep_stage_i.src_mode = C_MODE_PRE else
-                      prep_stage_i.src_val   when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' else
-                      prep_stage_i.dst_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '0' and prep_stage_i.dst_mode = C_MODE_PRE else
-                      prep_stage_i.dst_val;
+   mem_req_addr_o  <= mem_addr;
+
+
+   ------------------------------------------------------------
+   -- Debug
+   ------------------------------------------------------------
+
+   inst_done_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcodes(C_LAST);
 
 end architecture synthesis;
 

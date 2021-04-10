@@ -89,7 +89,7 @@ begin
    -- Generate combinatorial output values
    ------------------------------------------------------------
 
-   reg_rd_en_o    <= seq_ready_i;
+   reg_rd_en_o    <= seq_ready_i; -- Read when next stage is ready to process data.
    reg_src_addr_o <= fetch_data_i(R_SRC_REG);
    reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data_i(R_OPCODE) = C_OPCODE_JMP else
                      fetch_data_i(R_DST_REG);
@@ -147,10 +147,12 @@ begin
    p_output : process (clk_i)
    begin
       if rising_edge(clk_i) then
+         -- Next stage has consumed output data
          if seq_ready_i = '1' then
             seq_valid_o <= '0';
          end if;
 
+         -- Ready to send new data to next stage
          if fetch_valid_i and fetch_ready_o then
             seq_valid_o <= '1';
             seq_stage_o.microcodes <= microcode_value;
@@ -200,8 +202,8 @@ begin
                end if;
 
                -- Relative jump
-               if fetch_data_i(R_JMP_MODE) = C_JMP_RBRA or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB then
-                  --assert immediate_src = '1';
+               if immediate_src = '1' and
+                  (fetch_data_i(R_JMP_MODE) = C_JMP_RBRA or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB) then
                   seq_stage_o.immediate <= fetch_data_i(R_IMMEDIATE) + fetch_addr_i + 2;
                end if;
             end if;

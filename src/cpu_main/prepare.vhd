@@ -84,10 +84,12 @@ begin
    p_output : process (clk_i)
    begin
       if rising_edge(clk_i) then
+         -- Next stage has consumed output data
          if wr_ready_i = '1' then
             wr_valid_o <= '0';
          end if;
 
+         -- Ready to send new data to next stage
          if seq_valid_i and seq_ready_o then
             wr_valid_o             <= seq_valid_i;
             wr_stage_o             <= seq_stage_i;
