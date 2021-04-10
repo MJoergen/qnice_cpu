@@ -6,42 +6,29 @@ use work.cpu_constants.all;
 
 entity decode is
    port (
-      clk_i            : in  std_logic;
-      rst_i            : in  std_logic;
+      clk_i          : in  std_logic;
+      rst_i          : in  std_logic;
 
       -- From Instruction fetch
-      fetch_valid_i    : in  std_logic;
-      fetch_ready_o    : out std_logic;                     -- combinatorial
-      fetch_double_i   : in  std_logic;
-      fetch_addr_i     : in  std_logic_vector(15 downto 0);
-      fetch_data_i     : in  std_logic_vector(31 downto 0);
-      fetch_double_o   : out std_logic;                     -- combinatorial
+      fetch_valid_i  : in  std_logic;
+      fetch_ready_o  : out std_logic;                     -- combinatorial
+      fetch_double_i : in  std_logic;
+      fetch_addr_i   : in  std_logic_vector(15 downto 0);
+      fetch_data_i   : in  std_logic_vector(31 downto 0);
+      fetch_double_o : out std_logic;                     -- combinatorial
 
       -- Register file. Value arrives on the next clock cycle
-      reg_rd_en_o      : out std_logic;
-      reg_src_addr_o   : out std_logic_vector(3 downto 0);  -- combinatorial
-      reg_dst_addr_o   : out std_logic_vector(3 downto 0);  -- combinatorial
-      reg_src_val_i    : in  std_logic_vector(15 downto 0);
-      reg_dst_val_i    : in  std_logic_vector(15 downto 0);
-      reg_r14_i        : in  std_logic_vector(15 downto 0);
+      reg_rd_en_o    : out std_logic;
+      reg_src_addr_o : out std_logic_vector(3 downto 0);  -- combinatorial
+      reg_dst_addr_o : out std_logic_vector(3 downto 0);  -- combinatorial
+      reg_src_val_i  : in  std_logic_vector(15 downto 0);
+      reg_dst_val_i  : in  std_logic_vector(15 downto 0);
+      reg_r14_i      : in  std_logic_vector(15 downto 0);
 
-      -- To Execute stage
-      exe_valid_o      : out std_logic;
-      exe_ready_i      : in  std_logic;
-      exe_microcodes_o : out std_logic_vector(35 downto 0);
-      exe_addr_o       : out std_logic_vector(15 downto 0);
-      exe_inst_o       : out std_logic_vector(15 downto 0);
-      exe_immediate_o  : out std_logic_vector(15 downto 0);
-      exe_src_addr_o   : out std_logic_vector(3 downto 0);
-      exe_src_mode_o   : out std_logic_vector(1 downto 0);
-      exe_src_val_o    : out std_logic_vector(15 downto 0);
-      exe_src_imm_o    : out std_logic;
-      exe_dst_addr_o   : out std_logic_vector(3 downto 0);
-      exe_dst_mode_o   : out std_logic_vector(1 downto 0);
-      exe_dst_val_o    : out std_logic_vector(15 downto 0);
-      exe_dst_imm_o    : out std_logic;
-      exe_res_reg_o    : out std_logic_vector(3 downto 0);
-      exe_r14_o        : out std_logic_vector(15 downto 0)
+      -- To SEQUENCER
+      seq_valid_o    : out std_logic;
+      seq_ready_i    : in  std_logic;
+      seq_stage_o    : out t_stage
    );
 end entity decode;
 
@@ -95,21 +82,21 @@ begin
 
    fetch_double_o <= immediate_src or immediate_dst;
    fetch_ready_o <= '0' when fetch_double_o and not fetch_double_i else -- Wait for immediate value
-                    exe_ready_i;
+                    seq_ready_i;
 
 
    ------------------------------------------------------------
    -- Generate combinatorial output values
    ------------------------------------------------------------
 
-   reg_rd_en_o    <= exe_ready_i;
+   reg_rd_en_o    <= seq_ready_i;
    reg_src_addr_o <= fetch_data_i(R_SRC_REG);
    reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data_i(R_OPCODE) = C_OPCODE_JMP else
                      fetch_data_i(R_DST_REG);
 
-   exe_src_val_o  <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
-   exe_dst_val_o  <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
-   exe_r14_o      <= reg_r14_i;
+   seq_stage_o.src_val <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
+   seq_stage_o.dst_val <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
+   seq_stage_o.r14     <= reg_r14_i;
 
 
    ------------------------------------------------------------
@@ -157,38 +144,38 @@ begin
    -- Generate registered output values
    ------------------------------------------------------------
 
-   p_output2exe : process (clk_i)
+   p_output : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if exe_ready_i = '1' then
-            exe_valid_o <= '0';
+         if seq_ready_i = '1' then
+            seq_valid_o <= '0';
          end if;
 
          if fetch_valid_i and fetch_ready_o then
-            exe_valid_o      <= '1';
-            exe_microcodes_o <= microcode_value;
-            exe_addr_o       <= fetch_addr_i;
-            exe_immediate_o  <= fetch_data_i(R_IMMEDIATE);
-            exe_inst_o       <= fetch_data_i(R_INSTRUCTION);
-            exe_src_addr_o   <= reg_src_addr_o;
-            exe_src_mode_o   <= fetch_data_i(R_SRC_MODE);
-            exe_src_imm_o    <= immediate_src;
-            exe_dst_addr_o   <= reg_dst_addr_o;
-            exe_dst_mode_o   <= fetch_data_i(R_DST_MODE);
-            exe_dst_imm_o    <= immediate_dst;
-            exe_res_reg_o    <= reg_dst_addr_o;
+            seq_valid_o <= '1';
+            seq_stage_o.microcodes <= microcode_value;
+            seq_stage_o.addr       <= fetch_addr_i;
+            seq_stage_o.immediate  <= fetch_data_i(R_IMMEDIATE);
+            seq_stage_o.inst       <= fetch_data_i(R_INSTRUCTION);
+            seq_stage_o.src_addr   <= reg_src_addr_o;
+            seq_stage_o.src_mode   <= fetch_data_i(R_SRC_MODE);
+            seq_stage_o.src_imm    <= immediate_src;
+            seq_stage_o.dst_addr   <= reg_dst_addr_o;
+            seq_stage_o.dst_mode   <= fetch_data_i(R_DST_MODE);
+            seq_stage_o.dst_imm    <= immediate_dst;
+            seq_stage_o.res_reg    <= reg_dst_addr_o;
 
             -- Treat jumps as a special case
             if fetch_data_i(R_OPCODE) = C_OPCODE_JMP then
                -- Write new address to PC
-               exe_res_reg_o <= to_stdlogicvector(C_REG_PC, 4);
+               seq_stage_o.res_reg <= to_stdlogicvector(C_REG_PC, 4);
                if src_memory = '0' then
-                  exe_microcodes_o <= std_logic_vector'(
+                  seq_stage_o.microcodes <= std_logic_vector'(
                                       C_VAL_LAST &
                                       C_VAL_LAST &
                                       (C_VAL_LAST or C_VAL_REG_WRITE));
                else
-                  exe_microcodes_o <= std_logic_vector'(
+                  seq_stage_o.microcodes <= std_logic_vector'(
                                       C_VAL_LAST &
                                       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
                                       (C_VAL_MEM_READ_SRC or C_VAL_REG_MOD_SRC));
@@ -197,15 +184,15 @@ begin
                -- Subroutine call
                if fetch_data_i(R_JMP_MODE) = C_JMP_ASUB or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB then
                   -- Artifically introduce a MOVE R15, @--R13
-                  exe_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4);
-                  exe_dst_mode_o <= to_stdlogicvector(C_MODE_PRE, 2);
+                  seq_stage_o.dst_addr <= to_stdlogicvector(C_REG_SP, 4);
+                  seq_stage_o.dst_mode <= to_stdlogicvector(C_MODE_PRE, 2);
                   if src_memory = '0' then
-                     exe_microcodes_o <= std_logic_vector'(
+                     seq_stage_o.microcodes <= std_logic_vector'(
                                          C_VAL_LAST &
                                          (C_VAL_LAST or C_VAL_REG_WRITE) &
                                          (C_VAL_REG_MOD_DST or C_VAL_MEM_WRITE));
                   else
-                     exe_microcodes_o <= std_logic_vector'(
+                     seq_stage_o.microcodes <= std_logic_vector'(
                                          (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
                                          (C_VAL_MEM_READ_SRC or C_VAL_REG_MOD_SRC) &
                                          (C_VAL_REG_MOD_DST or C_VAL_MEM_WRITE));
@@ -214,17 +201,17 @@ begin
 
                -- Relative jump
                if fetch_data_i(R_JMP_MODE) = C_JMP_RBRA or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB then
-                  assert immediate_src = '1';
-                  exe_immediate_o  <= fetch_data_i(R_IMMEDIATE) + fetch_addr_i + 2;
+                  --assert immediate_src = '1';
+                  seq_stage_o.immediate <= fetch_data_i(R_IMMEDIATE) + fetch_addr_i + 2;
                end if;
             end if;
          end if;
 
          if rst_i = '1' then
-            exe_valid_o <= '0';
+            seq_valid_o <= '0';
          end if;
       end if;
-   end process p_output2exe;
+   end process p_output;
 
 end architecture synthesis;
 

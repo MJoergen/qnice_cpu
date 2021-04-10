@@ -95,6 +95,28 @@ package cpu_constants is
 
    procedure disassemble(pc : std_logic_vector; inst : std_logic_vector; operand : std_logic_vector);
 
+   type t_stage is record
+      microcodes  : std_logic_vector(35 downto 0);
+      addr        : std_logic_vector(15 downto 0);
+      inst        : std_logic_vector(15 downto 0);
+      immediate   : std_logic_vector(15 downto 0);
+      src_addr    : std_logic_vector(3 downto 0);
+      src_mode    : std_logic_vector(1 downto 0);
+      src_val     : std_logic_vector(15 downto 0);
+      src_imm     : std_logic;
+      dst_addr    : std_logic_vector(3 downto 0);
+      dst_mode    : std_logic_vector(1 downto 0);
+      dst_val     : std_logic_vector(15 downto 0);
+      dst_imm     : std_logic;
+      res_reg     : std_logic_vector(3 downto 0);
+      r14         : std_logic_vector(15 downto 0);
+      alu_oper    : std_logic_vector(3 downto 0);
+      alu_ctrl    : std_logic_vector(5 downto 0);
+      alu_flags   : std_logic_vector(15 downto 0);
+      alu_src_val : std_logic_vector(15 downto 0);
+      alu_dst_val : std_logic_vector(15 downto 0);
+   end record t_stage;
+
 end cpu_constants;
 
 library ieee;

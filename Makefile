@@ -17,19 +17,20 @@ SOURCES += src/fetch/axi_pause.vhd
 SOURCES += src/fetch/fetch.vhd
 SOURCES += src/fetch/icache.vhd
 SOURCES += src/fetch/fetch_cache.vhd
-SOURCES += src/decode/microcode.vhd
-SOURCES += src/decode/decode.vhd
-SOURCES += src/decode/serializer.vhd
-SOURCES += src/decode/decode_serialized.vhd
-SOURCES += src/execute/alu_data.vhd
-SOURCES += src/execute/alu_flags.vhd
-SOURCES += src/execute/prepare.vhd
-SOURCES += src/execute/write.vhd
-SOURCES += src/execute/execute.vhd
-SOURCES += src/decode_execute.vhd
 SOURCES += src/registers/registers.vhd
 SOURCES += src/memory/memory.vhd
 SOURCES += src/debug.vhd
+
+SOURCES += src/cpu_main/sub/alu_data.vhd
+SOURCES += src/cpu_main/sub/alu_flags.vhd
+SOURCES += src/cpu_main/sub/alu.vhd
+SOURCES += src/cpu_main/sub/microcode.vhd
+SOURCES += src/cpu_main/decode.vhd
+SOURCES += src/cpu_main/sequencer.vhd
+SOURCES += src/cpu_main/prepare.vhd
+SOURCES += src/cpu_main/write.vhd
+SOURCES += src/cpu_main/cpu_main.vhd
+
 SOURCES += src/cpu.vhd
 
 TEST_SOURCES += test/tdp_ram.vhd

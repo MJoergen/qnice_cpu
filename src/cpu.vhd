@@ -101,10 +101,10 @@ begin
 
 
    ------------------------------------------------------------
-   -- Instruction DECODE and EXECUTE
+   -- CPU MAIN
    ------------------------------------------------------------
 
-   i_decode_execute : entity work.decode_execute
+   i_cpu_main : entity work.cpu_main
       port map (
          clk_i            => clk_i,
          rst_i            => rst_i,
@@ -138,7 +138,7 @@ begin
          reg_we_o         => exe2reg_we,
          reg_addr_o       => exe2reg_addr,
          reg_val_o        => exe2reg_val
-      ); -- i_decode_execute
+      ); -- i_cpu_main
 
 
    ------------------------------------------------------------
