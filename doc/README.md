@@ -5,7 +5,7 @@ This implementation is essentially a four-stage pipeline consisting of:
 
 * FETCH: Fetches from the instruction memory and presents up to two words at a
   time to the DECODE stage.
-* DECODE: Outputs a sequence of single micro-operations to the EXECUTE stage.
+* DECODE: Outputs a sequence of single micro-operations.
 * PREPARE: Prepares the input operands for the ALU.
 * WRITE: Contains the ALU and performs write-back of the result to register and/or memory.
 
