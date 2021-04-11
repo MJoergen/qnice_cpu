@@ -48,13 +48,12 @@ since we here need only to distinguish between pure register addressing mode
 against any of the three memory adressing modes.
 
 With the above we have classified the instructions into four classes:
-* `INST  R,  R` : 1 operation  : Write to register.
-* `INST  R, @R` : 2 operations : Read from destination memory,
-  write to destination memory.
-* `INST @R,  R` : 2 operations : Read from source memory, write to
-  register.
-* `INST @R, @R` : 3 operations : Read from source memory, read
-  from destination memory, write to destination memory.
+|  Instruction  | # of operations | Which operations                                                                    |
+|  -----------  | --------------- | ----------------                                                                    |
+| `INST  R,  R` |   1 operation   | Write to register.                                                                  |
+| `INST  R, @R` |   2 operations  | Read from destination memory, write to destination memory.                          |
+| `INST @R,  R` |   2 operations  | Read from source memory, write to register.                                         |
+| `INST @R, @R` |   3 operations  | Read from source memory, read from destination memory, write to destination memory. |
 
 Here `INST` is a general instruction like e.g. `ADD`.
 
@@ -70,18 +69,19 @@ First of all, some instructions don't need to read from destination memory.
 This is e.g. the `MOVE` instruction.  Likewise, other instructions don't need
 to write to destination memory. This is e.g. the 'CMP' instruction.  So we have
 additional optimized versions for these instructions:
-* `MOVE  R,  R` : 1 operation  : Write to register.
-* `MOVE  R, @R` : 1 operation  : Write to destination memory.
-* `MOVE @R,  R` : 2 operations : Read from source memory, write to
-  register.
-* `MOVE @R, @R` : 2 operations : Read from source memory, write to
-  destination memory.
+|  Instruction  | # of operations | Which operations                                                                    |
+|  -----------  | --------------- | ----------------                                                                    |
+| `MOVE  R,  R` |   1 operation   | Write to register.                                                                  |
+| `MOVE  R, @R` |   1 operation   | Write to destination memory.                                                        |
+| `MOVE @R,  R` |   2 operations  | Read from source memory, write to register.                                         |
+| `MOVE @R, @R` |   2 operations  | Read from source memory, write to destination memory.                               |
 
-* `CMP  R,  R` : 1 operation  : Update Status Register.
-* `CMP  R, @R` : 2 operations : Read from destination memory, update Status Register.
-* `CMP @R,  R` : 2 operations : Read from source memory, update Status Register.
-* `CMP @R, @R` : 3 operations : Read from source memory, read from
-  destination memory, update Status Register.
+|  Instruction  | # of operations | Which operations                                                                    |
+|  -----------  | --------------- | ----------------                                                                    |
+|  `CMP  R,  R` |   1 operation   | Update Status Register.                                                             |
+|  `CMP  R, @R` |   2 operations  | Read from destination memory, update Status Register.                               |
+|  `CMP @R,  R` |   2 operations  | Read from source memory, update Status Register.                                    |
+|  `CMP @R, @R` |   3 operations  | Read from source memory, read from destination memory, update Status Register.      |
 
 Note that even though the `CMP` instruction does not need to write to memory,
 it still expands to the same number of micro-operations. This is because we
@@ -111,17 +111,17 @@ source register is updated before issuing the read for the destination operand.
 ### Description of micro-operations
 Each micro-operation consists of an array of 12 bits with the following meaning:
 
-|      Micro     |  Explanation                                               |
-|      -----     | ---------------                                            |
-| `LAST`         | Indicates the last micro-operation for this instruction.   |
-| `REG_MOD_SRC`  | Optionally modify source register (`@R++` or `@--R`).      |
-| `REG_MOD_DST`  | Optionally modify destination register (`@R++` or `@--R`). |
-| `MEM_WAIT_SRC` | Wait for source operand from memory.                       |
-| `MEM_WAIT_DST` | Wait for destination operand from memory.                  |
-| `REG_WRITE`    | Write to destination register.                             |
-| `MEM_READ_SRC` | Read from memory to source.                                |
-| `MEM_READ_DST` | Read from memory to destination.                           |
-| `MEM_WRITE`    | Write to destination memory.                               |
+| Micro-operation |  Explanation                                               |
+| --------------- | ---------------                                            |
+|  `LAST`         | Indicates the last micro-operation for this instruction.   |
+|  `REG_MOD_SRC`  | Optionally modify source register (`@R++` or `@--R`).      |
+|  `REG_MOD_DST`  | Optionally modify destination register (`@R++` or `@--R`). |
+|  `MEM_WAIT_SRC` | Wait for source operand from memory.                       |
+|  `MEM_WAIT_DST` | Wait for destination operand from memory.                  |
+|  `REG_WRITE`    | Write to destination register.                             |
+|  `MEM_READ_SRC` | Read from memory to source.                                |
+|  `MEM_READ_DST` | Read from memory to destination.                           |
+|  `MEM_WRITE`    | Write to destination memory.                               |
 
 ### Examples
 
@@ -129,31 +129,32 @@ Here I'll show a detailed description of some example instructions.
 
 We'll start with a simple `MOVE R0, R1`. Since this instruction has no memory operations at all,
 it simplifies to the following:
-|      Micro     |  One  |  Two  | Three |
-|      -----     | ----- | ----- | ----- |
-|`LAST         ` |   X   |       |       |
-|`REG_MOD_SRC  ` |       |       |       |
-|`REG_MOD_DST  ` |       |       |       |
-|`MEM_WAIT_SRC ` |       |       |       |
-|`MEM_WAIT_DST ` |       |       |       |
-|`REG_WRITE    ` |   X   |       |       |
-|`MEM_READ_SRC ` |       |       |       |
-|`MEM_READ_DST ` |       |       |       |
-|`MEM_WRITE    ` |       |       |       |
+| Micro-operation |  One  |  Two  | Three |
+| --------------- | ----- | ----- | ----- |
+| `LAST         ` |   X   |       |       |
+| `REG_MOD_SRC  ` |       |       |       |
+| `REG_MOD_DST  ` |       |       |       |
+| `MEM_WAIT_SRC ` |       |       |       |
+| `MEM_WAIT_DST ` |       |       |       |
+| `REG_WRITE    ` |   X   |       |       |
+| `MEM_READ_SRC ` |       |       |       |
+| `MEM_READ_DST ` |       |       |       |
+| `MEM_WRITE    ` |       |       |       |
+
 The instruction uses only one micro-operation.
 
 An instruction like `MOVE @R0, @R1` requires two micro-operations:
-|      Micro     |  One  |  Two  | Three |
-|      -----     | ----- | ----- | ----- |
-|`LAST         ` |       |   X   |       |
-|`REG_MOD_SRC  ` |   X   |       |       |
-|`REG_MOD_DST  ` |       |   X   |       |
-|`MEM_WAIT_SRC ` |       |   X   |       |
-|`MEM_WAIT_DST ` |       |       |       |
-|`REG_WRITE    ` |       |       |       |
-|`MEM_READ_SRC ` |   X   |       |       |
-|`MEM_READ_DST ` |       |       |       |
-|`MEM_WRITE    ` |       |   X   |       |
+| Micro-operation |  One  |  Two  | Three |
+| --------------- | ----- | ----- | ----- |
+| `LAST         ` |       |   X   |       |
+| `REG_MOD_SRC  ` |   X   |       |       |
+| `REG_MOD_DST  ` |       |   X   |       |
+| `MEM_WAIT_SRC ` |       |   X   |       |
+| `MEM_WAIT_DST ` |       |       |       |
+| `REG_WRITE    ` |       |       |       |
+| `MEM_READ_SRC ` |   X   |       |       |
+| `MEM_READ_DST ` |       |       |       |
+| `MEM_WRITE    ` |       |   X   |       |
 
 * The first micro-operation issues a memory read to source operand and
   simultaneously (optionally) updates the source register. This latter
@@ -163,17 +164,17 @@ An instruction like `MOVE @R0, @R1` requires two micro-operations:
   destination register
 
 An instruction like `ADD @R0, @R1` performs three memory instructions:
-|      Micro     |  One  |  Two  | Three |
-|      -----     | ----- | ----- | ----- |
-|`LAST         ` |       |       |   X   |
-|`REG_MOD_SRC  ` |   X   |       |       |
-|`REG_MOD_DST  ` |       |       |   X   |
-|`MEM_WAIT_SRC ` |       |       |   X   |
-|`MEM_WAIT_DST ` |       |       |   X   |
-|`REG_WRITE    ` |       |       |       |
-|`MEM_READ_SRC ` |   X   |       |       |
-|`MEM_READ_DST ` |       |   X   |       |
-|`MEM_WRITE    ` |       |       |   X   |
+| Micro-operation |  One  |  Two  | Three |
+| --------------- | ----- | ----- | ----- |
+| `LAST         ` |       |       |   X   |
+| `REG_MOD_SRC  ` |   X   |       |       |
+| `REG_MOD_DST  ` |       |       |   X   |
+| `MEM_WAIT_SRC ` |       |       |   X   |
+| `MEM_WAIT_DST ` |       |       |   X   |
+| `REG_WRITE    ` |       |       |       |
+| `MEM_READ_SRC ` |   X   |       |       |
+| `MEM_READ_DST ` |       |   X   |       |
+| `MEM_WRITE    ` |       |       |   X   |
 
 * The first micro-operation again issues a read to source operand and
   simultaneously (optionally) updates the source register, in case it is needed
