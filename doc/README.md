@@ -14,24 +14,36 @@ See the following block diagram:
 ![Block Diagram](cpu.png)
 
 The block diagram contains two additional blocks:
-* REGISTERS: Contains all the CPU registers and supports two read ports and one
-  write port.
-* MEMORY: Interfaces to the Wishbone memory bus and supports two read ports and
-  one write port.
+* Registers: Contains all the CPU registers and supports two read ports
+  (connected to DECODE) and one write port (connected to WRITE).
+* Memory: Interfaces to the Wishbone memory bus and supports two read ports
+  (connected to PREPAPRE) and one write port (connected to WRITE).
 
 The flow through the pipeline is that an instruction will spend one or two
 clock cycles in the FETCH stage (two cycles if it uses an immediate operand),
-and up to three clock cycles in the DECODE stage. The EXECUTE stage is purely
-combinatorial.
+and up to three clock cycles in the DECODE stage. The PREPARE stage waits for
+any memory operands to be read, while the WRITE stage is purely combinatorial.
+
+
+## Back-pressure
+The thick arrows indicate the AXI-like pipeline handshake, consisting of a
+`VALID` signal from source to sink and a `READY` signal from sink to source.
+This handshake is used to control back-pressure.
+
+There are two sources of back-pressure in the design:
+* The DECODE stage may generate up to three clock cycles of data for the
+  PREPARE stage. While doing so, it applies back-pressure to the FETCH stage.
+* The Memory module will generate back-pressure while waiting for the result
+  read from the memory bus. This is part of the Wishbone protocol and allows
+  for an I/O device to take several clock cycles to respond.
 
 
 ## Detailed design description
 For more detailed information about the design look here:
 * [FETCH](../src/fetch/README.md)
-* [DECODE](../src/decode/README.md)
-* [EXECUTE](../src/execute/README.md)
-* [REGISTERS](../src/registers/README.md)
-* [MEMORY](../src/memory/README.md)
+* [Registers](../src/registers/README.md)
+* [Memory](../src/memory/README.md)
+* [DECODE/PREPARE/WRITE](../src/cpu_main/README.md)
 
 
 ## Wishbone
@@ -51,14 +63,14 @@ wb_data_o  : in  std_logic_vector(15 downto 0)
 A write transaction is indicated by the CPU asserting all three signals
 `wb_cyc_i`, `wb_stb_i`, and `wb_we_i` simultaneously together with the address
 and data signals `wb_addr_i` and `wb_data_i`. The signal `wb_stall_o` is used
-to indicate the end of the transaction. When `wb_stall_o` the slave has accepted
-the transaction.
+to indicate the end of the transaction: When `wb_stall_o` is de-asserted the
+slave has accepted the transaction.
 
-A write transaction is indicated by the CPU asserting the two signals
-`wb_cyc_i` and `wb_stb_i`, and de-asserting `wb_we_i`. Again the signal
-`wb_stall_o` is used to indicate the end of the transaction. When `wb_stall_o`
+A read transaction is indicated by the CPU asserting the two signals `wb_cyc_i`
+and `wb_stb_i`, and de-asserting `wb_we_i`. Again the signal `wb_stall_o` is
+used to indicate the end of the transaction: When `wb_stall_o` is de-asserted
 the slave has accepted the transaction.  When the data is ready, the slave
-drives the data but `wb_data_o` and asserts the signal `wb_ack_o`.
+drives the data onto `wb_data_o` and asserts the signal `wb_ack_o`.
 
 
 ## Interleaving
@@ -78,7 +90,7 @@ small experiment, where I first have a sequence of identical instructions `MOVE
 0x0000, R0` that each take two clock cycles, then a sequence of identical
 instructions `MOVE @R0, @R1` that again take two clock cycles each. The final
 part contains alternating instructions `MOVE 0x0000, R0` and `MOVE @R0, @R1`,
-and this sequence of two instructions take a total of three instructions to
+and this sequence of two instructions takes a total of three instructions to
 execute. So the pair of instructions are faster than the sum of each individual
 instruction, because the instruction and data memories are operating
 simultaneously.
@@ -101,11 +113,13 @@ The current synthesis report shows the following utilization:
 
 |   Name    | LUTs | Regs | Slices |
 | --------- | ---- | ---- | ------ |
-| Fetch     |   67 |  152 |    42  |
-| Decode    |   73 |   76 |    40  |
-| Execute   |  494 |    0 |   179  |
-| Registers |  105 |  142 |    54  |
-| Memory    |   43 |   37 |    32  |
-| TOTAL     |  782 |  407 |   267  |
+| FETCH     |   70 |  152 |    37  |
+| DECODE    |   52 |   74 |    24  |
+| PREPARE   |   52 |  129 |    71  |
+| WRITE     |  427 |    0 |   148  |
+| Registers |  132 |  142 |    66  |
+| Memory    |   31 |   37 |    15  |
+| --------- | ---- | ---- | ------ |
+| TOTAL     |  777 |  536 |   260  |
 
 
