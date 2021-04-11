@@ -123,6 +123,13 @@ Each micro-operation consists of an array of 12 bits with the following meaning:
 |  `MEM_READ_DST` | Read from memory to destination.                           |
 |  `MEM_WRITE`    | Write to destination memory.                               |
 
+Each of the three register operations (`REG_MOD_SRC`, `REG_MOD_DST`, and
+`REG_WRITE`) work by issuing a write command to the Register file. Therefore,
+they are mutually exclusive and at most one of these bits may be set.
+
+The same applies to the three memory operations (`MEM_READ_SRC`,
+`MEM_READ_DST`, and `MEM_WRITE`).
+
 ### Examples
 
 Here I'll show a detailed description of some example instructions.
@@ -369,6 +376,37 @@ Finally, `r14` contains the current value of the Status Register.
 
 The remaining elements `alu_*` are only used from PREPARE to WRITE. They contain
 all the values needed by the ALU.
+
+## DECODE
+The main back-bone of the DECODE stage is the micro-code ROM implemented in the
+file [microcode.vhd](sub/microcode.vhd). The entry to this ROM is a four-bit
+signal describing the classification of the current instruction. This
+classification is encoded in the following four bits:
+* `reads_from_dst` : The instruction wants to read from the destination operand.
+* `writes_to_dst`  : The instruction wants to write to the destination operand.
+* `src_memory`     : The source operand belongs in memory.
+* `dst_memory`     : The destination operand belongs in memory.
+
+The latter two bits are de-asserted in the special case of `@R15++`.
+
+The microcode ROM returns (combinatorially) a list of up to three
+micro-operations.  This list is split (sequenced) into separate clock cycles by
+the [Sequencer](sub/sequencer.vhd) module.
+
+One additional complexity handled by the DECODE module is the special case of
+jump instructions (`ABRA`, `RBRA`, `ASUB`, and `RSUB`).
+
+## PREPARE
+This stage is quite small and mainly serves the function of adding some
+flip-flops in an otherwise very long combinatorial path. In other words, this
+stage almost halves the longest combinatorial delay thus essentially doubling
+the maximum frequency. However, the cost is increased data hazards due to a
+longer pipeline, and therefore additional bypass handling is needed, as well as
+occasional pipeline stalls.
+
+## WRITE
+This stage contains the ALU and writes result back to the Register or Memory
+module.  Additionally, it handles pre- and post-increment of the registers.
 
 ## Bypass
 Whenever one has a pipelined architecture, where later stages write back to
