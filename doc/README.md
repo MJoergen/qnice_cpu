@@ -120,7 +120,7 @@ The current synthesis report shows the following utilization:
 |   Name    | LUTs | Regs | Slices |
 | --------- | ---- | ---- | ------ |
 | FETCH     |   70 |  152 |    37  |
-| DECODE    |   52 |   74 |    24  |
+| DECODE    |   63 |   76 |    31  |
 | PREPARE   |   52 |  129 |    71  |
 | WRITE     |  427 |    0 |   148  |
 | Registers |  132 |  142 |    66  |

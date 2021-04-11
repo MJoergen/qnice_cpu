@@ -6,14 +6,16 @@ the stages DECODE, PREPARE, and WRITE.
 Table of contents:
 * [Block diagram](#Block-diagram)
 * [Microcoding of instructions](#Microcoding-of-instructions)
-* [Interfaces](#Interfaces)
+* [External interfaces](#External-interfaces)
+* [Internal interfaces](#Internal-interfaces)
 * [Bypass](#Bypass)
 
 ## Block diagram
 
 ![Block Diagram](../../doc/cpu.png)
 
-The remaining blocks are described else-where, see [main documentation](../../doc/README.md#Detailed-design-description).
+The remaining blocks are described else-where, see [main
+documentation](../../doc/README.md#Detailed-design-description).
 
 The three stages DECODE, PREPARE, and WRITE are combined into a single module
 `cpu_main`. This is mainly to simplify the formal verification.
@@ -21,39 +23,41 @@ The three stages DECODE, PREPARE, and WRITE are combined into a single module
 ## Microcoding of instructions
 
 The really cool feature of this implementation is the conversion from the
-CISC-like QNICE instructions to more RISC-like micro-operations. This conversion
-is done dynamically, i.e. on-the-fly by the DECODE stage with the help
-of a small ROM containing micro-code for the various instruction types.
+CISC-like QNICE instructions to more RISC-like micro-operations. This
+conversion is done dynamically, i.e. on-the-fly by the DECODE stage with the
+help of a small ROM containing micro-code for the various instruction types.
 
 The main purpose of this micro-coding is to reduce the complexity of the
-instructions. And the complexity arises not so much from the advanced
-addressing modes, but rather from the fact that each instruction performs up to
-three memory operations. For instance, the instruction `ADD @R0, @R1` performs
-a read from @R0, then a read from @R1, and finally a write to @R1.  It is these
+implementation. The complexity arises not so much from the advanced addressing
+modes, but rather from the fact that each instruction performs up to three
+memory operations. For instance, the instruction `ADD @R0, @R1` performs a read
+from `@R0`, then a read from `@R1`, and finally a write to `@R1`.  It is these
 memory operations that are "serialized" by the micro-coding. In other words,
-each micro-operation performs a most one memory operation (read or write).
+each micro-operation performs at most one memory operation (read or write).
 
 So to perform this translation we must essentially classify each instruction
-depending on which (if any) memory operations it performs. This is done by
-examining the addressing mode of the source and destination operand.
+depending on which (if any) memory operations it performs. This is done
+primarily by examining the addressing mode of the source and destination
+operand.
 
 Note that this microcoding only concerns with splitting up the memory
 operations. Therefore, any optional pre- or post-increment of the registers has
-not influence on the micro-coding. This once again simplifies since we need
-only to distinguish between pure register addressing mode against any of the
-three memory adressing modes.
+no influence on the micro-coding. Pre- and post-increment of registers is
+handled by the WRITE stage.  This once again simplifies the design since we
+here need only to distinguish between pure register addressing mode against any
+of the three memory adressing modes.
 
 With the above we have classified the instructions into four classes:
-* INST register, register : 1 clock cycle  : Write to register.
-* INST register, memory   : 2 clock cycles : Read from destination memory,
+* `INST R, R  ` : 1 operation  : Write to register.
+* `INST R, @R ` : 2 operations : Read from destination memory,
   write to destination memory.
-* INST memory, register   : 2 clock cycles : Read from source memory, write to
+* `INST @R, R ` : 2 operations : Read from source memory, write to
   register.
-* INST memory, memory     : 3 clock cycles : Read from source memory, read
+* `INST @R, @R` : 3 operations : Read from source memory, read
   from destination memory, write to destination memory.
 Here `INST` is a general instruction like e.g. `ADD`.
 
-I should note, that some instructions don't have two operands. This includes
+I should note that some instructions don't have two operands. This includes
 the Control instructions and the Jump instructions. These are treated
 separately.
 
@@ -64,17 +68,17 @@ First of all, some instructions don't need to read from destination memory.
 This is e.g. the `MOVE` instruction.  Likewise, other instructions don't need
 to write to destination memory. This is e.g. the 'CMP' instruction.  So we have
 additional optimized versions for these instructions:
-* MOVE register, register : 1 clock cycle : Write to register.
-* MOVE register, memory   : 1 clock cycles : Write to destination memory.
-* MOVE memory, register   : 2 clock cycles : Read from source memory, write to
+* `MOVE R, R  ` : 1 operation  : Write to register.
+* `MOVE R, @R ` : 1 operation  : Write to destination memory.
+* `MOVE @R, R ` : 2 operations : Read from source memory, write to
   register.
-* MOVE memory, memory     : 2 clock cycles : Read from source memory, write to
+* `MOVE @R, @R` : 2 operations : Read from source memory, write to
   destination memory.
 
-* CMP register, register  : 1 clock cycle : Update Status Register.
-* CMP register, memory    : 2 clock cycles : Read from destination memory, update Status Register.
-* CMP memory, register    : 2 clock cycles : Read from source memory, update Status Register.
-* CMP memory, memory      : 3 clock cycles : Read from source memory, read from
+* `CMP R, R  ` : 1 operation  : Update Status Register.
+* `CMP R, @R ` : 2 operations : Read from destination memory, update Status Register.
+* `CMP @R, R ` : 2 operations : Read from source memory, update Status Register.
+* `CMP @R, @R` : 3 operations : Read from source memory, read from
   destination memory, update Status Register.
 Note that even tough the `CMP` instruction to not need to write to memory, they
 still expand to the same number of micro-operations. This is because we need
@@ -82,11 +86,11 @@ one micro-operation to wait for the result read back from memory.
 
 ### Second optimization
 Another optimization is that I treat immediate operands as a special case. An
-immediate operand is encoded as @R15++ in the instruction, but there is no beed
+immediate operand is encoded as `@R15++` in the instruction, but there is no beed
 to perform a read from memory in this case, because the value is already given
 by the FETCH module.
 
-What about instructions with @R15++ in both operands, e.g. `ADD @R15++, @R15++`.
+What about instructions with `@R15++` in both operands, e.g. `ADD @R15++, @R15++`.
 This FETCH module only provides the first immediate operand. The second immediate operand
 is handled using a regular memory read.
 
@@ -176,7 +180,7 @@ An instruction like `ADD @R0, @R1` performs three memory instructions:
   register, waits for both memory operands to be ready, and writes the result
   back to memory.
 
-## Interfaces
+## External interfaces
 In the following I'll describe in detail the interfaces to the various
 surrounding blocks.
 
@@ -299,6 +303,54 @@ signals generated by the WRITE stage.
 fetch_valid_o : out std_logic;
 fetch_addr_o  : out std_logic_vector(15 downto 0);
 ```
+
+## Internal interfaces
+The interface from DECODE to PREPARE, and from PREPARE to WRITE is a standard
+AXI-interface accompanied by the following record data structure:
+```
+type t_stage is record
+   microcodes  : std_logic_vector(35 downto 0);
+   addr        : std_logic_vector(15 downto 0);
+   inst        : std_logic_vector(15 downto 0);
+   immediate   : std_logic_vector(15 downto 0);
+   src_imm     : std_logic;
+   dst_imm     : std_logic;
+   src_addr    : std_logic_vector(3 downto 0);
+   src_mode    : std_logic_vector(1 downto 0);
+   src_val     : std_logic_vector(15 downto 0);
+   dst_addr    : std_logic_vector(3 downto 0);
+   dst_mode    : std_logic_vector(1 downto 0);
+   dst_val     : std_logic_vector(15 downto 0);
+   res_reg     : std_logic_vector(3 downto 0);
+   r14         : std_logic_vector(15 downto 0);
+   alu_oper    : std_logic_vector(3 downto 0);
+   alu_ctrl    : std_logic_vector(5 downto 0);
+   alu_flags   : std_logic_vector(15 downto 0);
+   alu_src_val : std_logic_vector(15 downto 0);
+   alu_dst_val : std_logic_vector(15 downto 0);
+end record t_stage;
+```
+
+The element `microcodes` contain in bits 11-0 the micro-operation to be
+performed. The other bits are only used internally with the DECODE stage.
+
+The elements 'addr', 'inst', and 'immediate' are the address, instruction, and
+immediate operand passed on from the FETCH module.
+
+The flags `src_imm` and `dst_imm` indicate whether the source or destination
+operand should use the immediate value passed on.
+
+The elements `src_addr`, `src_mode`, and `src_val` indicate the source register
+number, the source operand addressing mode, and the source register value (from
+Register module). Similarly for the destination register.
+
+The element `res_reg` indicates which register to write the result back into.
+**TBD: Is this always equal to destination register?**.
+
+Finally, `r14` contains the current value of the Status Register.
+
+The remaining elements `alu_*` are only used from PREPARE to WRITE. The contain
+all the values needed by the ALU.
 
 ## Bypass
 Whenever one has a pipelined architecture, where later stages write back to
