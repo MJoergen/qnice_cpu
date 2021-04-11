@@ -58,15 +58,10 @@ end entity cpu_main;
 
 architecture synthesis of cpu_main is
 
-   -- DECODE to SEQUENCER
-   signal dec2seq_valid  : std_logic;
-   signal dec2seq_ready  : std_logic;
-   signal dec2seq_stage  : t_stage;
-
-   -- SEQUENCER to PREPARE
-   signal seq2prep_valid : std_logic;
-   signal seq2prep_ready : std_logic;
-   signal seq2prep_stage : t_stage;
+   -- DECODE to PREPARE
+   signal dec2prep_valid : std_logic;
+   signal dec2prep_ready : std_logic;
+   signal dec2prep_stage : t_stage;
 
    -- PREPARE to WRITE
    signal prep2wr_valid  : std_logic;
@@ -95,27 +90,10 @@ begin
          reg_dst_addr_o => reg_dst_reg_o,
          reg_dst_val_i  => reg_dst_val_i,
          reg_r14_i      => reg_r14_i,
-         seq_valid_o    => dec2seq_valid,
-         seq_ready_i    => dec2seq_ready,
-         seq_stage_o    => dec2seq_stage
+         prep_valid_o   => dec2prep_valid,
+         prep_ready_i   => dec2prep_ready,
+         prep_stage_o   => dec2prep_stage
       ); -- i_decode
-
-
-   ------------------------------------------------------------
-   -- SEQUENCER
-   ------------------------------------------------------------
-
-   i_sequencer : entity work.sequencer
-      port map (
-         clk_i        => clk_i,
-         rst_i        => rst_i,
-         dec_valid_i  => dec2seq_valid,
-         dec_ready_o  => dec2seq_ready,
-         dec_stage_i  => dec2seq_stage,
-         prep_valid_o => seq2prep_valid,
-         prep_ready_i => seq2prep_ready,
-         prep_stage_o => seq2prep_stage
-      ); -- i_sequencer
 
 
    ------------------------------------------------------------
@@ -126,9 +104,9 @@ begin
       port map (
          clk_i            => clk_i,
          rst_i            => rst_i,
-         seq_valid_i      => seq2prep_valid and not fetch_valid_o,
-         seq_ready_o      => seq2prep_ready,
-         seq_stage_i      => seq2prep_stage,
+         dec_valid_i      => dec2prep_valid and not fetch_valid_o,
+         dec_ready_o      => dec2prep_ready,
+         dec_stage_i      => dec2prep_stage,
          mem_src_valid_i  => mem_src_valid_i,
          mem_src_ready_o  => mem_src_ready_o,
          mem_src_data_i   => mem_src_data_i,

@@ -34,8 +34,8 @@ cpu_main.psl
 ../src/cpu_main/sub/alu_flags.vhd
 ../src/cpu_main/sub/alu.vhd
 ../src/cpu_main/sub/microcode.vhd
+../src/cpu_main/sub/sequencer.vhd
 ../src/cpu_main/decode.vhd
-../src/cpu_main/sequencer.vhd
 ../src/cpu_main/prepare.vhd
 ../src/cpu_main/write.vhd
 ../src/cpu_main/cpu_main.vhd

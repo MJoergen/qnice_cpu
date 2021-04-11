@@ -18,5 +18,5 @@ prep -top sequencer
 [files]
 sequencer.psl
 ../src/cpu_constants.vhd
-../src/cpu_main/sequencer.vhd
+../src/cpu_main/sub/sequencer.vhd
 
