@@ -8,6 +8,7 @@ Table of contents:
 * [Microcoding of instructions](#Microcoding-of-instructions)
 * [External interfaces](#External-interfaces)
 * [Internal interfaces](#Internal-interfaces)
+* [Stages](#Stages)
 * [Bypass](#Bypass)
 
 ## Block diagram
@@ -200,6 +201,11 @@ performed, the PREPARE stage waits for the read operations to be complete.
 The WRITE stage uses the remaining microoperations to control the Memory and
 Register modules.
 
+### Waveforms
+TBD: Show here a waveform of the four stages working with a given sequence of
+instructions, or just a single instruction like `ADD @R0++, @R0++`.  This
+waveform should show the bypass operation needed for updating `R0`.
+
 ## External interfaces
 In the following I'll describe in detail the interfaces to the various
 surrounding blocks.
@@ -377,7 +383,9 @@ Finally, `r14` contains the current value of the Status Register.
 The remaining elements `alu_*` are only used from PREPARE to WRITE. They contain
 all the values needed by the ALU.
 
-## DECODE
+## STAGES
+
+### DECODE
 The main back-bone of the DECODE stage is the micro-code ROM implemented in the
 file [microcode.vhd](sub/microcode.vhd). The entry to this ROM is a four-bit
 signal describing the classification of the current instruction. This
@@ -396,7 +404,7 @@ the [Sequencer](sub/sequencer.vhd) module.
 One additional complexity handled by the DECODE module is the special case of
 jump instructions (`ABRA`, `RBRA`, `ASUB`, and `RSUB`).
 
-## PREPARE
+### PREPARE
 This stage is quite small and mainly serves the function of adding some
 flip-flops in an otherwise very long combinatorial path. In other words, this
 stage almost halves the longest combinatorial delay thus essentially doubling
@@ -404,7 +412,7 @@ the maximum frequency. However, the cost is increased data hazards due to a
 longer pipeline, and therefore additional bypass handling is needed, as well as
 occasional pipeline stalls.
 
-## WRITE
+### WRITE
 This stage contains the ALU and writes result back to the Register or Memory
 module.  Additionally, it handles pre- and post-increment of the registers.
 

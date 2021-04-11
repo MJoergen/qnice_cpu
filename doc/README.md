@@ -17,7 +17,7 @@ The block diagram contains two additional blocks:
 * Registers: Contains all the CPU registers and supports two read ports
   (connected to DECODE) and one write port (connected to WRITE).
 * Memory: Interfaces to the Wishbone memory bus and supports two read ports
-  (connected to PREPAPRE) and one write port (connected to WRITE).
+  (connected to PREPARE) and one write port (connected to WRITE).
 
 The flow through the pipeline is that an instruction will spend one or two
 clock cycles in the FETCH stage (two cycles if it uses an immediate operand),
@@ -29,6 +29,13 @@ instruction and data interface. This main reason for this choice is to simplify
 the implementation. It does also provide a nice side effect of increasing the
 available memory bandwidth, because we can read from from instruction and data
 memory simultaneously, see below section on [Interleaving](#Interleaving).
+
+There is one important detail to note about the Harward architecture and that
+is that it requires dual port memory. This is because we want the system to
+allow loading a program to memory and then executing the program. This requires
+that the same memory can be accessed both as data memory and as instruction
+memory.  Thankfully, most modern FPGAs have built-in dual port memories that
+support this construct natively.
 
 
 ## Back-pressure
@@ -100,6 +107,11 @@ and this sequence of two instructions takes a total of three instructions to
 execute. So the pair of instructions are faster than the sum of each individual
 instruction, because the instruction and data memories are operating
 simultaneously.
+
+## Self-modifying codfe
+TBD: What is possible, what is not possible. How big latency is required? Is it
+enough to issue a branch instruction? Show some examples where it doesn't work
+and where is does work.
 
 
 ## Optimizations
