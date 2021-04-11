@@ -1,4 +1,4 @@
-vunit i_serializer(serializer(synthesis))
+vunit i_sequencer(sequencer(synthesis))
 {
 
    -- set all declarations to run on clk
@@ -14,7 +14,7 @@ vunit i_serializer(serializer(synthesis))
    -- PROPERTIES OF THE OUTPUT INTERFACE
    ---------------------------------------
 
-   f_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o) and stable(m_user_o)};
+   f_stable : assert always {prep_valid_o and not prep_ready_i and not rst_i} |=> {stable(prep_valid_o) and stable(prep_stage_o)};
 --   f_ready : assert always {s_ready_o and not s_valid_i} |=> {stable(s_ready_o)};
 
 
@@ -22,7 +22,7 @@ vunit i_serializer(serializer(synthesis))
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
 
-   assume always {s_valid_i and not s_ready_o} |=> {stable(s_valid_i) and stable(s_data_i) and stable(s_user_i)};
+   assume always {dec_valid_i and not dec_ready_o} |=> {stable(dec_valid_i) and stable(dec_stage_i)};
 
 
    --------------------------------------------
@@ -40,5 +40,5 @@ vunit i_serializer(serializer(synthesis))
    ----------------------------------------------
 
 
-} -- vunit i_serializer(serializer(synthesis))
+} -- vunit i_sequencer(sequencer(synthesis))
 

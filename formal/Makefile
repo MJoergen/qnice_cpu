@@ -9,10 +9,10 @@ DUTS += pipe_concat
 DUTS += dp_ram
 DUTS += icache
 DUTS += memory
-DUTS += serializer
+DUTS += sequencer
 DUTS += registers
 DUTS += fetch
-DUTS += decode_execute
+DUTS += cpu_main
 
 BMC   = $(patsubst %,%_bmc,$(DUTS))
 COVER = $(patsubst %,%_cover,$(DUTS))

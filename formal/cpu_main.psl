@@ -1,4 +1,4 @@
-vunit i_decode_execute(decode_execute(synthesis))
+vunit i_cpu_main(cpu_main(synthesis))
 {
 
    -- set all declarations to run on clk
@@ -134,5 +134,6 @@ vunit i_decode_execute(decode_execute(synthesis))
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
    ----------------------------------------------
 
-} -- vunit i_decode(decode(synthesis))
+} -- vunit i_cpu_main(cpu_main(synthesis))
+
 

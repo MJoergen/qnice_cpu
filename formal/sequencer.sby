@@ -1,0 +1,22 @@
+[tasks]
+cover
+bmc
+
+[options]
+cover: mode cover
+cover: depth 10
+bmc: mode bmc
+bmc: depth 10
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 sequencer.vhd sequencer.psl cpu_constants.vhd -e sequencer
+prep -top sequencer
+
+[files]
+sequencer.psl
+../src/cpu_constants.vhd
+../src/cpu_main/sequencer.vhd
+

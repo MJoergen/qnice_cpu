@@ -1,0 +1,42 @@
+[tasks]
+cover
+bmc
+
+[options]
+cover: mode cover
+cover: depth 10
+bmc: mode bmc
+bmc: depth 10
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 \
+   cpu_main.psl \
+   cpu_constants.vhd \
+   alu_data.vhd \
+   alu_flags.vhd \
+   alu.vhd \
+   microcode.vhd \
+   decode.vhd \
+   sequencer.vhd \
+   prepare.vhd \
+   write.vhd \
+   cpu_main.vhd \
+   cpu_main.psl -e cpu_main
+prep -top cpu_main
+
+[files]
+cpu_main.psl
+../src/cpu_constants.vhd
+../src/cpu_main/sub/alu_data.vhd
+../src/cpu_main/sub/alu_flags.vhd
+../src/cpu_main/sub/alu.vhd
+../src/cpu_main/sub/microcode.vhd
+../src/cpu_main/decode.vhd
+../src/cpu_main/sequencer.vhd
+../src/cpu_main/prepare.vhd
+../src/cpu_main/write.vhd
+../src/cpu_main/cpu_main.vhd
+
