@@ -20,8 +20,165 @@ The three stages DECODE, PREPARE, and WRITE are combined into a single module
 
 ## Microcoding of instructions
 
+The really cool feature of this implementation is the conversion from the
+CISC-like QNICE instructions to more RISC-like micro-operations. This conversion
+is done dynamically, i.e. on-the-fly by the DECODE stage with the help
+of a small ROM containing micro-code for the various instruction types.
+
+The main purpose of this micro-coding is to reduce the complexity of the
+instructions. And the complexity arises not so much from the advanced
+addressing modes, but rather from the fact that each instruction performs up to
+three memory operations. For instance, the instruction `ADD @R0, @R1` performs
+a read from @R0, then a read from @R1, and finally a write to @R1.  It is these
+memory operations that are "serialized" by the micro-coding. In other words,
+each micro-operation performs a most one memory operation (read or write).
+
+So to perform this translation we must essentially classify each instruction
+depending on which (if any) memory operations it performs. This is done by
+examining the addressing mode of the source and destination operand.
+
+Note that this microcoding only concerns with splitting up the memory
+operations. Therefore, any optional pre- or post-increment of the registers has
+not influence on the micro-coding. This once again simplifies since we need
+only to distinguish between pure register addressing mode against any of the
+three memory adressing modes.
+
+With the above we have classified the instructions into four classes:
+* INST register, register : 1 clock cycle  : Write to register.
+* INST register, memory   : 2 clock cycles : Read from destination memory,
+  write to destination memory.
+* INST memory, register   : 2 clock cycles : Read from source memory, write to
+  register.
+* INST memory, memory     : 3 clock cycles : Read from source memory, read
+  from destination memory, write to destination memory.
+Here `INST` is a general instruction like e.g. `ADD`.
+
+I should note, that some instructions don't have two operands. This includes
+the Control instructions and the Jump instructions. These are treated
+separately.
+
+We could stop here, but I've added several optimizations to this scheme.
+
+### First optimization
+First of all, some instructions don't need to read from destination memory.
+This is e.g. the `MOVE` instruction.  Likewise, other instructions don't need
+to write to destination memory. This is e.g. the 'CMP' instruction.  So we have
+additional optimized versions for these instructions:
+* MOVE register, register : 1 clock cycle : Write to register.
+* MOVE register, memory   : 1 clock cycles : Write to destination memory.
+* MOVE memory, register   : 2 clock cycles : Read from source memory, write to
+  register.
+* MOVE memory, memory     : 2 clock cycles : Read from source memory, write to
+  destination memory.
+
+* CMP register, register  : 1 clock cycle : Update Status Register.
+* CMP register, memory    : 2 clock cycles : Read from destination memory, update Status Register.
+* CMP memory, register    : 2 clock cycles : Read from source memory, update Status Register.
+* CMP memory, memory      : 3 clock cycles : Read from source memory, read from
+  destination memory, update Status Register.
+Note that even tough the `CMP` instruction to not need to write to memory, they
+still expand to the same number of micro-operations. This is because we need
+one micro-operation to wait for the result read back from memory.
+
+### Second optimization
+Another optimization is that I treat immediate operands as a special case. An
+immediate operand is encoded as @R15++ in the instruction, but there is no beed
+to perform a read from memory in this case, because the value is already given
+by the FETCH module.
+
+What about instructions with @R15++ in both operands, e.g. `ADD @R15++, @R15++`.
+This FETCH module only provides the first immediate operand. The second immediate operand
+is handled using a regular memory read.
+
+Furthermore, other addressing modes involving the Program Counter, i,e. `@R15`
+and `@--R15` are handled as any other memory operation. Note that `@--R15` will
+decrement the Program Counter, which in turn (as described below) will be
+interpreted as a jump instruction.
+
+### Pre- and post-increment
+Special care must be taken when handling instructions like `ADD @R0++, @R0++`
+since both the source and destination operands refer to the same register, and
+this register is updated in both operands. It is therefore essential that the
+source register is updated before issuing the read for the destination operand.
+
+### Description of micro-operations
+Each micro-operation consists of an array of 12 bits with the following meaning:
+
+* 11: Indicates the last micro-operation for this instruction.
+* 10-8: Not used.
+* 7: Optionally modify source register (`@R++` or `@--R`).
+* 6: Optionally modify destination register (`@R++` or `@--R`).
+* 5: Wait from source operand from memory.
+* 4: Wait from destination operand from memory.
+* 3: Write to destination register.
+* 2: Read from memory to source.
+* 1: Read from memory to destination.
+* 0: Write to destination memory.
+
+### Examples
+
+Here I'll show a detailed description of some example instructions.
+
+We'll start with a simple `MOVE R0, R1`. Since this instruction has no memory operations at all,
+it simplifies to the following:
+|      Micro     |  One  |  Two  | Three |
+|      -----     | ----- | ----- | ----- |
+|`LAST         ` |   X   |       |       |
+|`REG_MOD_SRC  ` |       |       |       |
+|`REG_MOD_DST  ` |       |       |       |
+|`MEM_WAIT_SRC ` |       |       |       |
+|`MEM_WAIT_DST ` |       |       |       |
+|`REG_WRITE    ` |   X   |       |       |
+|`MEM_READ_SRC ` |       |       |       |
+|`MEM_READ_DST ` |       |       |       |
+|`MEM_WRITE    ` |       |       |       |
+
+An instruction like `MOVE @R0, @R1` performs two memory instructions:
+|      Micro     |  One  |  Two  | Three |
+|      -----     | ----- | ----- | ----- |
+|`LAST         ` |       |   X   |       |
+|`REG_MOD_SRC  ` |   X   |       |       |
+|`REG_MOD_DST  ` |       |   X   |       |
+|`MEM_WAIT_SRC ` |       |   X   |       |
+|`MEM_WAIT_DST ` |       |       |       |
+|`REG_WRITE    ` |       |       |       |
+|`MEM_READ_SRC ` |   X   |       |       |
+|`MEM_READ_DST ` |       |       |       |
+|`MEM_WRITE    ` |       |   X   |       |
+
+* The first micro-operation issues a read to source operand and simultaneously
+  (optionally) updates the source register. This latter operation has no effect
+  for this particular instruction.
+* The second micro-operation waits for the source operand to be read from
+  memory, issues a write to destination memory, and optionally updates the
+  destination register
+
+An instruction like `ADD @R0, @R1` performs three memory instructions:
+|      Micro     |  One  |  Two  | Three |
+|      -----     | ----- | ----- | ----- |
+|`LAST         ` |       |       |   X   |
+|`REG_MOD_SRC  ` |   X   |       |       |
+|`REG_MOD_DST  ` |       |       |   X   |
+|`MEM_WAIT_SRC ` |       |       |   X   |
+|`MEM_WAIT_DST ` |       |       |   X   |
+|`REG_WRITE    ` |       |       |       |
+|`MEM_READ_SRC ` |   X   |       |       |
+|`MEM_READ_DST ` |       |   X   |       |
+|`MEM_WRITE    ` |       |       |   X   |
+
+* The first micro-operation again issues a read to source operand and
+  simultaneously (optionally) updates the source register, in case it is needed
+  by the destination operand.
+* The second micro-operations just issues a read to destination operand. Note
+  that here the destination register is not updated, because the same value
+  will be used during the memory write in the next micro-operation.
+* The third and last micro-operation optinally updates the destination
+  register, waits for both memory operands to be ready, and writes the result
+  back to memory.
+
 ## Interfaces
-In the following I'll describe in detail the interfaces to the various surrounding blocks.
+In the following I'll describe in detail the interfaces to the various
+surrounding blocks.
 
 ### From FETCH to DECODE
 ```

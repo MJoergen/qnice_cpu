@@ -24,6 +24,12 @@ clock cycles in the FETCH stage (two cycles if it uses an immediate operand),
 and up to three clock cycles in the DECODE stage. The PREPARE stage waits for
 any memory operands to be read, while the WRITE stage is purely combinatorial.
 
+In the above we see a Harward architecture, where we have a separate
+instruction and data interface. This main reason for this choice is to simplify
+the implementation. It does also provide a nice side effect of increasing the
+available memory bandwidth, because we can read from from instruction and data
+memory simultaneously, see below section on [Interleaving](#Interleaving).
+
 
 ## Back-pressure
 The thick arrows indicate the AXI-like pipeline handshake, consisting of a
