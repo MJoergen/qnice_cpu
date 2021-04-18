@@ -1,0 +1,77 @@
+[*]
+[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
+[*] Sun Apr 18 11:10:55 2021
+[*]
+[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/sequencer_bmc/engine_0/trace.vcd"
+[dumpfile_mtime] "Sun Apr 18 11:07:47 2021"
+[dumpfile_size] 3147
+[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/sequencer.gtkw"
+[timestart] 0
+[size] 1387 890
+[pos] -2205 -210
+*-2.746155 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] sequencer.
+[sst_width] 249
+[signals_width] 219
+[sst_expanded] 1
+[sst_vpaned_height] 244
+@28
+sequencer.clk_i
+sequencer.rst_i
+[color] 2
+sequencer.dec_valid_i
+[color] 7
+sequencer.dec_ready_o
+@c00200
+-dec_stage_i
+@22
+sequencer.dec_stage_i.addr[15:0]
+sequencer.dec_stage_i.dst_addr[3:0]
+@28
+sequencer.dec_stage_i.dst_imm
+sequencer.dec_stage_i.dst_mode[1:0]
+@22
+sequencer.dec_stage_i.dst_val[15:0]
+sequencer.dec_stage_i.immediate[15:0]
+sequencer.dec_stage_i.inst[15:0]
+sequencer.dec_stage_i.microcodes[35:0]
+sequencer.dec_stage_i.r14[15:0]
+sequencer.dec_stage_i.res_reg[3:0]
+sequencer.dec_stage_i.src_addr[3:0]
+@28
+sequencer.dec_stage_i.src_imm
+sequencer.dec_stage_i.src_mode[1:0]
+@22
+sequencer.dec_stage_i.src_val[15:0]
+@1401200
+-dec_stage_i
+@28
+[color] 2
+sequencer.prep_valid_o
+[color] 7
+sequencer.prep_ready_i
+@c00201
+-prep_stage_o
+@22
+sequencer.prep_stage_o.addr[15:0]
+sequencer.prep_stage_o.dst_addr[3:0]
+@28
+sequencer.prep_stage_o.dst_imm
+sequencer.prep_stage_o.dst_mode[1:0]
+@22
+sequencer.prep_stage_o.dst_val[15:0]
+sequencer.prep_stage_o.immediate[15:0]
+sequencer.prep_stage_o.inst[15:0]
+sequencer.prep_stage_o.microcodes[35:0]
+sequencer.prep_stage_o.r14[15:0]
+sequencer.prep_stage_o.res_reg[3:0]
+sequencer.prep_stage_o.src_addr[3:0]
+@28
+sequencer.prep_stage_o.src_imm
+sequencer.prep_stage_o.src_mode[1:0]
+@22
+sequencer.prep_stage_o.src_val[15:0]
+@1401201
+-prep_stage_o
+[pattern_trace] 1
+[pattern_trace] 0
