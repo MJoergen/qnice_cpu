@@ -99,6 +99,10 @@ begin
             wr_stage_o.alu_src_val <= alu_src_val;
             wr_stage_o.alu_dst_val <= alu_dst_val;
          end if;
+
+         if rst_i = '1' then
+            wr_valid_o <= '0';
+         end if;
       end if;
    end process p_output;
 

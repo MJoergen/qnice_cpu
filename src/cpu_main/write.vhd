@@ -46,7 +46,7 @@ architecture synthesis of write is
 
 begin
 
-   prep_ready_o <= '1';
+   prep_ready_o <= mem_req_ready_i when or(mem_req_op_o) = '1' else '1';
 
 
    ------------------------------------------------------------
