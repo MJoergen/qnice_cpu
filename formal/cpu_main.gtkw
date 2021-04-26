@@ -1,24 +1,24 @@
 [*]
-[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Sun Apr 18 09:26:29 2021
+[*] GTKWave Analyzer v3.3.86 (w)1999-2017 BSI
+[*] Mon Apr 26 13:55:15 2021
 [*]
-[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/cpu_main_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Sun Apr 18 09:13:46 2021"
-[dumpfile_size] 32107
-[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/cpu_main.gtkw"
+[dumpfile] "/home/mfj/git/MJoergen/qnice_cpu/formal/cpu_main_bmc/engine_0/trace.vcd"
+[dumpfile_mtime] "Mon Apr 26 13:47:02 2021"
+[dumpfile_size] 31690
+[savefile] "/home/mfj/git/MJoergen/qnice_cpu/formal/cpu_main.gtkw"
 [timestart] 0
-[size] 1920 1132
-[pos] -1921 -12
-*-3.218250 26 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[size] 1853 1145
+[pos] -1 -1
+*-3.218250 35 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] cpu_main.
 [treeopen] cpu_main.i_decode.
 [treeopen] cpu_main.i_prepare.
 [treeopen] cpu_main.i_write.
-[sst_width] 341
+[sst_width] 264
 [signals_width] 343
 [sst_expanded] 1
 [sst_vpaned_height] 328
-@c00200
+@800200
 -cpu_main
 @28
 cpu_main.clk_i
@@ -79,7 +79,7 @@ cpu_main.fetch_valid_o
 cpu_main.fetch_addr_o[15:0]
 @28
 cpu_main.inst_done_o
-@1401200
+@1000200
 -cpu_main
 @22
 cpu_main.i_cpu_main.c_src_reg[3:0]
@@ -89,37 +89,147 @@ cpu_main.i_cpu_main.c_dst_val[15:0]
 @28
 cpu_main.i_cpu_main.f_move_reg_reg
 cpu_main.i_cpu_main.f_reg_read
-cpu_main.i_cpu_main.f_reg_write
+cpu_main.i_cpu_main.f_mem_src_oustanding
+cpu_main.i_cpu_main.f_mem_dst_oustanding
 @c00200
--dec2prep
+-DECODE
+@28
+cpu_main.i_decode.clk_i
+cpu_main.i_decode.rst_i
+[color] 2
+cpu_main.i_decode.fetch_valid_i
+[color] 7
+cpu_main.i_decode.fetch_ready_o
+cpu_main.i_decode.fetch_double_i
+cpu_main.i_decode.fetch_double_o
+@22
+cpu_main.i_decode.fetch_addr_i[15:0]
+cpu_main.i_decode.fetch_data_i[31:0]
+@28
+cpu_main.i_decode.reg_rd_en_o
+@22
+cpu_main.i_decode.reg_src_addr_o[3:0]
+cpu_main.i_decode.reg_dst_addr_o[3:0]
+cpu_main.i_decode.reg_src_val_i[15:0]
+cpu_main.i_decode.reg_dst_val_i[15:0]
+cpu_main.i_decode.reg_r14_i[15:0]
 @28
 [color] 2
-cpu_main.dec2prep_valid
+cpu_main.i_decode.prep_valid_o
 [color] 7
-cpu_main.dec2prep_ready
+cpu_main.i_decode.prep_ready_i
+@c00200
+-prep_stage_o
 @22
 cpu_main.i_decode.prep_stage_o.addr[15:0]
-cpu_main.i_decode.prep_stage_o.inst[15:0]
-cpu_main.i_decode.prep_stage_o.immediate[15:0]
-cpu_main.i_decode.prep_stage_o.microcodes[35:0]
-cpu_main.i_decode.prep_stage_o.src_addr[3:0]
-@28
-cpu_main.i_decode.prep_stage_o.src_imm
-cpu_main.i_decode.prep_stage_o.src_mode[1:0]
-@22
-cpu_main.i_decode.prep_stage_o.src_val[15:0]
 cpu_main.i_decode.prep_stage_o.dst_addr[3:0]
 @28
 cpu_main.i_decode.prep_stage_o.dst_imm
 cpu_main.i_decode.prep_stage_o.dst_mode[1:0]
 @22
 cpu_main.i_decode.prep_stage_o.dst_val[15:0]
+cpu_main.i_decode.prep_stage_o.immediate[15:0]
+cpu_main.i_decode.prep_stage_o.inst[15:0]
+cpu_main.i_decode.prep_stage_o.microcodes[35:0]
 cpu_main.i_decode.prep_stage_o.r14[15:0]
 cpu_main.i_decode.prep_stage_o.res_reg[3:0]
+cpu_main.i_decode.prep_stage_o.src_addr[3:0]
+@28
+cpu_main.i_decode.prep_stage_o.src_imm
+cpu_main.i_decode.prep_stage_o.src_mode[1:0]
+@22
+cpu_main.i_decode.prep_stage_o.src_val[15:0]
 @1401200
--dec2prep
+-prep_stage_o
+-DECODE
+@c00201
+-PREPARE
+@28
+cpu_main.i_prepare.clk_i
+cpu_main.i_prepare.rst_i
+[color] 2
+cpu_main.i_prepare.dec_valid_i
+[color] 7
+cpu_main.i_prepare.dec_ready_o
+@800200
+-dec_stage_i
+@22
+cpu_main.i_prepare.dec_stage_i.addr[15:0]
+cpu_main.i_prepare.dec_stage_i.alu_ctrl[5:0]
+cpu_main.i_prepare.dec_stage_i.alu_dst_val[15:0]
+cpu_main.i_prepare.dec_stage_i.alu_flags[15:0]
+cpu_main.i_prepare.dec_stage_i.alu_oper[3:0]
+cpu_main.i_prepare.dec_stage_i.alu_src_val[15:0]
+cpu_main.i_prepare.dec_stage_i.dst_addr[3:0]
+@28
+cpu_main.i_prepare.dec_stage_i.dst_imm
+cpu_main.i_prepare.dec_stage_i.dst_mode[1:0]
+@22
+cpu_main.i_prepare.dec_stage_i.dst_val[15:0]
+cpu_main.i_prepare.dec_stage_i.immediate[15:0]
+cpu_main.i_prepare.dec_stage_i.inst[15:0]
+cpu_main.i_prepare.dec_stage_i.microcodes[35:0]
+cpu_main.i_prepare.dec_stage_i.r14[15:0]
+cpu_main.i_prepare.dec_stage_i.res_reg[3:0]
+cpu_main.i_prepare.dec_stage_i.src_addr[3:0]
+@28
+cpu_main.i_prepare.dec_stage_i.src_imm
+cpu_main.i_prepare.dec_stage_i.src_mode[1:0]
+@22
+cpu_main.i_prepare.dec_stage_i.src_val[15:0]
+@1000200
+-dec_stage_i
+@28
+[color] 2
+cpu_main.i_prepare.mem_src_valid_i
+[color] 7
+cpu_main.i_prepare.mem_src_ready_o
+@22
+cpu_main.i_prepare.mem_src_data_i[15:0]
+@28
+[color] 2
+cpu_main.i_prepare.mem_dst_valid_i
+[color] 7
+cpu_main.i_prepare.mem_dst_ready_o
+@22
+cpu_main.i_prepare.mem_dst_data_i[15:0]
+@28
+[color] 2
+cpu_main.i_prepare.wr_valid_o
+[color] 7
+cpu_main.i_prepare.wr_ready_i
 @c00200
--write
+-wr_stage_o
+@22
+cpu_main.i_prepare.wr_stage_o.addr[15:0]
+cpu_main.i_prepare.wr_stage_o.alu_ctrl[5:0]
+cpu_main.i_prepare.wr_stage_o.alu_dst_val[15:0]
+cpu_main.i_prepare.wr_stage_o.alu_flags[15:0]
+cpu_main.i_prepare.wr_stage_o.alu_oper[3:0]
+cpu_main.i_prepare.wr_stage_o.alu_src_val[15:0]
+cpu_main.i_prepare.wr_stage_o.dst_addr[3:0]
+@28
+cpu_main.i_prepare.wr_stage_o.dst_imm
+cpu_main.i_prepare.wr_stage_o.dst_mode[1:0]
+@22
+cpu_main.i_prepare.wr_stage_o.dst_val[15:0]
+cpu_main.i_prepare.wr_stage_o.immediate[15:0]
+cpu_main.i_prepare.wr_stage_o.inst[15:0]
+cpu_main.i_prepare.wr_stage_o.microcodes[35:0]
+cpu_main.i_prepare.wr_stage_o.r14[15:0]
+cpu_main.i_prepare.wr_stage_o.res_reg[3:0]
+cpu_main.i_prepare.wr_stage_o.src_addr[3:0]
+@28
+cpu_main.i_prepare.wr_stage_o.src_imm
+cpu_main.i_prepare.wr_stage_o.src_mode[1:0]
+@22
+cpu_main.i_prepare.wr_stage_o.src_val[15:0]
+@1401200
+-wr_stage_o
+@1401201
+-PREPARE
+@800200
+-WRITE
 @28
 cpu_main.i_write.clk_i
 cpu_main.i_write.rst_i
@@ -164,59 +274,16 @@ cpu_main.i_write.mem_req_op_o[2:0]
 @22
 cpu_main.i_write.mem_req_addr_o[15:0]
 cpu_main.i_write.mem_req_data_o[15:0]
-@1401200
--write
-@800200
--DECODE
 @28
-cpu_main.i_decode.clk_i
-cpu_main.i_decode.rst_i
-[color] 2
-cpu_main.i_decode.fetch_valid_i
-[color] 7
-cpu_main.i_decode.fetch_ready_o
-cpu_main.i_decode.fetch_double_i
-cpu_main.i_decode.fetch_double_o
+cpu_main.i_write.reg_r14_we_o
 @22
-cpu_main.i_decode.fetch_addr_i[15:0]
-cpu_main.i_decode.fetch_data_i[31:0]
+cpu_main.i_write.reg_r14_o[15:0]
 @28
-cpu_main.i_decode.reg_rd_en_o
+cpu_main.i_write.reg_we_o
 @22
-cpu_main.i_decode.reg_src_addr_o[3:0]
-cpu_main.i_decode.reg_dst_addr_o[3:0]
-cpu_main.i_decode.reg_src_val_i[15:0]
-cpu_main.i_decode.reg_dst_val_i[15:0]
-cpu_main.i_decode.reg_r14_i[15:0]
-@28
-[color] 2
-cpu_main.i_decode.prep_valid_o
-[color] 7
-cpu_main.i_decode.prep_ready_i
-@c00201
--prep_stage_o
-@22
-cpu_main.i_decode.prep_stage_o.addr[15:0]
-cpu_main.i_decode.prep_stage_o.dst_addr[3:0]
-@28
-cpu_main.i_decode.prep_stage_o.dst_imm
-cpu_main.i_decode.prep_stage_o.dst_mode[1:0]
-@22
-cpu_main.i_decode.prep_stage_o.dst_val[15:0]
-cpu_main.i_decode.prep_stage_o.immediate[15:0]
-cpu_main.i_decode.prep_stage_o.inst[15:0]
-cpu_main.i_decode.prep_stage_o.microcodes[35:0]
-cpu_main.i_decode.prep_stage_o.r14[15:0]
-cpu_main.i_decode.prep_stage_o.res_reg[3:0]
-cpu_main.i_decode.prep_stage_o.src_addr[3:0]
-@28
-cpu_main.i_decode.prep_stage_o.src_imm
-cpu_main.i_decode.prep_stage_o.src_mode[1:0]
-@22
-cpu_main.i_decode.prep_stage_o.src_val[15:0]
-@1401201
--prep_stage_o
+cpu_main.i_write.reg_addr_o[3:0]
+cpu_main.i_write.reg_val_o[15:0]
 @1000200
--DECODE
+-WRITE
 [pattern_trace] 1
 [pattern_trace] 0

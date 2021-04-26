@@ -9,6 +9,18 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- INTERNAL ASSERTIONS
    --------------------------------------------
 
+   f_dec2prep_valid_stable : assert always {dec2prep_valid and not dec2prep_ready and not rst_i} |=>
+      {stable(dec2prep_valid) and stable(dec2prep_stage)};
+
+--   f_dec2prep_ready_stable : assert always {dec2prep_ready and not dec2prep_valid and not rst_i} |=>
+--      {stable(dec2prep_ready)};
+
+   f_prep2wr_valid_stable : assert always {prep2wr_valid and not prep2wr_ready and not rst_i} |=>
+      {stable(prep2wr_valid) and stable(prep2wr_stage)};
+
+--   f_prep2wr_ready_stable : assert always {prep2wr_ready and not prep2wr_valid and not rst_i} |=>
+--      {stable(prep2wr_ready)};
+
 
    ---------------------------------------
    -- PROPERTIES OF THE OUTPUT INTERFACE
@@ -18,8 +30,8 @@ vunit i_cpu_main(cpu_main(synthesis))
    f_fetch_double : assert always {fetch_double_o and not fetch_double_i} |-> {not fetch_ready_o};
 
    -- Memory request data must stay stable.
-   f_mem_req_stable : assert always {mem_req_valid_o and not mem_req_ready_i and not rst_i} |=>
-      {stable(mem_req_op_o) and stable(mem_req_addr_o) and stable(mem_req_data_o)};
+--   f_mem_req_stable : assert always {mem_req_valid_o and not mem_req_ready_i and not rst_i} |=>
+--      {stable(mem_req_op_o) and stable(mem_req_addr_o) and stable(mem_req_data_o)};
 
    -- Memory response ready signal must stay stable.
    f_mem_src_ready_stable : assert always {mem_src_ready_o and not mem_src_valid_i and not rst_i} |=> {stable(mem_src_ready_o)};
@@ -55,6 +67,8 @@ vunit i_cpu_main(cpu_main(synthesis))
                               c_src_reg /= 15} |->
 
                              {f_reg_read = '1';
+
+                              true[*];
 
                               mem_req_valid_o = '0' and
                               reg_r14_we_o = '1' and
@@ -108,6 +122,10 @@ vunit i_cpu_main(cpu_main(synthesis))
          if not f_mem_dst_request and f_mem_dst_response then
             f_mem_dst_oustanding <= '0';
          end if;
+         if rst_i = '1' then
+            f_mem_src_oustanding <= '0';
+            f_mem_dst_oustanding <= '0';
+         end if;
       end if;
    end process p_memory;
 
@@ -133,6 +151,8 @@ vunit i_cpu_main(cpu_main(synthesis))
    ----------------------------------------------
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
    ----------------------------------------------
+
+--   assume always {mem_req_ready_i = '1'};
 
 } -- vunit i_cpu_main(cpu_main(synthesis))
 
