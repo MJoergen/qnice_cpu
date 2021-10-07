@@ -206,18 +206,22 @@ begin
    end process p_rden_keep;
 
 
-   r14_o <= r14;
+   r14_o <= wr_val_i or X"0001" when wr_en_i = '1' and wr_addr_i = C_REG_SR else
+            wr_r14_i or X"0001" when wr_r14_en_i = '1' else
+            r14;
 
    -- TBD: Possible timing optimization: Make "wr_en_d = '1' and wr_addr_d =
    -- src_reg_d" a single register.
    -- Potential improvement: Small
 
-   src_val_o <= wr_val_d         when wr_en_d = '1' and wr_addr_d = src_reg_d else
+   src_val_o <= wr_val_i         when wr_en_i = '1' and wr_addr_i = src_reg_d else
+                wr_val_d         when wr_en_d = '1' and wr_addr_d = src_reg_d else
                 src_val_d        when rd_en_d = '0' else
                 r14              when src_reg_d = C_REG_SR else
                 upper_rd_src_val when src_reg_d >= 8 else
                 lower_rd_src_val;
-   dst_val_o <= wr_val_d         when wr_en_d = '1' and wr_addr_d = dst_reg_d else
+   dst_val_o <= wr_val_i         when wr_en_i = '1' and wr_addr_i = dst_reg_d else
+                wr_val_d         when wr_en_d = '1' and wr_addr_d = dst_reg_d else
                 dst_val_d        when rd_en_d = '0' else
                 r14              when dst_reg_d = C_REG_SR else
                 upper_rd_dst_val when dst_reg_d >= 8 else

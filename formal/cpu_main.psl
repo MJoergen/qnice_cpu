@@ -9,13 +9,13 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- INTERNAL ASSERTIONS
    --------------------------------------------
 
-   f_dec2prep_valid_stable : assert always {dec2prep_valid and not dec2prep_ready and not rst_i} |=>
+   f_dec2prep_valid_stable : assert always {dec2prep_valid and not dec2prep_ready and not rst_i and not fetch_valid_o} |=>
       {stable(dec2prep_valid) and stable(dec2prep_stage)};
 
 --   f_dec2prep_ready_stable : assert always {dec2prep_ready and not dec2prep_valid and not rst_i} |=>
 --      {stable(dec2prep_ready)};
 
-   f_prep2wr_valid_stable : assert always {prep2wr_valid and not prep2wr_ready and not rst_i} |=>
+   f_prep2wr_valid_stable : assert always {prep2wr_valid and not prep2wr_ready and not rst_i and not fetch_valid_o} |=>
       {stable(prep2wr_valid) and stable(prep2wr_stage)};
 
 --   f_prep2wr_ready_stable : assert always {prep2wr_ready and not prep2wr_valid and not rst_i} |=>
@@ -34,8 +34,10 @@ vunit i_cpu_main(cpu_main(synthesis))
 --      {stable(mem_req_op_o) and stable(mem_req_addr_o) and stable(mem_req_data_o)};
 
    -- Memory response ready signal must stay stable.
-   f_mem_src_ready_stable : assert always {mem_src_ready_o and not mem_src_valid_i and not rst_i} |=> {stable(mem_src_ready_o)};
-   f_mem_dst_ready_stable : assert always {mem_dst_ready_o and not mem_dst_valid_i and not rst_i} |=> {stable(mem_dst_ready_o)};
+   f_mem_src_ready_stable : assert always {mem_src_ready_o and not mem_src_valid_i and not rst_i and not fetch_valid_o} |=>
+      {stable(mem_src_ready_o)};
+   f_mem_dst_ready_stable : assert always {mem_dst_ready_o and not mem_dst_valid_i and not rst_i and not fetch_valid_o} |=>
+      {stable(mem_dst_ready_o)};
 
    f_r14_bit0 : assert always {reg_r14_o(0) = '1'};
 

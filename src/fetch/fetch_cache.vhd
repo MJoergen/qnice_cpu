@@ -75,7 +75,7 @@ begin
    i_axi_pause : entity work.axi_pause
       generic map (
          G_TDATA_SIZE => 32,
-         G_PAUSE_SIZE => 0
+         G_PAUSE_SIZE => -8
       )
       port map (
          clk_i      => clk_i,

@@ -44,9 +44,31 @@ architecture synthesis of write is
    signal mem_data    : std_logic_vector(15 downto 0);
    signal mem_valid   : std_logic;
 
+   signal reg_r14_we_d : std_logic;
+   signal reg_r14_d    : std_logic_vector(15 downto 0);
+   signal reg_we_d     : std_logic;
+   signal reg_addr_d   : std_logic_vector(3 downto 0);
+   signal reg_val_d    : std_logic_vector(15 downto 0);
+   signal r14          : std_logic_vector(15 downto 0);
+
 begin
 
    prep_ready_o <= mem_req_ready_i when or(mem_req_op_o) = '1' else '1';
+
+   p_bypass : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         reg_r14_we_d <= reg_r14_we_o;
+         reg_r14_d    <= reg_r14_o;
+         reg_we_d     <= reg_we_o;
+         reg_addr_d   <= reg_addr_o;
+         reg_val_d    <= reg_val_o;
+      end if;
+   end process p_bypass;
+
+   r14 <= reg_val_d when reg_we_d = '1' and reg_addr_d = C_REG_SR else
+          reg_r14_d when reg_r14_we_d = '1' else
+          prep_stage_i.r14;
 
 
    ------------------------------------------------------------
@@ -83,7 +105,7 @@ begin
    -- Update register (combinatorial)
    ------------------------------------------------------------
 
-   update_reg <= prep_stage_i.r14(to_integer(prep_stage_i.inst(R_JMP_COND))) xor prep_stage_i.inst(R_JMP_NEG)
+   update_reg <= r14(to_integer(prep_stage_i.inst(R_JMP_COND))) xor prep_stage_i.inst(R_JMP_NEG)
                  when prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP
               else '1';
 

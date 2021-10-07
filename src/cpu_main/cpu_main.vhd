@@ -77,7 +77,7 @@ begin
    i_decode : entity work.decode
       port map (
          clk_i          => clk_i,
-         rst_i          => rst_i,
+         rst_i          => rst_i or fetch_valid_o,
          fetch_valid_i  => fetch_valid_i,
          fetch_ready_o  => fetch_ready_o,
          fetch_double_i => fetch_double_i,
@@ -103,8 +103,8 @@ begin
    i_prepare : entity work.prepare
       port map (
          clk_i            => clk_i,
-         rst_i            => rst_i,
-         dec_valid_i      => dec2prep_valid and not fetch_valid_o,
+         rst_i            => rst_i or fetch_valid_o,
+         dec_valid_i      => dec2prep_valid,
          dec_ready_o      => dec2prep_ready,
          dec_stage_i      => dec2prep_stage,
          mem_src_valid_i  => mem_src_valid_i,
