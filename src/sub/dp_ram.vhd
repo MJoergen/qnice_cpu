@@ -58,9 +58,7 @@ begin
       p_read_falling : process (clk_i)
       begin
          if falling_edge(clk_i) then
-            if rd_en_i = '1' then
-               rd_data <= dp_ram_r(to_integer(rd_addr_i));
-            end if;
+            rd_data <= dp_ram_r(to_integer(rd_addr_i));
          end if;
       end process p_read_falling;
 

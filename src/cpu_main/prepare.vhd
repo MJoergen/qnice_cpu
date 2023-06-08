@@ -89,9 +89,9 @@ begin
    alu_oper    <= seq_stage.inst(R_OPCODE);
    alu_ctrl    <= seq_stage.inst(R_CTRL_CMD);
    alu_flags   <= seq_stage.r14;
-   alu_src_val <= seq_stage.immediate when seq_stage.src_imm else
-                  mem_src_data_i when seq_stage.microcodes(C_MEM_WAIT_SRC) = '1' else
-                  seq_stage.addr+1 when seq_stage.src_addr = C_REG_PC else
+   alu_src_val <= seq_stage.immediate when seq_stage.src_imm                          else
+                  mem_src_data_i      when seq_stage.microcodes(C_MEM_WAIT_SRC) = '1' else
+                  seq_stage.addr+1    when seq_stage.src_addr = C_REG_PC              else
                   seq_stage.src_val;
    alu_dst_val <= seq_stage.immediate when seq_stage.dst_imm else
                   mem_dst_data_i when seq_stage.microcodes(C_MEM_WAIT_DST) = '1' else
