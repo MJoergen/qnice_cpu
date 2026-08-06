@@ -1,118 +1,348 @@
 vunit i_icache(icache(synthesis))
 {
 
+   -----------------------------------------------------------------
+   -- SHADOW STATE
+   -----------------------------------------------------------------
+   -- All declarations are grouped here, matching the convention used in
+   -- fetch.psl.
+   --
+   -- f_count is the buffer occupancy recomputed from the PORT handshakes
+   -- alone, independently of the RTL's own "count".  Cross-checking the two
+   -- (f_count_match below) is the central correctness property of this file.
+   --
+   -- The range deliberately extends beyond 0..2 in BOTH directions.  Declaring
+   -- it "range 0 to 2" would make an overflow or underflow an implicit
+   -- assumption -- the offending state is simply excluded from the reachable
+   -- state space -- rather than a reported failure, and f_range below would be
+   -- vacuously true.  With headroom, f_range can actually fail.
+   signal f_count : integer range -2 to 3 := 0;
+
+   -- Shadow copy of the most recent address accepted on the input port, used
+   -- to express the "consecutive addresses" input contract.
+   signal f_s_addr_valid : std_logic                                      := '0';
+   signal f_s_addr       : std_logic_vector(G_ADDR_SIZE - 1 downto 0)     := (others => '0');
+
    -- set all declarations to run on clk
    default clock is rising_edge(clk_i);
+
+
+   --------------------------------------------
+   -- SHADOW STATE MAINTENANCE
+   --------------------------------------------
+
+   -- Track buffer occupancy from the port handshakes.  Written as a single
+   -- signed delta rather than four separate conditional adjustments, so that
+   -- the mutually exclusive cases cannot accidentally overlap.
+   --
+   -- Note that s_ready_o is gated by rst_i in the RTL, so no input handshake
+   -- can complete during a flush cycle and the input term needs no extra
+   -- reset qualification.
+   p_count : process (clk_i)
+      variable delta_v : integer range -2 to 1;
+   begin
+      if rising_edge(clk_i) then
+         delta_v := 0;
+
+         -- One word flowing in.
+         if s_valid_i = '1' and s_ready_o = '1' then
+            delta_v := delta_v + 1;
+         end if;
+
+         -- One or two words flowing out.
+         if m_valid_o = '1' and m_ready_i = '1' then
+            if m_double_o = '1' and m_double_i = '1' then
+               delta_v := delta_v - 2;
+            else
+               delta_v := delta_v - 1;
+            end if;
+         end if;
+
+         f_count <= f_count + delta_v;
+
+         -- rst_i is both the global reset and the pipeline flush; either way
+         -- the buffer is emptied.
+         if rst_i = '1' then
+            f_count <= 0;
+         end if;
+      end if;
+   end process p_count;
+
+   -- Track the last address accepted on the input port.  Cleared on flush,
+   -- because the first address of a redirected stream bears no relation to the
+   -- last address of the abandoned one.
+   p_s_addr : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if s_valid_i = '1' and s_ready_o = '1' then
+            f_s_addr_valid <= '1';
+            f_s_addr       <= s_addr_i;
+         end if;
+
+         if rst_i = '1' then
+            f_s_addr_valid <= '0';
+         end if;
+      end if;
+   end process p_s_addr;
 
 
    --------------------------------------------
    -- INTERNAL ASSERTIONS
    --------------------------------------------
 
+   -- The RTL's combinational occupancy must agree with the port-derived
+   -- shadow count.
+   --
+   -- Qualified by rst_i = '0' because m_valid_o is combinationally gated by
+   -- rst_i, so during a flush cycle "count" reads 0 while f_count still holds
+   -- the pre-flush occupancy until the next clock edge.
+   f_count_match : assert always {rst_i = '0'} |-> {count = f_count};
+
+   -- Occupancy must stay within the two available slots.  See the note on the
+   -- declared range of f_count above for why this is not vacuous.
+   f_range : assert always {f_count >= 0 and f_count <= 2};
+
+   -- The two buffered words must be consecutive in address.  This is what
+   -- makes the "slot 1 holds the immediate operand belonging to slot 0"
+   -- interpretation sound, and it follows from the input contract (c).
+   f_addr_consecutive : assert always {f_count = 2 and rst_i = '0'}
+                                  |-> {m_addr(2 * G_ADDR_SIZE - 1 downto G_ADDR_SIZE) = m_addr_o + 1};
+
 
    ---------------------------------------
    -- PROPERTIES OF THE OUTPUT INTERFACE
    ---------------------------------------
 
+   -- When two words are offered and not consumed, nothing can change: the
+   -- buffer is full, so s_ready_o is low and no new word can arrive.
    f_stable_double : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '1'}
-                               |=> {stable(m_valid_o) and stable(m_double_o) and stable(m_addr_o) and stable(m_data_o)} abort rst_i;
+                               |=> {stable(m_valid_o) and stable(m_double_o) and
+                                    stable(m_addr_o) and stable(m_data_o)} abort rst_i;
 
+   -- When one word is offered and not consumed, the offered word must not
+   -- change, but m_double_o and the upper half of m_data_o legitimately may,
+   -- because a second word can arrive into slot 1 in the meantime.
    f_stable_single : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '0'}
-                               |=> {stable(m_valid_o) and stable(m_addr_o) and stable(m_data_o(7 downto 0))} abort rst_i;
+                               |=> {stable(m_valid_o) and stable(m_addr_o) and
+                                    stable(m_data_o(G_DATA_SIZE - 1 downto 0))} abort rst_i;
 
-   f_reset_sync : assert always {rst_i = '1'}
-                            |=> {m_valid_o = '0' and s_ready_o = '1'};
-
+   -- The flush must be visible to DECODE in the very cycle it is applied,
+   -- otherwise a stale instruction from the abandoned stream is delivered.
+   -- This is the property that justifies the combinational rst_i gating on
+   -- m_valid_o, and it is the single most important assertion in this file
+   -- given that rst_i doubles as the branch flush.
    f_reset_comb : assert always {rst_i = '1'}
-                            |-> {m_valid_o = '0'};
+                            |-> {m_valid_o = '0' and m_double_o = '0' and s_ready_o = '0'};
+
+   -- ...and the buffer must actually be empty afterwards, not merely masked.
+   f_reset_sync : assert always {rst_i = '1'}
+                            |=> {m_valid_o = '0' and m_double_o = '0' and f_count = 0};
+
+   -- m_double_o may never be asserted without m_valid_o, since DECODE is
+   -- permitted to sample it combinationally.
+   f_double_needs_valid : assert always {m_valid_o = '0'} |-> {m_double_o = '0'};
 
 
-   signal f_count : integer range 0 to 2 := 0;
+   ---------------------------------------
+   -- OCCUPANCY-TO-OUTPUT CORRESPONDENCE
+   ---------------------------------------
 
-   assert count = f_count;
+   f_zero : assert always {f_count = 0 and rst_i = '0'}
+                      |-> {s_ready_o = '1' and m_valid_o = '0'};
 
-   -- Keep track of amount of data flowing into and out of the FIFO
-   p_count : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         -- Data flowing in, but not out.
-         if s_valid_i and s_ready_o and not (m_valid_o and m_ready_i) then
-            f_count <= f_count + 1;
-         end if;
+   f_one  : assert always {f_count = 1 and rst_i = '0'}
+                      |-> {s_ready_o = '1' and m_valid_o = '1' and m_double_o = '0'};
 
-         -- Data flowing in, and two out.
-         if s_valid_i and s_ready_o and (m_valid_o and m_ready_i and m_double_o and m_double_i) then
-            f_count <= f_count - 1;
-         end if;
+   f_two  : assert always {f_count = 2 and rst_i = '0'}
+                      |-> {s_ready_o = m_ready_i and m_valid_o = '1' and m_double_o = '1'};
 
-         -- Two data flowing out, but not in.
-         if m_valid_o and m_ready_i and m_double_o and m_double_i and not (s_valid_i and s_ready_o) then
-            f_count <= f_count - 2;
-         end if;
 
-         -- One data flowing out, but not in.
-         if m_valid_o and m_ready_i and not (m_double_o and m_double_i) and not (s_valid_i and s_ready_o) then
-            f_count <= f_count - 1;
-         end if;
-
-         if rst_i then
-            f_count <= 0;
-         end if;
-      end if;
-   end process p_count;
-
-   f_zero : assert always {f_count = 0} |-> {s_ready_o = '1' and m_valid_o = '0'} abort rst_i;
-   f_one  : assert always {f_count = 1} |-> {s_ready_o = '1' and m_valid_o = '1' and m_double_o = '0'} abort rst_i;
-   f_two  : assert always {f_count = 2} |-> {s_ready_o = m_ready_i and m_valid_o = '1' and m_double_o = '1'} abort rst_i;
-   f_three : assert always {f_count <= 2};
-
+   ---------------------------------------
+   -- DATA AND ADDRESS MOVEMENT
+   ---------------------------------------
+   -- One property per reachable (occupancy, input, output) combination,
+   -- checking both the resulting occupancy and the exact placement of each
+   -- word.  Together these constitute a full inductive data-integrity proof,
+   -- so no free-constant (anyconst) scoreboard is needed here.
 
    f_empty : assert always {f_count = 0 and s_valid_i = '0' and rst_i = '0'}
                        |=> {f_count = 0} abort rst_i;
 
    f_empty_in : assert always {f_count = 0 and s_valid_i = '1' and rst_i = '0'}
-                          |=> {f_count = 1 and m_data_o(7 downto 0) = prev(s_data_i)} abort rst_i;
+                          |=> {f_count = 1 and
+                               m_data_o(G_DATA_SIZE - 1 downto 0) = prev(s_data_i) and
+                               m_addr_o = prev(s_addr_i)} abort rst_i;
 
    f_single_in : assert always {f_count = 1 and s_valid_i = '1' and m_ready_i = '0' and rst_i = '0'}
-                           |=> {f_count = 2 and m_data_o(15 downto 8) = prev(s_data_i)} abort rst_i;
+                           |=> {f_count = 2 and
+                                m_data_o(2 * G_DATA_SIZE - 1 downto G_DATA_SIZE) = prev(s_data_i) and
+                                m_addr(2 * G_ADDR_SIZE - 1 downto G_ADDR_SIZE) = prev(s_addr_i)} abort rst_i;
+
+   f_single_out : assert always {f_count = 1 and s_valid_i = '0' and m_ready_i = '1' and rst_i = '0'}
+                            |=> {f_count = 0} abort rst_i;
 
    f_single_in_out : assert always {f_count = 1 and s_valid_i = '1' and m_ready_i = '1' and rst_i = '0'}
-                               |=> {f_count = 1 and m_data_o(7 downto 0) = prev(s_data_i)} abort rst_i;
+                               |=> {f_count = 1 and
+                                    m_data_o(G_DATA_SIZE - 1 downto 0) = prev(s_data_i) and
+                                    m_addr_o = prev(s_addr_i)} abort rst_i;
 
-   f_double_single_out : assert always {f_count = 2 and s_valid_i = '0' and m_ready_i = '1' and m_double_i = '0' and rst_i = '0'}
-                                   |=> {f_count = 1 and m_data_o(7 downto 0) = prev(m_data_o(15 downto 8))} abort rst_i;
+   f_double_single_out : assert always {f_count = 2 and s_valid_i = '0' and m_ready_i = '1' and
+                                        m_double_i = '0' and rst_i = '0'}
+                                   |=> {f_count = 1 and
+                                        m_data_o(G_DATA_SIZE - 1 downto 0) =
+                                           prev(m_data_o(2 * G_DATA_SIZE - 1 downto G_DATA_SIZE)) and
+                                        m_addr_o = prev(m_addr(2 * G_ADDR_SIZE - 1 downto G_ADDR_SIZE))} abort rst_i;
 
-   f_double_double_out : assert always {f_count = 2 and s_valid_i = '0' and m_ready_i = '1' and m_double_i = '1' and rst_i = '0'}
+   f_double_double_out : assert always {f_count = 2 and s_valid_i = '0' and m_ready_i = '1' and
+                                        m_double_i = '1' and rst_i = '0'}
                                    |=> {f_count = 0} abort rst_i;
 
-   f_double_in_single_out : assert always {f_count = 2 and s_valid_i = '1' and m_ready_i = '1' and m_double_i = '0' and rst_i = '0'}
-                                      |=> {f_count = 2 and m_data_o(7 downto 0) = prev(m_data_o(15 downto 8)) and m_data_o(15 downto 8) = prev(s_data_i)} abort rst_i;
+   f_double_in_single_out : assert always {f_count = 2 and s_valid_i = '1' and m_ready_i = '1' and
+                                           m_double_i = '0' and rst_i = '0'}
+                                      |=> {f_count = 2 and
+                                           m_data_o(G_DATA_SIZE - 1 downto 0) =
+                                              prev(m_data_o(2 * G_DATA_SIZE - 1 downto G_DATA_SIZE)) and
+                                           m_data_o(2 * G_DATA_SIZE - 1 downto G_DATA_SIZE) =
+                                              prev(s_data_i)} abort rst_i;
 
-   f_double_in_double_out : assert always {f_count = 2 and s_valid_i = '1' and m_ready_i = '1' and m_double_i = '1' and rst_i = '0'}
-                                      |=> {f_count = 1 and m_data_o(7 downto 0) = prev(s_data_i)} abort rst_i;
+   f_double_in_double_out : assert always {f_count = 2 and s_valid_i = '1' and m_ready_i = '1' and
+                                           m_double_i = '1' and rst_i = '0'}
+                                      |=> {f_count = 1 and
+                                           m_data_o(G_DATA_SIZE - 1 downto 0) = prev(s_data_i) and
+                                           m_addr_o = prev(s_addr_i)} abort rst_i;
 
 
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
 
+   -- Require reset at startup.
+   f_reset : assume {rst_i};
+
+   -- DECODE may only consume two words when two words are actually offered.
+   -- Without this, DECODE could assert m_double_i in the single-word state and
+   -- the shadow count would diverge from the RTL, a failure of f_count_match
+   -- that is the environment's fault rather than the module's.  The RTL
+   -- deliberately ignores m_double_i when only one word is offered, so this is
+   -- a contract statement rather than a workaround.
+   f_double_i_valid : assume always {m_double_i = '1'}
+                                |-> {m_valid_o = '1' and m_double_o = '1'};
+
+   -- FETCH must hold a presented word stable until it is accepted.
+   f_input_stable : assume always {s_valid_i = '1' and s_ready_o = '0' and rst_i = '0'}
+                              |=> {s_valid_i = '1' and stable(s_addr_i) and
+                                   stable(s_data_i)} abort rst_i;
+
+   -- Input contract (b): words arrive in consecutive, increasing addresses
+   -- between flushes.  FETCH guarantees this - it is the same property its
+   -- own f_dc_assert_addr asserts on the interface between the two modules -
+   -- so it is an assumption here and an assertion at the system level.
+   f_input_consecutive : assume always {f_s_addr_valid = '1' and s_valid_i = '1' and s_ready_o = '1'}
+                                   |-> {s_addr_i = f_s_addr + 1};
+
 
    --------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    --------------------------------------------
 
-   -- Make sure FIFO can transition from full to empty.
+   -- Make sure the buffer can transition from full to empty.
    f_full_to_empty : cover {f_count = 2; f_count = 1; f_count = 0};
+
+   -- DECODE consumes an instruction together with its immediate operand.
+   f_cover_double_out : cover {m_valid_o = '1' and m_ready_i = '1' and m_double_i = '1'};
+
+   -- Simultaneous input and output handshake -- the case where the two
+   -- assignment blocks in p_fsm overlap and assignment ordering matters.
+   f_cover_in_and_out : cover {s_valid_i = '1' and s_ready_o = '1' and
+                               m_valid_o = '1' and m_ready_i = '1'};
+
+   -- Backpressure towards FETCH.  If this is unreachable then f_two is being
+   -- proved vacuously, since s_ready_o only ever drops with the buffer full.
+   f_cover_backpressure : cover {s_ready_o = '0' and rst_i = '0'};
+
+   -- Sustained full occupancy across consecutive cycles.
+   f_cover_full_to_full : cover {f_count = 2; f_count = 2};
+
+   -- A flush while the buffer holds two words -- the branch-redirect case that
+   -- motivates rst_i doubling as the flush.  This is the scenario in which a
+   -- missing flush would deliver two stale instructions to DECODE.
+   f_cover_flush_full : cover {f_count = 2 and rst_i = '1'};
+
+   -- Normal operation resuming after a flush.
+   f_cover_flush_refill : cover {rst_i = '1'; f_count = 0; f_count = 1};
 
 
    ----------------------------------------------
    -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
    ----------------------------------------------
 
+   -- The occupancy fully determines the offered-word signals, so any state in
+   -- which they disagree is unreachable.  Stating this explicitly keeps the
+   -- induction hypothesis from having to rediscover it.
+   f_inv_valid : assert always {rst_i = '0'} |-> {(f_count = 0 and m_valid_o = '0') or
+                                                  (f_count > 0 and m_valid_o = '1')};
+
+   -- Two words are offered if and only if two words are buffered.  Written as
+   -- two separate implications rather than a boolean equality: GHDL's PSL
+   -- boolean layer parses a relational expression as a complete boolean, so a
+   -- second "=" joining two parenthesised comparisons is a syntax error there,
+   -- even though plain VHDL accepts boolean = boolean.
+   f_inv_double_set : assert always {rst_i = '0' and f_count = 2} |-> {m_double_o = '1'};
+
+   f_inv_double_clr : assert always {rst_i = '0' and f_count /= 2} |-> {m_double_o = '0'};
+
+   -- STRENGTHENING INVARIANTS FOR f_addr_consecutive
+   --
+   -- f_addr_consecutive is true but not by itself inductive.  Induction starts
+   -- from an arbitrary state, and nothing above prevents the solver from
+   -- positing a state with f_count = 2 and two completely unrelated addresses
+   -- already in the buffer -- a state that is unreachable in practice but
+   -- perfectly legal as an induction starting point.
+   --
+   -- The missing link is that f_input_consecutive constrains arriving
+   -- addresses relative to f_s_addr, yet nothing connects f_s_addr to what is
+   -- actually held in the buffer.  The two invariants below supply exactly
+   -- that connection: the NEWEST buffered word is always the last word
+   -- accepted on the input port.  With them, entering f_count = 2 forces
+   -- slot 1 to be slot 0 plus one, which is what f_addr_consecutive claims.
+   --
+   -- Both are themselves inductive: every transition that writes a slot writes
+   -- either s_addr_i (which f_s_addr tracks in the same cycle) or shifts slot 1
+   -- down into slot 0 while leaving f_s_addr untouched.
+
+   -- With one word buffered, that word is the most recently accepted one.
+   f_inv_newest_single : assert always {rst_i = '0' and f_count = 1}
+                                   |-> {m_addr_o = f_s_addr};
+
+   -- With two words buffered, slot 1 holds the most recently accepted one.
+   f_inv_newest_double : assert always {rst_i = '0' and f_count = 2}
+                                   |-> {m_addr(2 * G_ADDR_SIZE - 1 downto G_ADDR_SIZE) = f_s_addr};
+
+   -- A non-empty buffer implies at least one word has been accepted since the
+   -- last flush, so f_s_addr is meaningful and f_input_consecutive is armed.
+   -- Without this the solver may start induction with f_count > 0 and
+   -- f_s_addr_valid = '0', which disables the input contract entirely.
+   f_inv_addr_valid : assert always {rst_i = '0' and f_count > 0}
+                                |-> {f_s_addr_valid = '1'};
+
 
    ----------------------------------------------
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
    ----------------------------------------------
+
+   -- Assume no reset or flush after the first clock cycle.  Useful for
+   -- isolating steady-state behaviour, but note that this also disables every
+   -- flush-related cover above.
+--   f_no_reset : assume always {rst_i = '0'} |=> {rst_i = '0'};
+
+   -- Assume DECODE is always ready.
+--   f_ready_always : assume always {m_ready_i = '1'};
+
+   -- Assume DECODE never consumes a second word.
+--   f_never_double : assume always {m_double_i = '0'};
+
+   -- Assume FETCH always has a word available.
+--   f_input_always : assume always {s_valid_i = '1'};
 
 } -- vunit i_icache(icache(synthesis))
 

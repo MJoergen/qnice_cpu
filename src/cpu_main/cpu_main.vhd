@@ -4,6 +4,10 @@ use ieee.numeric_std_unsigned.all;
 
 use work.cpu_constants.all;
 
+-- NOTE: The DECODE and PREPARE modules are explicitly reset (using fetch_valid_o)
+-- following any update to the Program Counter (as determined by the WRITE module).
+-- This flushes the entire pipeline.
+
 entity cpu_main is
    port (
       clk_i           : in  std_logic;
