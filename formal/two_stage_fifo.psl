@@ -1,90 +1,111 @@
 vunit i_two_stage_fifo(two_stage_fifo(synthesis))
 {
-   -- Additional signals used during formal verification
-   signal f_count : integer range 0 to 3 := 0;
+   -----------------------------------------------------------------
+   -- DECLARATIONS
+   -----------------------------------------------------------------
+   -- All declarations are grouped here, matching the convention used in
+   -- fetch.psl and icache.psl.
 
+   -- Occupancy of the FIFO, recomputed from the PORT handshakes alone and
+   -- cross-checked against the module's own s_fill_o output (f_fill below).
+   --
+   -- The range deliberately extends BELOW zero.  Declaring it "range 0 to 3"
+   -- would leave an underflow to be caught only indirectly: Yosys maps that
+   -- range to two bits, so 0 - 1 wraps to 3 and trips the UPPER bound of
+   -- f_size, reporting an overflow when the actual fault was an underflow.
+   -- With headroom, f_size reports the correct direction.
+   signal f_count : integer range -1 to 3 := 0;
 
-   -- set all declarations to run on clk_i
-   default clock is rising_edge(clk_i);
-
-
-   -----------------------------
-   -- ASSERTIONS ABOUT OUTPUTS
-   -----------------------------
-
-   -- FIFO must be empty after reset
-   f_after_reset_empty : assert always {rst_i} |=> not m_valid_o;
-
-   -- FIFO must be ready after reset
-   f_after_reset_ready : assert always {rst_i} |=> s_ready_o;
-
-   -- Output must be stable until accepted
-   f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o)};
-
-   -- Ready must be stable until new data
-   f_ready_stable : assert always {s_ready_o and not s_valid_i and not rst_i} |=> {stable(s_ready_o)};
-
-   -- Keep track of amount of data flowing into and out of the FIFO
-   p_count : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         -- Data flowing in, but not out.
-         if s_valid_i and s_ready_o and not (m_valid_o and m_ready_i) then
-            f_count <= f_count + 1;
-         end if;
-
-         -- Data flowing out, but not in.
-         if m_valid_o and m_ready_i and not (s_valid_i and s_ready_o) then
-            f_count <= f_count - 1;
-         end if;
-
-         if rst_i then
-            f_count <= 0;
-         end if;
-      end if;
-   end process p_count;
-
-   -- The FIFO size is limited to 2.
-   f_size : assert always {0 <= f_count and f_count <= 2};
-
-   -- The FIFO size is as expected
-   f_fill : assert always {f_count = to_integer(s_fill_o)};
-
-
-   ----------------------------------------------------
    -- FIFO ORDERING
-   ----------------------------------------------------
+   -- Two distinct symbolic values are pushed through the FIFO, and sticky
+   -- flags record whether each has entered and/or left.  Deriving d2 from d1
+   -- by inversion forces the two values to differ without needing a second
+   -- free constant plus an inequality assumption, and it cannot be satisfied
+   -- vacuously by the solver choosing d1 = d2.
+   signal f_value_d1 : std_logic_vector(G_DATA_SIZE - 1 downto 0);
+   signal f_value_d2 : std_logic_vector(G_DATA_SIZE - 1 downto 0);
 
-   -- Control signals to determine if the values have entered and/or left the FIFO
+   attribute anyconst : boolean;
+   attribute anyconst of f_value_d1 : signal is true;
+
+   -- Control signals to determine if the values have entered and/or left the
+   -- FIFO.
    signal f_sampled_in_d1  : std_logic := '0';
    signal f_sampled_in_d2  : std_logic := '0';
    signal f_sampled_out_d1 : std_logic := '0';
    signal f_sampled_out_d2 : std_logic := '0';
 
-   -- Verify FIFO doesn't emit garbage
-   f_fifo_no_garbage_1 : assert always {not f_sampled_in_d1} |-> {not f_sampled_out_d1};
-   f_fifo_no_garbage_2 : assert always {not f_sampled_in_d2} |-> {not f_sampled_out_d2};
+   -- Sticky record of the ordering premise: d1 had entered the FIFO at a
+   -- moment when d2 had not.  This is precisely the first element of the
+   -- antecedent of f_fifo_ordering_out, captured as a state bit so that the
+   -- ordering argument can be expressed as an inductive invariant.  A temporal
+   -- sequence antecedent cannot be strengthened directly; the premise has to
+   -- be held in a register first.
+   signal f_d1_first : std_logic := '0';
 
-   -- Verify the FIFO preserves ordering, i.e. d2 leaves after d1.
-   f_fifo_ordering_out : assert always {f_sampled_in_d1 and not f_sampled_in_d2 and not rst_i;
-                                        (not rst_i)[*];
-                                        f_sampled_out_d2 and not rst_i}
-                                   |-> {f_sampled_out_d1};
+   -- set all declarations to run on clk_i
+   default clock is rising_edge(clk_i);
 
-
-   -- Two random values to be pushed into the FIFO
-   signal f_value_d1 : std_logic_vector(G_DATA_SIZE - 1 downto 0);
-   signal f_value_d2 : std_logic_vector(G_DATA_SIZE - 1 downto 0);
-   attribute anyconst : boolean;
-   attribute anyconst of f_value_d1 : signal is true;
 
    f_value_d2 <= not f_value_d1; -- This just forces D1 and D2 to be different.
 
 
+   -----------------------------------------------------------------
+   -- SHADOW STATE MAINTENANCE
+   -----------------------------------------------------------------
+
+   -- Keep track of amount of data flowing into and out of the FIFO.
+   p_count : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         -- Data flowing in, but not out.
+         if s_valid_i = '1' and s_ready_o = '1' and
+            not (m_valid_o = '1' and m_ready_i = '1') then
+            f_count <= f_count + 1;
+         end if;
+
+         -- Data flowing out, but not in.
+         if m_valid_o = '1' and m_ready_i = '1' and
+            not (s_valid_i = '1' and s_ready_o = '1') then
+            f_count <= f_count - 1;
+         end if;
+
+         if rst_i = '1' then
+            f_count <= 0;
+         end if;
+      end if;
+   end process p_count;
+
+
+   -- Record which of the two symbolic values have entered and left the FIFO.
+   --
+   -- IMPORTANT: the input side is qualified by the FULL handshake
+   -- (s_valid_i AND s_ready_o), not by s_valid_i alone.  Sampling on
+   -- s_valid_i alone records a value as having entered the FIFO when it was
+   -- merely OFFERED while the FIFO was full, which produces a spurious
+   -- counterexample for f_fifo_ordering_out:
+   --
+   --    cycle 1: FIFO full, upstream offers d1 -> f_sampled_in_d1 set,
+   --             but nothing is accepted;
+   --    cycle 2: FIFO has drained, upstream now offers d2, which IS accepted.
+   --             The ordering antecedent matches here (in_d1 set, in_d2 not);
+   --    later:   d2 leaves, setting f_sampled_out_d2, but d1 never entered,
+   --             so f_sampled_out_d1 is still low and the assertion fails on
+   --             a perfectly correct FIFO.
+   --
+   -- The same omission also weakens both no-garbage properties, whose
+   -- antecedents are "not f_sampled_in_*": an over-eager input flag makes them
+   -- true less often, silently reducing coverage.
+   --
+   -- The OUTPUT side is deliberately left qualified by m_valid_o alone.  That
+   -- is the stronger check: the FIFO must never even PRESENT a value it was
+   -- not given, not merely never have one accepted.  Ordering is unaffected,
+   -- because in a FIFO the order of presentation equals the order of
+   -- departure.
    p_sampled : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if s_valid_i then
+         if s_valid_i = '1' and s_ready_o = '1' then
             if s_data_i = f_value_d1 then
                f_sampled_in_d1 <= '1';
             end if;
@@ -93,7 +114,7 @@ vunit i_two_stage_fifo(two_stage_fifo(synthesis))
             end if;
          end if;
 
-         if m_valid_o then
+         if m_valid_o = '1' then
             if m_data_o = f_value_d1 then
                f_sampled_out_d1 <= '1';
             end if;
@@ -112,12 +133,131 @@ vunit i_two_stage_fifo(two_stage_fifo(synthesis))
    end process p_sampled;
 
 
+   -- Capture the ordering premise as a sticky bit: d1 was accepted at a moment
+   -- when d2 had not yet been accepted.
+   --
+   -- IMPORTANT -- this is set from the INPUT HANDSHAKE, not from the sampled
+   -- flags.  Deriving it from the flags instead
+   --
+   --    if f_sampled_in_d1 = '1' and f_sampled_in_d2 = '0' then ...
+   --
+   -- registers it one cycle LATER than f_sampled_in_d1, because that flag is
+   -- itself registered.  The lag opens a hole in the induction: during the
+   -- single cycle where f_sampled_in_d1 is already '1' but f_d1_first is still
+   -- '0', every invariant keyed on f_d1_first is vacuous, so nothing pins d1's
+   -- position and the solver is free to place it anywhere.  Setting the bit on
+   -- the same edge as f_sampled_in_d1 removes the lag entirely.
+   --
+   -- This is still exactly the premise the ordering property needs: the flags
+   -- are sticky, so if f_sampled_in_d2 is low now it was low at every earlier
+   -- cycle, hence f_d1_first is guaranteed to be set whenever the first
+   -- element of the antecedent of f_fifo_ordering_out holds.
+   p_d1_first : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if s_valid_i = '1' and s_ready_o = '1' and
+            s_data_i = f_value_d1 and f_sampled_in_d2 = '0' then
+            f_d1_first <= '1';
+         end if;
+
+         if rst_i = '1' then
+            f_d1_first <= '0';
+         end if;
+      end if;
+   end process p_d1_first;
+
+
+   -----------------------------
+   -- ASSERTIONS ABOUT OUTPUTS
+   -----------------------------
+
+   -- FIFO must be empty after reset
+   f_after_reset_empty : assert always {rst_i} |=> not m_valid_o;
+
+   -- FIFO must be ready after reset
+   -- FIFO must be ready after reset.  The "rst_i or" escape covers a reset
+   -- held for more than one cycle: s_ready_o is now gated combinationally by
+   -- rst_i, so it reads '0' for as long as reset is asserted, even though the
+   -- underlying s_ready_r has already been set to '1'.
+   f_after_reset_ready : assert always {rst_i} |=> {rst_i = '1' or s_ready_o = '1'};
+
+   -- Output must be stable until accepted
+   f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i}
+                               |=> {stable(m_valid_o) and stable(m_data_o)};
+
+   -- Ready must be stable until new data
+   -- Ready must be stable until new data.  The abort is required because
+   -- s_ready_o is gated by rst_i: a reset asserted in the consequent cycle
+   -- pulls the output low, which is intended behaviour rather than a
+   -- stability violation.
+   f_ready_stable : assert always {s_ready_o and not s_valid_i and not rst_i}
+                              |=> {stable(s_ready_o)} abort rst_i;
+
+   -- The FIFO size is limited to 2.  See the note on the declared range of
+   -- f_count above for why the lower bound is not vacuous.
+   f_size : assert always {0 <= f_count and f_count <= 2};
+
+   -- The FIFO size is as expected
+   f_fill : assert always {f_count = to_integer(s_fill_o)};
+
+
+   ----------------------------------------------------
+   -- FIFO ORDERING
+   ----------------------------------------------------
+
+   -- Verify FIFO doesn't emit garbage
+   f_fifo_no_garbage_1 : assert always {not f_sampled_in_d1} |-> {not f_sampled_out_d1};
+   f_fifo_no_garbage_2 : assert always {not f_sampled_in_d2} |-> {not f_sampled_out_d2};
+
+   -- Verify the FIFO preserves ordering, i.e. d2 leaves after d1.
+   --
+   -- STATED OVER STATE, NOT AS A TEMPORAL SEQUENCE.  The natural formulation
+   --
+   --    assert always {f_sampled_in_d1 and not f_sampled_in_d2 and not rst_i;
+   --                   (not rst_i)[*];
+   --                   f_sampled_out_d2 and not rst_i}
+   --              |-> {f_sampled_out_d1};
+   --
+   -- is correct and provable by BMC, but it CANNOT be proved by k-induction --
+   -- not for want of invariants, but because of where its state lives.  The
+   -- unbounded [*] makes the property synthesise into a monitor FSM with its
+   -- own registers ("antecedent matched, now waiting").  Those registers are
+   -- part of the induction state and are initialised arbitrarily, so induction
+   -- may start with the monitor already armed, as though the first element had
+   -- matched in some cycle before the trace began, and then present a
+   -- departure of d2.  No invariant over the DESIGN state can exclude that,
+   -- because the monitor state is not constrained by the design state at all.
+   -- The observed counterexample bears this out: it has f_sampled_in_d1 low
+   -- for the entire trace, so the antecedent never genuinely matched.
+   --
+   -- The formulation below carries no monitor state -- every term is a real
+   -- register in the verification harness -- so induction can reason about it.
+   -- It is equivalent because all four flags are sticky and f_d1_first records
+   -- exactly the premise "d1 was accepted while d2 had not yet been":
+   -- if d2 has departed and d1 entered first, then d1 must have departed too.
+   f_fifo_ordering_out : assert always {f_d1_first = '1' and f_sampled_out_d2 = '1' and rst_i = '0'}
+                                   |-> {f_sampled_out_d1 = '1'};
+
+
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
 
    -- Require reset at startup.
    f_reset : assume {rst_i};
+
+   -- An offered word must be held stable until it is accepted.  This is part
+   -- of the elastic-pipeline contract on the input side.  The RTL does not
+   -- strictly need it -- nothing is captured while s_ready_r is low -- but
+   -- without it the upstream may present one value while stalled and a
+   -- different value once accepted, which is the scenario that made the
+   -- unqualified input sampling in p_sampled unsound.
+   -- Note on style: stable() returns a BOOLEAN, so it must not be combined
+   -- with a bare std_logic operand -- hence "s_valid_i = '1'" rather than
+   -- plain "s_valid_i" in the consequent.  The antecedent is all std_logic and
+   -- is therefore fine as written.
+   f_input_stable : assume always {s_valid_i and not s_ready_o and not rst_i}
+                              |=> {s_valid_i = '1' and stable(s_data_i)} abort rst_i;
 
 
    --------------------------------------------
@@ -126,6 +266,245 @@ vunit i_two_stage_fifo(two_stage_fifo(synthesis))
 
    -- Make sure FIFO can transition from full to empty.
    f_full_to_empty : cover {f_count = 2; f_count = 1; f_count = 0};
+
+   -- The FIFO reaching full occupancy.
+   f_cover_full : cover {f_count = 2};
+
+   -- Simultaneous input and output handshake.
+   f_cover_pass_thru : cover {s_valid_i and s_ready_o and m_valid_o and m_ready_i};
+
+   -- Backpressure towards the upstream.  If this is unreachable then the
+   -- stall-related properties are being proved vacuously.
+   f_cover_backpressure : cover {s_ready_o = '0' and rst_i = '0'};
+
+   -- VACUITY CHECKS FOR THE ORDERING MACHINERY.
+   --
+   -- f_fifo_ordering_out and both no-garbage properties say nothing unless the
+   -- symbolic values actually traverse the FIFO within the cover depth.  These
+   -- covers make that failure mode visible.
+   --
+   -- Note the usual asymmetry: f_value_d1 is an unconstrained constant, so in
+   -- COVER mode the solver picks its value to make the trace succeed, whereas
+   -- in ASSERT mode the proof must hold for every value.  These covers
+   -- therefore demonstrate satisfiability of the antecedent shape, not
+   -- reachability for an arbitrary value.
+   f_cover_d1_out : cover {f_sampled_out_d1};
+
+   f_cover_both_out : cover {f_sampled_out_d1 and f_sampled_out_d2};
+
+   -- Covers the exact antecedent of f_fifo_ordering_out.  This is the
+   -- important one: if it is unreachable, the ordering property is vacuous.
+   -- Cover statements are only ever evaluated by BMC, never by induction, so
+   -- the sequence form is safe here and is retained because it demonstrates
+   -- the full temporal scenario rather than just the end state.
+   f_cover_ordering : cover {f_sampled_in_d1 and not f_sampled_in_d2 and not rst_i;
+                             (not rst_i)[*];
+                             f_sampled_out_d2 and not rst_i};
+
+   -- Both values traverse the FIFO with the ordering premise established.
+   -- Confirms f_d1_first can actually be set, without which the state-based
+   -- ordering assertion above would be vacuous.
+   f_cover_d1_first : cover {f_d1_first = '1' and f_sampled_out_d2 = '1'};
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
+   ----------------------------------------------
+
+   -- An empty FIFO must always be able to accept.
+   --
+   -- This is the hidden invariant that makes p_s_ready sound.  That process
+   -- only updates s_ready_r while m_valid_r is high:
+   --
+   --    if m_valid_r = '1' then
+   --       s_ready_r <= m_ready_i or (s_ready_r and not s_valid_i);
+   --    end if;
+   --
+   -- so the state (m_valid = '0', s_ready = '0') is a permanent deadlock: the
+   -- FIFO is empty, cannot accept, and the only process that could raise
+   -- s_ready_r is gated off.  That state is unreachable from reset, but
+   -- k-induction starts from an ARBITRARY state and will posit it unless it is
+   -- explicitly excluded.  f_fill also fails there, since s_fill_o encodes
+   -- "00" from m_valid_o alone regardless of s_ready_o.
+   --
+   -- Downstream proofs depend on this too: the FIFO-internal invariants
+   -- asserted in fetch.psl (f_inv_fifo_valid_set, f_inv_fifo_head) have no
+   -- basis without it.
+   -- Qualified by rst_i = '0' because s_ready_o is gated by rst_i, so during a
+   -- reset or flush cycle the FIFO is legitimately not ready even when empty.
+   f_inv_empty_ready : assert always {rst_i = '0' and m_valid_o = '0'} |-> {s_ready_o = '1'};
+
+   -- The fill encoding is fully determined by the two control outputs, so any
+   -- state in which they disagree is unreachable.  Stating this explicitly
+   -- keeps the induction hypothesis from having to rediscover it.  Written as
+   -- separate implications rather than equalities between booleans, because
+   -- GHDL's PSL boolean layer parses a relational expression as a complete
+   -- boolean and rejects a second "=" joining two parenthesised comparisons.
+   -- All three are qualified by rst_i = '0'.  s_fill_o is derived from the
+   -- control REGISTERS while s_ready_o is the gated output, so the two
+   -- deliberately disagree during a reset or flush cycle: the gate reports
+   -- "not accepting", whereas the stored occupancy is unchanged until the
+   -- clock edge.
+   f_inv_fill_zero : assert always {rst_i = '0' and m_valid_o = '0'} |-> {s_fill_o = "00"};
+
+   f_inv_fill_one : assert always {rst_i = '0' and m_valid_o = '1' and s_ready_o = '1'}
+                              |-> {s_fill_o = "01"};
+
+   f_inv_fill_two : assert always {rst_i = '0' and m_valid_o = '1' and s_ready_o = '0'}
+                              |-> {s_fill_o = "10"};
+
+   -- STRENGTHENING INVARIANTS FOR THE NO-GARBAGE PROPERTIES
+   --
+   -- f_fifo_no_garbage_1/2 are true but not inductive on their own.  They
+   -- reason about the sticky flags only, and nothing above relates those flags
+   -- to what the FIFO is actually STORING.  Induction begins from an arbitrary
+   -- state, so the solver may posit a FIFO whose registers already hold
+   -- f_value_d1 while f_sampled_in_d1 is still low; one cycle later that value
+   -- appears on m_data_o, f_sampled_out_d1 sets, and the assertion fails even
+   -- though no correct execution could have reached that state.
+   --
+   -- The fix is to state the missing connection directly: any value CURRENTLY
+   -- HELD in an occupied slot must already have been recorded as having
+   -- entered.  The FIFO has exactly two storage slots, occupied as follows
+   -- (see also f_inv_fill_* above):
+   --
+   --    m_data_r : occupied iff m_valid_r = '1'
+   --    s_data_r : occupied iff s_ready_r = '0'   (i.e. the FIFO is full)
+   --
+   -- Note that s_data_r is written by p_s_data on EVERY cycle where
+   -- s_ready_r = '1', regardless of s_valid_i, so it routinely holds data that
+   -- was never accepted.  Qualifying these invariants by s_ready_o = '0' is
+   -- therefore essential -- the register's contents are only meaningful when
+   -- the FIFO is full.
+   --
+   -- Both invariants are themselves inductive.  For the output slot: m_data_r
+   -- is loaded either from s_data_i together with m_valid_r <= s_valid_i, so a
+   -- newly valid output implies an accepted handshake that sets the flag in
+   -- the same cycle, or from s_data_r, which carries its own invariant across.
+   -- For the input slot: s_ready_r can only fall from '1' to '0' when
+   -- m_valid_r = '1', m_ready_i = '0' and s_valid_i = '1' -- a genuine input
+   -- handshake -- and p_s_data captures s_data_i on that same edge, so the
+   -- flag is set exactly when the slot becomes occupied.
+
+   f_inv_out_content_d1 : assert always {m_valid_o = '1' and m_data_o = f_value_d1}
+                                    |-> {f_sampled_in_d1 = '1'};
+
+   f_inv_out_content_d2 : assert always {m_valid_o = '1' and m_data_o = f_value_d2}
+                                    |-> {f_sampled_in_d2 = '1'};
+
+   -- The rst_i = '0' qualification is essential now that s_ready_o is gated.
+   -- "s_ready_o = '0'" is used here to mean "the input slot is occupied", but
+   -- during a reset or flush cycle the gate forces it low regardless of
+   -- occupancy -- and p_s_data writes s_data_r on every cycle where
+   -- s_ready_r = '1', so an unoccupied slot routinely holds data that was
+   -- never accepted and whose sampled-in flag is therefore low.
+   f_inv_in_content_d1 : assert always {rst_i = '0' and s_ready_o = '0' and s_data_r = f_value_d1}
+                                   |-> {f_sampled_in_d1 = '1'};
+
+   f_inv_in_content_d2 : assert always {rst_i = '0' and s_ready_o = '0' and s_data_r = f_value_d2}
+                                   |-> {f_sampled_in_d2 = '1'};
+
+   -- STRENGTHENING INVARIANTS FOR f_fifo_ordering_out
+   --
+   -- The ordering property is likewise true but not inductive.  Its antecedent
+   -- is a temporal SEQUENCE ("d1 had entered while d2 had not, ... later d2
+   -- left"), and a sequence antecedent cannot be strengthened directly -- which
+   -- is why the premise is first captured in the sticky bit f_d1_first above.
+   --
+   -- The argument is then purely positional.  If d1 entered before d2, then d1
+   -- is AHEAD of d2 in the queue, so as long as d1 has not yet left, d2 cannot
+   -- possibly be at the output.  The FIFO's two slots are ordered
+   --
+   --    s_data_r (input slot, occupied iff s_ready_o = '0')   -- behind
+   --    m_data_r (output slot, occupied iff m_valid_o = '1')  -- in front
+   --
+   -- so "d2 is behind d1" means: either d1 occupies the output slot, or d1
+   -- occupies the input slot and the output slot holds some value that entered
+   -- even earlier -- which cannot be d2, since d2 entered after d1.
+   --
+   -- A first attempt at the second half phrased it as "while d1 is still
+   -- resident, the output slot cannot hold d2", justified by observing that
+   -- anything ahead of d1 must have entered before d1 and therefore cannot be
+   -- d2.  That reasoning is sound but circular for induction: "anything ahead
+   -- entered earlier" IS the ordering guarantee being proved, so the invariant
+   -- was no more inductive than the property itself.
+   --
+   -- The formulation below is positional and exact instead of argumentative.
+   -- The FIFO holds at most two values, so once BOTH d1 and d2 have entered
+   -- and d1 has not yet left, there is only one possible arrangement: d1 at the
+   -- head (output slot) and d2 behind it.  Asserting that arrangement directly
+   -- is inductive, because every transition either leaves both slots alone,
+   -- advances d1 out of the head (setting f_sampled_out_d1 and making the
+   -- invariant vacuous), or shifts s_data_r into m_data_r, which preserves the
+   -- arrangement.
+
+   -- A sticky premise bit is only meaningful if the value it refers to really
+   -- did enter.  Without this, induction may start with f_d1_first = '1' while
+   -- f_sampled_in_d1 = '0', which makes f_inv_d1_present false.
+   f_inv_d1_first_entered : assert always {f_d1_first = '1'} |-> {f_sampled_in_d1 = '1'};
+
+   -- A value that has entered and not yet been presented must still occupy one
+   -- of the two slots.
+   --
+   -- Keyed on f_sampled_in_d1 rather than f_d1_first: residency has nothing to
+   -- do with the ordering premise, and using the narrower bit would needlessly
+   -- reintroduce the lag described above.
+   f_inv_d1_present : assert always {f_sampled_in_d1 = '1' and f_sampled_out_d1 = '0' and rst_i = '0'}
+                                |-> {(m_valid_o = '1' and m_data_o = f_value_d1) or
+                                     (s_ready_o = '0' and s_data_r = f_value_d1)};
+
+   -- By the time d2 has entered, d1 must already have been presented.
+   --
+   -- An earlier version of this invariant asserted the arrangement instead --
+   -- "with both values resident and d1 not yet departed, d1 is at the head" --
+   -- but its antecedent is UNREACHABLE, which GHDL's auto-generated antecedent
+   -- cover correctly flagged.  f_sampled_out_d1 is set as soon as d1 is
+   -- PRESENTED at the output, and d1 is always presented before d2 can even be
+   -- accepted:
+   --
+   --   - d1 entering an empty FIFO reaches m_data_o on the next edge, and d2
+   --     cannot have been accepted in the same cycle as d1 (one word per cycle,
+   --     and an earlier d2 would have prevented f_d1_first from setting);
+   --   - d1 entering the input slot fills the FIFO, so s_ready_o falls and d2
+   --     cannot be accepted at all until the head drains -- and the edge that
+   --     drains the head is the same edge that shifts d1 into it.
+   --
+   -- So f_sampled_in_d2 = '1' and f_sampled_out_d1 = '0' never hold together,
+   -- and the old invariant was vacuous.  Stating that impossibility directly
+   -- gives a reachable antecedent and the same inductive strength: at the cycle
+   -- d2 is accepted the FIFO is not full, so by f_inv_d1_present an
+   -- undelivered d1 must be at the head, which sets f_sampled_out_d1 on that
+   -- very edge.
+   f_inv_order_head : assert always {f_d1_first = '1' and f_sampled_in_d2 = '1' and rst_i = '0'}
+                                |-> {f_sampled_out_d1 = '1'};
+
+   -- Hence d2 can only ever be presented once d1 has already departed.  This
+   -- discharges f_fifo_ordering_out directly: f_sampled_out_d2 is set only by a
+   -- presentation of d2, and at every such presentation f_sampled_out_d1 is
+   -- already high.
+   --
+   -- The two cases behind it: if d2 has not entered, f_inv_out_content_d2
+   -- forbids it appearing on m_data_o at all; if d2 has entered, then while
+   -- f_sampled_out_d1 is still low f_inv_order_head puts d1 at the head, so
+   -- m_data_o is d1, not d2.
+   f_inv_d2_out_after : assert always {f_d1_first = '1' and m_valid_o = '1' and
+                                       m_data_o = f_value_d2 and rst_i = '0'}
+                                  |-> {f_sampled_out_d1 = '1'};
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
+   ----------------------------------------------
+
+   -- Assume no reset after the first clock cycle.  Note that this also
+   -- disables the reset-related assertions above.
+--   f_no_reset : assume always {not rst_i} |=> {not rst_i};
+
+   -- Assume the downstream is always ready.
+--   f_ready_always : assume always {m_ready_i};
+
+   -- Assume the upstream always has data available.
+--   f_valid_always : assume always {s_valid_i};
 
 } -- vunit i_two_stage_fifo(two_stage_fifo(synthesis))
 

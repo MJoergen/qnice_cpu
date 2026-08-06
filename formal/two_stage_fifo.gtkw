@@ -1,15 +1,15 @@
 [*]
-[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Sun Mar 28 19:44:42 2021
+[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*] Thu Aug  6 13:38:37 2026
 [*]
-[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/two_stage_fifo_cover/engine_0/trace4.vcd"
-[dumpfile_mtime] "Sun Mar 28 19:43:58 2021"
-[dumpfile_size] 2273
-[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/two_stage_fifo.gtkw"
+[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/formal/two_stage_fifo_prove/engine_0/trace_induct.vcd"
+[dumpfile_mtime] "Thu Aug  6 13:34:47 2026"
+[dumpfile_size] 4168
+[savefile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/formal/two_stage_fifo.gtkw"
 [timestart] 0
 [size] 1519 906
-[pos] -2133 -117
-*-3.711389 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] two_stage_fifo.
 [sst_width] 249
 [signals_width] 190
@@ -33,11 +33,12 @@ two_stage_fifo.m_valid_o
 two_stage_fifo.m_ready_i
 @22
 two_stage_fifo.m_data_o[7:0]
+@23
+two_stage_fifo.s_data_r[7:0]
 @1000200
 -two_stage_fifo
-@29
-two_stage_fifo.i_two_stage_fifo.f_count[1:0]
 @28
+two_stage_fifo.i_two_stage_fifo.f_d1_first
 two_stage_fifo.i_two_stage_fifo.f_sampled_in_d1
 two_stage_fifo.i_two_stage_fifo.f_sampled_in_d2
 two_stage_fifo.i_two_stage_fifo.f_sampled_out_d1
