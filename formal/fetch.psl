@@ -7,6 +7,15 @@ vunit i_fetch(fetch(synthesis))
    -- Since both are unconstrained constants, proving that the DECODE stage
    -- receives f_const_data whenever it receives f_const_addr proves payload
    -- correctness for every address, without needing a scoreboard.
+   --
+   -- NOTE ON K-INDUCTION: f_dc_data_integrity is not expected to close under
+   -- pure k-induction.  The induction hypothesis has to relate the CONTENTS of
+   -- the address FIFO and the data buffer to f_const_addr / f_const_data, and
+   -- neither block's internal storage is visible from this vunit.  Run it in
+   -- bmc mode; to get it through prove mode, add matching invariants inside
+   -- two_stage_fifo.psl and two_stage_buffer.psl, or comment out this
+   -- declaration block together with f_const_addr_stable, f_const_data_stable,
+   -- f_wb_slave_data and f_dc_data_integrity -- nothing else depends on them.
    signal f_const_addr : std_logic_vector(15 downto 0);
    signal f_const_data : std_logic_vector(15 downto 0);
 
@@ -154,10 +163,20 @@ vunit i_fetch(fetch(synthesis))
    -- INTERNAL ASSERTIONS
    --------------------------------------------
 
-   -- The address fifo must always accept an incoming address.
+   -- The address fifo should always accept an incoming address.
    -- This prevents data loss and/or corruption.
+   --
+   -- Qualified by the abort and reset, because the FIFO's rst_i is driven by
+   -- "rst_i or dc_valid_i" and its s_ready_o is now gated by that signal. A
+   -- request already asserted on STB may be accepted by the slave in the very
+   -- cycle DECODE issues a redirect, so wb_req_accept and a low
+   -- tsf_in_addr_ready coincide. That is not data loss: the address belongs
+   -- to the stream being abandoned, and the FIFO is flushed on the same edge.
+   -- Before s_ready_o was gated, the FIFO accepted the address and discarded
+   -- it one edge later via its own reset
+   -- same outcome, different handshake.
    f_addr_ready : assert always
-      {wb_req_accept} |-> {tsf_in_addr_ready};
+      {wb_req_accept = '1' and dc_valid_i = '0' and rst_i = '0'} |-> {tsf_in_addr_ready = '1'};
 
    -- The data buffer must always accept an incoming response.
    -- This prevents data loss and/or corruption.
@@ -356,9 +375,33 @@ vunit i_fetch(fetch(synthesis))
    -- The bus cycle terminating and later restarting
    f_cover_cyc_restart : cover {wb_cyc_o; not wb_cyc_o; wb_cyc_o};
 
+   -- VACUITY CHECK for f_dc_data_integrity.
+   --
+   -- f_dc_data_integrity only says something if its antecedent is reachable,
+   -- i.e. if an instruction is ever delivered to DECODE at the address held in
+   -- the free constant f_const_addr.  If the trace is never long enough for
+   -- that to happen, the assertion passes without checking anything.  These
+   -- covers make that failure mode visible.
+   --
+   -- Be aware of what the solver is allowed to do here: f_const_addr is an
+   -- unconstrained constant, so in COVER mode the solver chooses it to make
+   -- the cover succeed.  It will simply set f_const_addr to whatever address
+   -- happens to be delivered first.  That is still a useful check -- it proves
+   -- the antecedent shape is satisfiable and that the constant participates in
+   -- a real delivery -- but it does NOT prove that an arbitrary address is
+   -- reachable.  In ASSERT mode the quantification runs the other way (the
+   -- proof must hold for every value), which is what gives the integrity
+   -- property its strength.
    f_cover_const_fetched : cover {dc_valid_o = '1' and dc_addr_o = f_const_addr};
 
-   f_cover_const_fetched_deep : cover {dc_valid_o = '1' and dc_addr_o = f_const_addr and f_dc_last_addr_valid = '1'};
+   -- Stronger variant: the constant address is delivered AND is not the PC
+   -- that DECODE supplied, so at least one address increment and a full
+   -- request/response round trip must have occurred to reach it.  This closes
+   -- the loophole where the solver satisfies the cover above by pointing
+   -- f_const_addr at the very first instruction after a branch.
+   f_cover_const_fetched_deep : cover
+      {dc_valid_o = '1' and dc_addr_o = f_const_addr and f_dc_last_addr_valid = '1'};
+
 
    ----------------------------------------------
    -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
@@ -392,6 +435,65 @@ vunit i_fetch(fetch(synthesis))
    -- only ever released once the counter has reached zero.
    f_inv_cyc_outstanding : assert always
       {f_wb_outstanding > 0} |-> {wb_cyc_o = '1'};
+
+   -- STRENGTHENING INVARIANTS FOR f_dc_assert_addr
+   --
+   -- f_dc_assert_addr is true but not inductive on its own.  Induction begins
+   -- from an arbitrary state, and nothing above relates f_dc_last_addr to the
+   -- addresses actually held in the address FIFO, so the solver may posit
+   -- f_dc_last_addr_valid = '1' with a FIFO head bearing no relation to it.
+   --
+   -- The anchor is f_wb_addr, the next address to be requested.  Every address
+   -- currently in flight is determined by it:
+   --
+   --    - the request waiting on STB, if any, has address f_wb_addr
+   --      (this is f_wb_master_address);
+   --    - the FIFO holds the addresses f_wb_addr - fill .. f_wb_addr - 1,
+   --      oldest first;
+   --    - therefore the next address due at the DECODE output is
+   --      f_wb_addr - fill, and the one delivered before it was
+   --      f_wb_addr - fill - 1.
+   --
+   -- Each invariant below is preserved by every transition: accepting a
+   -- request increments both f_wb_addr and fill, leaving the differences
+   -- unchanged; delivering a word decrements fill and advances
+   -- f_dc_last_addr by exactly one; an abort clears the FIFO and both valid
+   -- flags in the same cycle, making the guarded invariants vacuous.
+
+   -- The FIFO's output valid must agree with its occupancy.  Stated as two
+   -- implications rather than an equality, because GHDL's PSL boolean layer
+   -- parses a relational expression as a complete boolean and rejects a
+   -- second "=" joining two parenthesised comparisons.
+   f_inv_fifo_valid_set : assert always {rst_i = '0' and tsf_in_addr_fill /= "00"}
+                                    |-> {tsf_out_addr_valid = '1'};
+
+   f_inv_fifo_valid_clr : assert always {rst_i = '0' and tsf_in_addr_fill = "00"}
+                                    |-> {tsf_out_addr_valid = '0'};
+
+   -- The head of the address FIFO is the oldest address in flight.
+   f_inv_fifo_head : assert always {rst_i = '0' and tsf_out_addr_valid = '1'}
+                               |-> {tsf_out_addr_data = f_wb_addr - to_integer(tsf_in_addr_fill)};
+
+   -- pipe_concat passes the FIFO head straight through to the DECODE output.
+   -- This holds structurally if pipe_concat is combinational; if it is a
+   -- registered stage, this invariant is false and the two above must be
+   -- re-expressed one pipeline stage further downstream.  The same caveat
+   -- applies to f_inv_pending above.
+   f_inv_dc_addr : assert always {rst_i = '0' and dc_valid_o = '1'}
+                             |-> {dc_addr_o = tsf_out_addr_data};
+
+   -- The last address delivered to DECODE sits immediately below the oldest
+   -- address still in flight.  Together with f_inv_fifo_head and
+   -- f_inv_dc_addr, this is exactly what f_dc_assert_addr claims, so this is
+   -- the load-bearing invariant of the group.
+   f_inv_last_addr : assert always {rst_i = '0' and f_dc_last_addr_valid = '1'}
+                               |-> {f_dc_last_addr = f_wb_addr - to_integer(tsf_in_addr_fill) - 1};
+
+   -- Before the first delivery after a redirect, the oldest address in flight
+   -- is the new PC itself.  This is the corresponding strengthening for
+   -- f_dc_new_pc_addr, which is non-inductive for the same reason.
+   f_inv_new_pc : assert always {rst_i = '0' and f_dc_new_pc_valid = '1'}
+                            |-> {f_dc_new_pc = f_wb_addr - to_integer(tsf_in_addr_fill)};
 
 
    ----------------------------------------------
