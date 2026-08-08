@@ -19,7 +19,12 @@ vunit i_one_stage_fifo(one_stage_fifo(synthesis))
    -- Output must be stable until accepted
    f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o)};
 
-   -- Ready must be stable until new data
+   -- Ready must be stable until new data.
+   -- Unlike one_stage_buffer, s_ready_o here is never gated directly by
+   -- rst_i (s_ready_s <= m_ready_i or not m_valid_r has no rst_i term), so
+   -- no "abort rst_i" is required: under the antecedent (s_valid_i='0'),
+   -- the capture block always drives m_valid_r(k+1) to '0', which forces
+   -- s_ready_o(k+1)='1' unconditionally -- independent of rst_i at k+1.
    f_ready_stable : assert always {s_ready_o and not s_valid_i and not rst_i} |=> {stable(s_ready_o)};
 
    -- Keep track of amount of data flowing into and out of the FIFO
@@ -56,7 +61,21 @@ vunit i_one_stage_fifo(one_stage_fifo(synthesis))
    -- The FIFO size is limited to 1.
    f_size : assert always {0 <= f_count and f_count <= 1};
 
-   -- If FIFO is full, it must always present valid data on output
+   -- If FIFO is full, it must always present valid data on output.
+   --
+   -- Note for k-induction: do NOT add a blanket "m_data_r = f_last_value"
+   -- invariant here the way one_stage_buffer needed -- it would be false.
+   -- In this design m_data_r is captured whenever s_ready_s='1' regardless
+   -- of s_valid_i (while empty, s_ready_s is always '1', so m_data_r keeps
+   -- capturing s_data_i every idle cycle even when s_valid_i='0'), whereas
+   -- f_last_value only updates when s_valid_i='1' and s_ready_o='1'. They
+   -- can therefore legitimately differ while the FIFO is empty. Equality
+   -- is only required -- and only holds -- while f_count=1, which is
+   -- exactly this property. Hand-tracing the transition cases (accept into
+   -- full, hold while full, simultaneous read/write while full, drain to
+   -- empty) shows this property is preserved using only itself (plus
+   -- f_count_0/f_size) as the induction hypothesis, so no additional
+   -- auxiliary invariant should be needed for k-induction to close it.
    f_count_1 : assert always {f_count = 1} |-> {m_valid_o = '1' and m_data_o = f_last_value} abort rst_i;
 
    -- If FIFO is empty, no data present on output
@@ -78,5 +97,5 @@ vunit i_one_stage_fifo(one_stage_fifo(synthesis))
    -- Make sure FIFO can transition from full to empty.
    f_full_to_empty : cover {m_valid_o and not rst_i; not m_valid_o};
 
-} -- vunit i_one_stage_buffer(one_stage_buffer(synthesis))
+} -- vunit i_one_stage_fifo(one_stage_fifo(synthesis))
 

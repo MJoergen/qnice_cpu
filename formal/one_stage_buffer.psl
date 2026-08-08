@@ -18,8 +18,12 @@ vunit i_one_stage_buffer (one_stage_buffer(synthesis))
    -- Output must be stable until accepted or reset
    f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o)};
 
-   -- Ready must be stable until new data
-   f_ready_stable : assert always {s_ready_o and not s_valid_i and not rst_i} |=> {stable(s_ready_o)};
+   -- Ready must be stable until new data or reset.
+   -- "abort rst_i" is required here: s_ready_o is gated combinatorially by
+   -- rst_i (see s_ready_s in the RTL), so reset asserting at the very next
+   -- cycle legitimately changes s_ready_o even with no new data -- that is
+   -- not a stability violation, it is the intended reset behavior.
+   f_ready_stable : assert always {s_ready_o and not s_valid_i and not rst_i} |=> {stable(s_ready_o)} abort rst_i;
 
    -- Keep track of amount of data flowing into and out of the BUFFER
    p_count : process (clk_i)
@@ -69,6 +73,19 @@ vunit i_one_stage_buffer (one_stage_buffer(synthesis))
 
    -- If BUFFER is empty and no input, no data present on output
    f_state_1 : assert always {f_count = 1} |-> {s_afull_o = '1'} abort rst_i;
+
+   -- Auxiliary invariant required for k-induction (not strictly needed for
+   -- BMC): the RTL register m_data_r and the shadow register f_last_value
+   -- are both updated only under the identical accept condition
+   -- (s_valid_i='1' and s_ready_o='1'), with the same value (s_data_i), and
+   -- neither is touched by rst_i. BMC can infer they stay equal implicitly
+   -- by unrolling from the reset state; k-induction cannot assume any
+   -- particular reset history, so this equality must be stated explicitly
+   -- as a hypothesis the induction step can rely on (and trivially
+   -- preserves) in order to discharge f_count_1's m_data_o = f_last_value
+   -- claim. Holds unconditionally, including through reset, since neither
+   -- signal is cleared by rst_i.
+   f_inv_data_lockstep : assert always {m_data_r = f_last_value};
 
 
    -----------------------------
