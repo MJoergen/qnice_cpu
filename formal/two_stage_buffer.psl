@@ -15,14 +15,24 @@ vunit i_two_stage_buffer(two_stage_buffer(synthesis))
    -- BUFFER must be empty after reset, unless incoming data
    f_after_reset_empty : assert always {rst_i} |=> {not m_valid_o} abort s_valid_i;
 
-   -- BUFFER must be ready after reset
-   f_after_reset_ready : assert always {rst_i} |=> s_ready_o;
+   -- BUFFER must be ready after reset.
+   -- "abort rst_i" is required: top-level s_ready_o is stage 1's own
+   -- s_ready_s, which is gated by "and not rst_i" internally. If rst_i is
+   -- held for more than one cycle, s_ready_o is correctly forced back to
+   -- '0' on the following reset cycle -- that is intended behavior, not a
+   -- violation, so the property must not fire while rst_i is still
+   -- asserted at the consequent cycle.
+   f_after_reset_ready : assert always {rst_i} |=> s_ready_o abort rst_i;
 
    -- Output must be stable until accepted or reset
    f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o)};
 
-   -- Ready must be stable until new data
-   f_ready_stable : assert always {s_ready_o and not s_valid_i and not rst_i} |=> {stable(s_ready_o)};
+   -- Ready must be stable until new data or reset.
+   -- Same class of issue as f_after_reset_ready: with no new data, the
+   -- capture logic forces s_ready_o(k+1)='1' -- unless rst_i asserts at
+   -- k+1, in which case stage 1's internal rst_i-gating correctly drops it
+   -- to '0'. "abort rst_i" allows for that legitimate transition.
+   f_ready_stable : assert always {s_ready_o and not s_valid_i and not rst_i} |=> {stable(s_ready_o)} abort rst_i;
 
    -- Keep track of amount of data flowing into and out of the BUFFER
    p_count : process (clk_i)
@@ -62,7 +72,23 @@ vunit i_two_stage_buffer(two_stage_buffer(synthesis))
    -- Verify BUFFER filling
    f_fill : assert always {f_count = to_integer(s_fill_o)};
 
-   -- Verify internal signal. This is needed for induction proof
+   -- Verify internal signal. This is needed for induction proof.
+   --
+   -- Stage 1 can never be occupied while stage 2 is empty: this transparent
+   -- 2-stage pipe always fills "from the back" (stage 2 first), so
+   -- (s_afull, int_afull) = (1, 0) is unreachable. Without this stated
+   -- explicitly, k-induction has no reason to exclude that combination,
+   -- which would make s_fill_o's priority encoding ("00" whenever
+   -- int_afull='0', regardless of s_afull) misreport occupancy. Confirmed
+   -- by hand-tracing all transitions out of the three reachable states
+   -- (0,0)/(0,1)/(1,1): this property is preserved using only itself as
+   -- the induction hypothesis, so it should not itself be a blocker.
+   --
+   -- f_fill below is the deeper composition (it ties the top-level f_count
+   -- counter to both stages' occupancy at once) and is the more likely
+   -- place induction still has trouble, even with this invariant present.
+   -- If it does, the next lemma to add would tie f_count directly to
+   -- (s_afull, int_afull), e.g. f_count = 0 <-> (not s_afull and not int_afull).
    f_internal : assert always {not int_afull} |-> {not s_afull};
 
 
