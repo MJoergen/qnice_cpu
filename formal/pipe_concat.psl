@@ -40,5 +40,11 @@ vunit i_pipe_concat(pipe_concat(synthesis))
    -- Make sure output can stay valid for two clock cycles.
    f_back2back : cover {m_valid_o and m_ready_i; m_valid_o};
 
-} -- vunit i_one_stage_buffer(one_stage_buffer(synthesis))
+   -- s0 arrives first, then s1 completes the beat
+   f_s0_waits : cover {s0_valid_i and not s1_valid_i and not rst_i; m_valid_o and m_ready_i};
+
+   -- s1 arrives first, then s0 completes the beat
+   f_s1_waits : cover {s1_valid_i and not s0_valid_i and not rst_i; m_valid_o and m_ready_i};
+
+} -- vunit i_pipe_concat(pipe_concat(synthesis))
 
