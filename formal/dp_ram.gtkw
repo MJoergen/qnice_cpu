@@ -1,14 +1,14 @@
 [*]
-[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Sat Mar 27 15:51:15 2021
+[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*] Mon Aug 10 09:54:50 2026
 [*]
-[dumpfile] "/home/mike/git/MJoergen/qnice_cpu2/formal/dp_ram_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Sat Mar 27 15:48:06 2021"
-[dumpfile_size] 1673
-[savefile] "/home/mike/git/MJoergen/qnice_cpu2/formal/dp_ram.gtkw"
+[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/formal/dp_ram_block/engine_0/trace.vcd"
+[dumpfile_mtime] "Mon Aug 10 09:54:09 2026"
+[dumpfile_size] 1839
+[savefile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/formal/dp_ram.gtkw"
 [timestart] 0
 [size] 1571 823
-[pos] -1912 -20
+[pos] -1 -1
 *-3.308034 25 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] dp_ram.
 [sst_width] 249
@@ -33,5 +33,8 @@ dp_ram.i_dp_ram.c_addr[3:0]
 dp_ram.i_dp_ram.f_data[7:0]
 @28
 dp_ram.i_dp_ram.f_written
+@22
+dp_ram.rd_data[7:0]
+dp_ram.dp_ram_r<5>[7:0]
 [pattern_trace] 1
 [pattern_trace] 0

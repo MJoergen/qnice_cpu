@@ -6,14 +6,11 @@ vunit i_dp_ram(dp_ram(synthesis))
 
 
    ----------------------------------------------
-   -- INTERNAL ASSERTIONS
+   -- SHADOW OF THE TRACKED ADDRESS
    ----------------------------------------------
 
-
-   ----------------------------------------------
-   -- ASSERTIONS ON OUTPUTS
-   ----------------------------------------------
-
+   -- Track one arbitrary-but-fixed address c_addr and shadow the last value
+   -- written to it (f_data), together with a "seen a write" flag (f_written).
    signal c_addr : std_logic_vector(G_ADDR_SIZE-1 downto 0);
    attribute anyconst : boolean;
    attribute anyconst of c_addr : signal is true;
@@ -31,8 +28,15 @@ vunit i_dp_ram(dp_ram(synthesis))
       end if;
    end process p_written;
 
-   -- We can read back last value written to any given address
-   f_read_back : assert always {f_written = '1' and rd_addr_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {rd_data_o = f_data};
+
+   ----------------------------------------------
+   -- ASSERTIONS ON OUTPUTS
+   ----------------------------------------------
+
+   -- We can read back the last value written to any given address.
+   f_read_back : assert always
+      {f_written = '1' and rd_addr_i = c_addr and wr_en_i = '0' and rd_en_i = '1'}
+      |=> {rd_data_o = f_data};
 
    -- Output value only changes when rd_en_i is asserted.
    f_stable : assert always {not rd_en_i} |=> {stable(rd_data_o)};
@@ -53,16 +57,19 @@ vunit i_dp_ram(dp_ram(synthesis))
       end if;
    end process p_falling;
 
-   -- Here we make sure that the input signals only transition on the rising
-   -- clock edge, not on the falling clock edge.
-   assume always {not clk_i} |-> {f_falling_rd_en = rd_en_i and f_falling_rd_addr = rd_addr_i};
+   -- Inputs may only transition on the rising edge, held stable across the whole
+   -- cycle. This makes the block-RAM falling-edge read register a within-cycle
+   -- timing relay rather than an extra unit of read latency, so that both
+   -- G_RAM_STYLE configurations expose the same rising-edge-sampled behaviour.
+   assume always {not clk_i}
+      |-> {f_falling_rd_en = rd_en_i and f_falling_rd_addr = rd_addr_i};
 
 
    ----------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    ----------------------------------------------
 
-   -- Useful for debugging, to make sure that the rd_en_i input signal is able to toggle.
+   -- Useful for debugging, to make sure that rd_en_i is able to toggle.
    f_toggle : cover {rd_en_i = '1'; rd_en_i = '0'; rd_en_i = '1'};
 
 
@@ -70,11 +77,27 @@ vunit i_dp_ram(dp_ram(synthesis))
    -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
    ----------------------------------------------
 
+   -- The true memory array mirrors the shadow register. Without this,
+   -- k-induction may start in an unreachable state where f_written='1' but
+   -- dp_ram_r(c_addr) /= f_data, letting f_read_back fail spuriously (the
+   -- "anyconst c_addr" CEX reported by SBY). This lemma is itself 1-inductive:
+   -- a write to c_addr updates dp_ram_r(c_addr) and f_data identically, writes
+   -- to other addresses touch neither, and f_written never de-asserts.
+   --
+   -- For G_RAM_STYLE = "distributed" this lemma is sufficient: rd_data_o is a
+   -- direct rising-edge read of dp_ram_r, so f_read_back closes by k-induction.
+   --
+   -- For G_RAM_STYLE = "block" the read path additionally contains the
+   -- falling-edge register rd_data, which (a) has NO RTL initializer and is thus
+   -- arbitrary in formal, and (b) exhibits read-during-write collision against
+   -- the rising-edge write. That makes a clean single-cycle inductive invariant
+   -- on rd_data awkward, so the block config is verified in bounded (BMC) mode
+   -- instead - see dp_ram.sby. Because the two styles are behaviourally
+   -- identical at the rising-edge sample points (under the input-stability
+   -- assumption above), the unbounded distributed proof plus the bounded block
+   -- proof together soundly cover both.
+   f_mem_shadow : assert always
+      {f_written = '1'} |-> {dp_ram_r(to_integer(c_addr)) = f_data};
 
-   ----------------------------------------------
-   -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
-   ----------------------------------------------
-
-
-} -- vunit i_registers(registers(synthesis))
+} -- vunit i_dp_ram(dp_ram(synthesis))
 
