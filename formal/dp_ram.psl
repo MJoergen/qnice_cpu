@@ -86,18 +86,37 @@ vunit i_dp_ram(dp_ram(synthesis))
    --
    -- For G_RAM_STYLE = "distributed" this lemma is sufficient: rd_data_o is a
    -- direct rising-edge read of dp_ram_r, so f_read_back closes by k-induction.
-   --
    -- For G_RAM_STYLE = "block" the read path additionally contains the
-   -- falling-edge register rd_data, which (a) has NO RTL initializer and is thus
-   -- arbitrary in formal, and (b) exhibits read-during-write collision against
-   -- the rising-edge write. That makes a clean single-cycle inductive invariant
-   -- on rd_data awkward, so the block config is verified in bounded (BMC) mode
-   -- instead - see dp_ram.sby. Because the two styles are behaviourally
-   -- identical at the rising-edge sample points (under the input-stability
-   -- assumption above), the unbounded distributed proof plus the bounded block
-   -- proof together soundly cover both.
+   -- falling-edge register rd_data, which needs its own mirror invariant --
+   -- see f_rd_data below.
    f_mem_shadow : assert always
       {f_written = '1'} |-> {dp_ram_r(to_integer(c_addr)) = f_data};
+
+   -- Block config only: throughout the low phase of the clock, the falling-edge
+   -- staging register mirrors the memory word at the address it captured
+   -- (f_falling_rd_addr): the falling edge has just refreshed it, and no write
+   -- can intervene before the next rising edge. Without this lemma, induction
+   -- may start in an unreachable state where rd_data holds a value that never
+   -- came out of the memory; the next rising edge then forwards that garbage
+   -- into rd_data_o exactly when f_read_back samples it (the classic induction
+   -- CEX for this design: clk_i parked low for the whole trace, one final
+   -- rising edge, f_read_back fails).
+   --
+   -- The guard clk_i = '0' matters: during the high phase the mirror may
+   -- legitimately be stale, namely when the rising edge that opened the phase
+   -- wrote the very address rd_data had captured (read-during-write collision;
+   -- the following falling edge resolves it). Restricting the lemma to the low
+   -- phase makes it both true and inductive, and the low phase is exactly the
+   -- state the read path consumes: every rising edge loads rd_data_o out of a
+   -- low-phase state, so pinning rd_data there is sufficient for f_read_back.
+   --
+   -- For G_RAM_STYLE = "distributed" the consequent folds to a constant true
+   -- (rd_data is unused in that config). The style test lives in the consequent
+   -- rather than the antecedent so that the antecedent stays reachable in both
+   -- configs, keeping the auto-generated precondition cover satisfied.
+   f_rd_data : assert always
+      {clk_i = '0'}
+      |-> {G_RAM_STYLE /= "block" or rd_data = dp_ram_r(to_integer(f_falling_rd_addr))};
 
 } -- vunit i_dp_ram(dp_ram(synthesis))
 

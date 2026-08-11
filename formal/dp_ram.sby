@@ -35,6 +35,7 @@ bmc_distributed    bmc    distributed
 cover_distributed  cover  distributed
 bmc_block          bmc    block
 cover_block        cover  block
+prove_block        prove  block
 
 [options]
 prove: mode prove
