@@ -57,7 +57,8 @@ vunit i_memory(memory(synthesis))
    f_wb_master_stb_low : assert always {not wb_cyc_o} |-> {not wb_stb_o};
 
    -- WISHBONE MASTER: While a request is stalled it cannot change, except on reset or abort.
---   f_wb_master_stable : assert always {wb_stb_o and wb_stall_i and not rst_i} |=> {stable(wb_stb_o) and stable(wb_addr_o)};
+   f_wb_master_stable : assert always {wb_stb_o and wb_stall_i and not rst_i} |=>
+     {rst_i = '1' or (stable(wb_stb_o) and stable(wb_addr_o) and stable(wb_we_o) and stable(wb_dat_o))};
 
 
    -----------------------------
@@ -158,6 +159,15 @@ vunit i_memory(memory(synthesis))
    f_exe_src_req_count_max : assume always {f_exe_src_req_count <= 2};
    f_exe_dst_req_count_max : assume always {f_exe_dst_req_count <= 2};
 
+   -- EXECUTE producer contract: while a request is offered but not yet
+   -- accepted (mreq_ready_o low), valid must stay asserted and the payload
+   -- must remain stable. This mirrors how the real EXECUTE stage behaves and
+   -- is what the combinational Wishbone request path relies on.
+   f_mreq_stable : assume always
+      {mreq_valid_i and not mreq_ready_o and not rst_i} |=>
+      {mreq_valid_i = '1' and stable(mreq_op_i)
+                          and stable(mreq_addr_i)
+                          and stable(mreq_data_i)};
 
    --------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY

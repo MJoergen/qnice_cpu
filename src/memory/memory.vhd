@@ -1,21 +1,26 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
-use work.cpu_constants.all;
+use work.cpu_constants.C_MEM_READ_SRC;
+use work.cpu_constants.C_MEM_READ_DST;
+use work.cpu_constants.C_MEM_WRITE;
+
+-- This module multiplexes one AXI write and two AXI read channels into a single
+-- Wishbone Master interface.
 
 entity memory is
    port (
       clk_i        : in  std_logic;
       rst_i        : in  std_logic;
 
-      -- From execute
+      -- From EXECUTE
       mreq_valid_i : in  std_logic;
       mreq_ready_o : out std_logic;
       mreq_op_i    : in  std_logic_vector(2 downto 0);
       mreq_addr_i  : in  std_logic_vector(15 downto 0);
       mreq_data_i  : in  std_logic_vector(15 downto 0);
 
-      -- To execute
+      -- To EXECUTE
       msrc_valid_o : out std_logic;
       msrc_ready_i : in  std_logic;
       msrc_data_o  : out std_logic_vector(15 downto 0);
@@ -24,7 +29,7 @@ entity memory is
       mdst_ready_i : in  std_logic;
       mdst_data_o  : out std_logic_vector(15 downto 0);
 
-      -- Memory
+      -- Wishbone Master interface to external memory
       wb_cyc_o     : out std_logic;
       wb_stb_o     : out std_logic;
       wb_stall_i   : in  std_logic;
@@ -37,6 +42,12 @@ entity memory is
 end entity memory;
 
 architecture synthesis of memory is
+
+   constant C_WB_WE : natural := 32;
+   subtype  R_WB_DATA is natural range 31 downto 16;
+   subtype  R_WB_ADDR is natural range 15 downto 0;
+
+   signal mreq_accept : std_logic;
 
    signal osf_mem_in_valid  : std_logic;
    signal osf_mem_in_ready  : std_logic;
@@ -53,16 +64,35 @@ architecture synthesis of memory is
 
 begin
 
-   mreq_ready_o <= not (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i)
-               and not (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i);
+   -- Accept request, EXCEPT when any one of:
+   -- * SRC read data is presented, but not yet accepted
+   -- * DST read data is presented, but not yet accepted
+   mreq_accept <= '0' when (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i) = '1' else
+                  '0' when (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i) = '1' else
+                  '1';
 
+   -- Buffer Wishbone request until it is accepted (wb_stall_i = '0').
+   i_one_stage_buffer_wb : entity work.one_stage_buffer
+      generic map (
+         G_DATA_SIZE => 33
+      )
+      port map (
+         clk_i               => clk_i,
+         rst_i               => rst_i,
+         s_valid_i           => mreq_valid_i and mreq_accept,
+         s_ready_o           => mreq_ready_o,
+         s_data_i(C_WB_WE)   => mreq_op_i(C_MEM_WRITE),
+         s_data_i(R_WB_DATA) => mreq_data_i,
+         s_data_i(R_WB_ADDR) => mreq_addr_i,
+         m_valid_o           => wb_stb_o,
+         m_ready_i           => not wb_stall_i,
+         m_data_o(C_WB_WE)   => wb_we_o,
+         m_data_o(R_WB_DATA) => wb_dat_o,
+         m_data_o(R_WB_ADDR) => wb_addr_o
+      ); -- i_one_stage_buffer_wb
 
-   -- WISHBONE request interface is combinatorial
-   wb_cyc_o  <= ((mreq_valid_i and mreq_ready_o) or wait_for_ack) and not rst_i;
-   wb_stb_o  <= wb_cyc_o and mreq_valid_i and mreq_ready_o;
-   wb_addr_o <= mreq_addr_i;
-   wb_we_o   <= mreq_valid_i and mreq_op_i(C_MEM_WRITE);
-   wb_dat_o  <= mreq_data_i;
+   wb_cyc_o <= (wb_stb_o or wait_for_ack) and not rst_i;
+
 
    p_wait_for_ack : process (clk_i)
    begin

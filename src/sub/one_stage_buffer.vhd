@@ -156,7 +156,7 @@ begin
    s_afull_o <= m_valid_r;
    s_ready_o <= s_ready_s;
    m_data_o  <= m_data_r when m_valid_r = '1' else s_data_i;
-   m_valid_o <= m_valid_r or (s_valid_i and not rst_i);
+   m_valid_o <= (m_valid_r or s_valid_i) and not rst_i;
 
 end architecture synthesis;
 
