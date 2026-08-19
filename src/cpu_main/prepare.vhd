@@ -53,14 +53,14 @@ begin
 
    i_sequencer : entity work.sequencer
       port map (
-         clk_i        => clk_i,
-         rst_i        => rst_i,
-         dec_valid_i  => dec_valid_i,
-         dec_ready_o  => dec_ready_o,
-         dec_stage_i  => dec_stage_i,
-         prep_valid_o => seq_valid,
-         prep_ready_i => seq_ready,
-         prep_stage_o => seq_stage
+         clk_i     => clk_i,
+         rst_i     => rst_i,
+         s_valid_i => dec_valid_i,
+         s_ready_o => dec_ready_o,
+         s_stage_i => dec_stage_i,
+         m_valid_o => seq_valid,
+         m_ready_i => seq_ready,
+         m_stage_o => seq_stage
       ); -- i_sequencer
 
 

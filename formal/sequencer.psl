@@ -14,25 +14,63 @@ vunit i_sequencer(sequencer(synthesis))
    -- PROPERTIES OF THE OUTPUT INTERFACE
    ---------------------------------------
 
-   f_stable : assert always {prep_valid_o and not prep_ready_i and not rst_i} |=> {stable(prep_valid_o) and stable(prep_stage_o)};
---   f_ready : assert always {s_ready_o and not s_valid_i} |=> {stable(s_ready_o)};
+   -- Output payload/valid are held stable while stalled downstream
+   f_stable : assert always
+      {m_valid_o and not m_ready_i and not rst_i} |=>
+      {stable(m_valid_o) and stable(m_stage_o)};
+
+   -- Output valid is a pure pass-through of input valid
+   f_valid_follows : assert always {m_valid_o = s_valid_i};
+
+   -- No new input is accepted before the last chunk has been presented
+   f_hold_until_last : assert always
+      {m_valid_o = '1' and m_stage_o.microcodes(C_LAST) = '0'} |-> {s_ready_o = '0'};
+
+
+   ----------------------------------------------
+   -- SEQUENCE INDEX INVARIANTS (aid k-induction)
+   ----------------------------------------------
+
+   -- Advance by one on an accepted non-last beat
+   f_index_advance : assert always
+      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcodes(C_LAST) = '0' and rst_i = '0'} |=>
+      {index = prev(index) + 1};
+
+   -- Restart at 0 after an accepted last beat
+   f_index_restart : assert always
+      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcodes(C_LAST) = '1' and rst_i = '0'} |=>
+      {index = 0};
+
+   -- Hold index when no beat is accepted
+   f_index_stable : assert always
+      {not (m_valid_o and m_ready_i) and not rst_i} |=> {stable(index)};
 
 
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
 
-   assume always {dec_valid_i and not dec_ready_o} |=> {stable(dec_valid_i) and stable(dec_stage_i)};
+   -- Upstream (DECODE) holds valid + payload until accepted
+   assume always
+      {s_valid_i and not s_ready_o} |=> {stable(s_valid_i) and stable(s_stage_i)};
+
+   -- Contract: 'last' must be set no later than chunk 3, else 'index'
+   -- overflows its 0..3 subtype (see CONTRACT note in sequencer.vhd).
+   assume always
+      {index = 3 and m_valid_o = '1'} |-> {m_stage_o.microcodes(C_LAST) = '1'};
 
 
    --------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    --------------------------------------------
 
+   -- A non-last (multi-chunk) beat is reachable
+   c_multi_chunk : cover
+      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcodes(C_LAST) = '0'};
 
-   ----------------------------------------------
-   -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
-   ----------------------------------------------
+   -- A sequence completes (last beat accepted)
+   c_last_chunk : cover
+      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcodes(C_LAST) = '1'};
 
 
    ----------------------------------------------

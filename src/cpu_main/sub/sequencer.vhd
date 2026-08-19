@@ -1,52 +1,93 @@
 library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std.all;
 
-use work.cpu_constants.all;
+use work.cpu_constants.t_stage;
+use work.cpu_constants.C_LAST;
+use work.cpu_constants.C_UCODE_BITS;
+
+-- This module accepts a list of microcode instructions (in
+-- s_stage_i.microcodes) and sequences them into fixed-width chunks
+-- (in m_stage_o.microcodes), emitting one chunk per PREPARE beat.
+--
+-- One DECODE beat (s_valid_i) is expanded into N PREPARE beats
+-- (m_valid_o), where N is the number of chunks up to and including the
+-- chunk whose C_LAST bit is set. A new DECODE beat is not accepted until
+-- the chunk marked 'last' has been accepted downstream.
+--
+-- CONTRACT: The C_LAST bit MUST be set no later than chunk index 3.
+-- 'index' has subtype range 0 to 3; a fifth (index = 4) chunk would
+-- violate the range. This contract is enforced formally in sequencer.psl
+-- (see the "index = 3 |-> last" assume).
 
 entity sequencer is
    port (
-      clk_i        : in  std_logic;
-      rst_i        : in  std_logic;
-      dec_valid_i  : in  std_logic;
-      dec_ready_o  : out std_logic;
-      dec_stage_i  : in  t_stage;
-      prep_valid_o : out std_logic;
-      prep_ready_i : in  std_logic;
-      prep_stage_o : out t_stage
+      clk_i     : in    std_logic;
+      rst_i     : in    std_logic;
+      -- Connect to DECODE
+      s_valid_i : in    std_logic;
+      s_ready_o : out   std_logic;
+      s_stage_i : in    t_stage;
+      -- Connect to PREPARE
+      m_valid_o : out   std_logic;
+      m_ready_i : in    std_logic;
+      m_stage_o : out   t_stage
    );
 end entity sequencer;
 
 architecture synthesis of sequencer is
 
-   signal index : integer range 0 to 3 := 0;
+   -- Index of the chunk currently being presented on m_stage_o.
+   -- Range 0 to 3 => at most four chunks per DECODE beat (see CONTRACT).
+   signal index : natural range 0 to 3 := 0;
 
 begin
 
-   dec_ready_o <= '0' when dec_valid_i = '1' and prep_stage_o.microcodes(C_LAST) = '0' else prep_ready_i;
+   -- Elaboration-time sanity check: the C_LAST flag must live inside the
+   -- low chunk slice that p_output overwrites; otherwise 'last' would be
+   -- read from a stale upper bit of the raw, unselected microcode list.
+   assert C_LAST < C_UCODE_BITS
+      report "C_LAST must be inside the chunk slice (C_LAST < C_UCODE_BITS)"
+      severity failure;
 
+   -- Accept a new sequence only when the microcode chunk marked 'last' is
+   -- being accepted. While a non-last chunk is presented, hold s_ready_o
+   -- low so DECODE keeps the same list stable across the whole sequence.
+   s_ready_o <= '0' when m_valid_o = '1' and m_stage_o.microcodes(C_LAST) = '0' else
+                m_ready_i;
+
+   -- Advance the chunk index on every accepted PREPARE beat, wrapping back
+   -- to 0 once the 'last' chunk has been accepted.
    p_index : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if prep_valid_o and prep_ready_i then
-            if dec_ready_o then
+         if m_valid_o = '1' and m_ready_i = '1' then
+            if m_stage_o.microcodes(C_LAST) = '1' then
                index <= 0;
             else
                index <= index + 1;
             end if;
          end if;
 
-         if rst_i then
+         if rst_i = '1' then
             index <= 0;
          end if;
       end if;
    end process p_index;
 
+   -- Combinatorial output, to avoid inserting latency into the pipeline.
+   --
+   -- The full input stage is forwarded first (this also carries any fields
+   -- other than 'microcodes'), then the low C_UCODE_BITS slice of
+   -- 'microcodes' is overwritten with the selected chunk. NOTE: the upper
+   -- bits of m_stage_o.microcodes still hold the raw, unselected list;
+   -- downstream logic MUST consume only bits (C_UCODE_BITS-1 downto 0).
    p_output : process (all)
    begin
-      prep_valid_o <= dec_valid_i;
-      prep_stage_o <= dec_stage_i;
-      prep_stage_o.microcodes(11 downto 0) <= dec_stage_i.microcodes((index+1)*12-1 downto index*12);
+      m_valid_o <= s_valid_i;
+      m_stage_o <= s_stage_i;
+      m_stage_o.microcodes(C_UCODE_BITS - 1 downto 0) <=
+         s_stage_i.microcodes((index + 1) * C_UCODE_BITS - 1 downto index * C_UCODE_BITS);
    end process p_output;
 
 end architecture synthesis;

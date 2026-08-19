@@ -83,6 +83,8 @@ package cpu_constants is
    constant C_MEM_READ_DST : integer := 1;   -- memory to destination
    constant C_MEM_WRITE    : integer := 0;   -- write to memory
 
+   constant C_UCODE_BITS   : positive := 12;
+
    constant C_VAL_LAST         : std_logic_vector(11 downto 0) := (C_LAST         => '1', others => '0');
    constant C_VAL_REG_MOD_SRC  : std_logic_vector(11 downto 0) := (C_REG_MOD_SRC  => '1', others => '0');
    constant C_VAL_REG_MOD_DST  : std_logic_vector(11 downto 0) := (C_REG_MOD_DST  => '1', others => '0');
