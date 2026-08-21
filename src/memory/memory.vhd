@@ -5,8 +5,10 @@ use work.cpu_constants.C_MEM_READ_SRC;
 use work.cpu_constants.C_MEM_READ_DST;
 use work.cpu_constants.C_MEM_WRITE;
 
--- This module multiplexes one AXI write and two AXI read channels into a single
--- Wishbone Master interface.
+-- This module multiplexes one request channel and two readback channels into a
+-- single Wishbone Master interface. It's required of the Wishbone slave that
+-- requests are ack'ed in the same order.
+-- At most two outstanding requests are allowed.
 
 entity memory is
    port (
@@ -60,7 +62,7 @@ architecture synthesis of memory is
    signal osb_dst_in_valid  : std_logic;
    signal osb_dst_in_ready  : std_logic;
 
-   signal wait_for_ack      : std_logic;
+   signal wait_for_ack      : natural range 0 to 2;
 
 begin
 
@@ -91,22 +93,25 @@ begin
          m_data_o(R_WB_ADDR) => wb_addr_o
       ); -- i_one_stage_buffer_wb
 
-   wb_cyc_o <= (wb_stb_o or wait_for_ack) and not rst_i;
+   wb_cyc_o <= '1' when (wb_stb_o = '1' or wait_for_ack > 0) and rst_i = '0' else
+               '0';
 
 
    p_wait_for_ack : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if wb_cyc_o and wb_ack_i then
-            wait_for_ack <= '0';
+         -- Request without response
+         if (wb_cyc_o and wb_stb_o and not wb_stall_i) and not (wb_cyc_o and wb_ack_i) then
+            wait_for_ack <= wait_for_ack + 1;
          end if;
 
-         if wb_cyc_o and wb_stb_o and not wb_stall_i then
-            wait_for_ack <= '1';
+         -- Reponse without request
+         if not (wb_cyc_o and wb_stb_o and not wb_stall_i) and (wb_cyc_o and wb_ack_i) then
+            wait_for_ack <= wait_for_ack - 1;
          end if;
 
          if rst_i = '1' then
-            wait_for_ack <= '0';
+            wait_for_ack <= 0;
          end if;
       end if;
    end process p_wait_for_ack;
@@ -118,7 +123,8 @@ begin
 
    osf_mem_in_valid <= mreq_valid_i and mreq_ready_o and (mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST));
 
-   i_one_stage_fifo_mem : entity work.one_stage_fifo
+   -- Two-word FIFO with registered output
+   i_two_stage_fifo_mem : entity work.two_stage_fifo
       generic map (
          G_DATA_SIZE => 1
       )
@@ -129,18 +135,22 @@ begin
          s_ready_o   => osf_mem_in_ready,
          s_data_i(0) => mreq_op_i(C_MEM_READ_SRC),
          m_valid_o   => osf_mem_out_valid,
-         m_ready_i   => wb_cyc_o and wb_ack_i,
+         m_ready_i   => osf_mem_out_ready,
          m_data_o(0) => osf_mem_out_data
-      ); -- i_one_stage_fifo_mem
+      ); -- i_two_stage_fifo_mem
+
+   osf_mem_out_ready <= wb_cyc_o and wb_ack_i;
 
 
    ------------------------------------------
    -- Store the response for the SRC output
    ------------------------------------------
 
-   osb_src_in_valid <= wait_for_ack and wb_ack_i and osf_mem_out_valid and osf_mem_out_data;
+   osb_src_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and osf_mem_out_valid = '1' and osf_mem_out_data = '1' else
+                       '0';
 
-   i_one_stage_buffer_src : entity work.one_stage_buffer
+   -- Two-word FIFO with zero-latency forwarding
+   i_two_stage_buffer_src : entity work.two_stage_buffer
       generic map (
          G_DATA_SIZE => 16
       )
@@ -153,16 +163,18 @@ begin
          m_valid_o => msrc_valid_o,
          m_ready_i => msrc_ready_i,
          m_data_o  => msrc_data_o
-      ); -- i_one_stage_buffer_src
+      ); -- i_two_stage_buffer_src
 
 
    ------------------------------------------
    -- Store the response for the DST output
    ------------------------------------------
 
-   osb_dst_in_valid <= wait_for_ack and wb_ack_i and osf_mem_out_valid and not osf_mem_out_data;
+   osb_dst_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and osf_mem_out_valid = '1' and osf_mem_out_data = '0' else
+                       '0';
 
-   i_one_stage_buffer_dst : entity work.one_stage_buffer
+   -- Two-word FIFO with zero-latency forwarding
+   i_two_stage_buffer_dst : entity work.two_stage_buffer
       generic map (
          G_DATA_SIZE => 16
       )
@@ -175,7 +187,7 @@ begin
          m_valid_o => mdst_valid_o,
          m_ready_i => mdst_ready_i,
          m_data_o  => mdst_data_o
-      ); -- i_one_stage_buffer_dst
+      ); -- i_two_stage_buffer_dst
 
 end architecture synthesis;
 

@@ -12,7 +12,8 @@ cover: depth 10
 smtbmc
 
 [script]
-ghdl --std=08 memory.vhd memory.psl one_stage_buffer.vhd one_stage_fifo.vhd cpu_constants.vhd -e memory
+ghdl --std=08 memory.vhd memory.psl one_stage_buffer.vhd one_stage_fifo.vhd \
+     two_stage_buffer.vhd two_stage_fifo.vhd cpu_constants.vhd -e memory
 prep -top memory
 
 [files]
@@ -21,4 +22,6 @@ memory.psl
 ../src/memory/memory.vhd
 ../src/sub/one_stage_buffer.vhd
 ../src/sub/one_stage_fifo.vhd
+../src/sub/two_stage_buffer.vhd
+../src/sub/two_stage_fifo.vhd
 

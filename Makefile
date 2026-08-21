@@ -50,6 +50,7 @@ WAVE          = test/$(TB).ghw
 SAVE          = test/$(TB).gtkw
 
 TOP = system
+STOP_TIME = 850us
 
 
 ################################################
@@ -83,7 +84,7 @@ sim: $(WAVE)
 $(WAVE): $(SOURCES) $(TEST_SOURCES) $(ROM)
 	ghdl -i --std=08 $(SOURCES) $(TEST_SOURCES)
 	ghdl -m --std=08 -frelaxed $(TB)
-	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=850us -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH)
+	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=$(STOP_TIME) -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH)
 
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
