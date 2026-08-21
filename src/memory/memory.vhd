@@ -53,14 +53,17 @@ architecture synthesis of memory is
 
    signal osf_mem_in_valid  : std_logic;
    signal osf_mem_in_ready  : std_logic;
+   signal osf_mem_fill      : natural range 0 to 2;
    signal osf_mem_out_valid : std_logic;
    signal osf_mem_out_ready : std_logic;
    signal osf_mem_out_data  : std_logic;
 
    signal osb_src_in_valid  : std_logic;
    signal osb_src_in_ready  : std_logic;
+   signal osb_src_fill      : natural range 0 to 2;
    signal osb_dst_in_valid  : std_logic;
    signal osb_dst_in_ready  : std_logic;
+   signal osb_dst_fill      : natural range 0 to 2;
 
    signal wait_for_ack      : natural range 0 to 2;
 
@@ -71,6 +74,8 @@ begin
    -- * DST read data is presented, but not yet accepted
    mreq_accept <= '0' when (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i) = '1' else
                   '0' when (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i) = '1' else
+                  '0' when ((mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST))
+                            and not osf_mem_in_ready) = '1' else
                   '1';
 
    -- Buffer Wishbone request until it is accepted (wb_stall_i = '0').
@@ -121,7 +126,7 @@ begin
    -- Store the request
    ----------------------
 
-   osf_mem_in_valid <= mreq_valid_i and mreq_ready_o and (mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST));
+   osf_mem_in_valid <= mreq_valid_i and mreq_ready_o and mreq_accept and (mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST));
 
    -- Two-word FIFO with registered output
    i_two_stage_fifo_mem : entity work.two_stage_fifo
@@ -134,6 +139,7 @@ begin
          s_valid_i   => osf_mem_in_valid,
          s_ready_o   => osf_mem_in_ready,
          s_data_i(0) => mreq_op_i(C_MEM_READ_SRC),
+         s_fill_o    => osf_mem_fill,
          m_valid_o   => osf_mem_out_valid,
          m_ready_i   => osf_mem_out_ready,
          m_data_o(0) => osf_mem_out_data
@@ -160,6 +166,7 @@ begin
          s_valid_i => osb_src_in_valid,
          s_ready_o => osb_src_in_ready,
          s_data_i  => wb_data_i,
+         s_fill_o  => osb_src_fill,
          m_valid_o => msrc_valid_o,
          m_ready_i => msrc_ready_i,
          m_data_o  => msrc_data_o
@@ -184,6 +191,7 @@ begin
          s_valid_i => osb_dst_in_valid,
          s_ready_o => osb_dst_in_ready,
          s_data_i  => wb_data_i,
+         s_fill_o  => osb_dst_fill,
          m_valid_o => mdst_valid_o,
          m_ready_i => mdst_ready_i,
          m_data_o  => mdst_data_o

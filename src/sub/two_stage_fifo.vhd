@@ -15,9 +15,9 @@
 -- s_fill_o is derived combinationally from them rather than from a separate
 -- counter.  The encoding is:
 --
---    "00" : empty
---    "01" : one word held, room for one more
---    "10" : full
+--    0 : empty
+--    1 : one word held, room for one more
+--    2 : full
 --
 -- INTERFACE CONTRACTS -- these are requirements on the environment:
 --
@@ -64,7 +64,7 @@ entity two_stage_fifo is
       s_valid_i : in  std_logic;
       s_ready_o : out std_logic;
       s_data_i  : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
-      s_fill_o  : out std_logic_vector(1 downto 0);
+      s_fill_o  : out natural range 0 to 2;
       m_valid_o : out std_logic;
       m_ready_i : in  std_logic;
       m_data_o  : out std_logic_vector(G_DATA_SIZE-1 downto 0)
@@ -89,9 +89,9 @@ begin
    -- output.  Deriving it from s_ready_o would make a flush cycle report the
    -- FIFO as full, since the gate forces s_ready_o low; the stored occupancy
    -- has not actually changed at that point.
-   s_fill_o <= "00" when m_valid_r = '0' else
-               "01" when m_valid_r = '1' and s_ready_r = '1' else
-               "10"; --  when m_valid_r = '1' and s_ready_r = '0'
+   s_fill_o <= 0 when m_valid_r = '0' else
+               1 when m_valid_r = '1' and s_ready_r = '1' else
+               2; --  when m_valid_r = '1' and s_ready_r = '0'
 
 
    p_s_data : process (clk_i)

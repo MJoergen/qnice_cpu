@@ -9,8 +9,8 @@
 -- downstream is ready -- see one_stage_buffer's header for the timing
 -- implications of that (both directions become combinatorial when empty).
 --
--- s_fill_o reports the number of items currently stored (0, 1, or 2) as
--- an unsigned value in "01" downto "00"/.../"10" encoding. Its priority-mux
+-- s_fill_o reports the number of items currently stored (0, 1, or 2).
+-- Its priority-mux
 -- implementation relies on an invariant that is NOT locally visible in this
 -- file: the pipeline always fills "from the back", i.e. the first stage
 -- (s_afull) can only be occupied while the second stage (int_afull) is
@@ -36,7 +36,7 @@ entity two_stage_buffer is
       s_valid_i : in  std_logic;
       s_ready_o : out std_logic;
       s_data_i  : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
-      s_fill_o  : out std_logic_vector(1 downto 0);
+      s_fill_o  : out natural range 0 to 2;
       m_valid_o : out std_logic;
       m_ready_i : in  std_logic;
       m_data_o  : out std_logic_vector(G_DATA_SIZE-1 downto 0)
@@ -61,9 +61,9 @@ architecture synthesis of two_stage_buffer is
 
 begin
 
-   s_fill_o <= "00" when not int_afull else
-               "01" when not s_afull else
-               "10";
+   s_fill_o <= 0 when not int_afull else
+               1 when not s_afull else
+               2;
 
    -- First stage: accepts data from the external upstream interface.
    i_osb_first : entity work.one_stage_buffer
