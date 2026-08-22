@@ -16,7 +16,7 @@
 -- (s_afull) can only be occupied while the second stage (int_afull) is
 -- also occupied. The seemingly-missing combination (s_afull='1',
 -- int_afull='0') is therefore unreachable, not overlooked -- s_fill_o's
--- "00" branch only checks int_afull for exactly this reason. This
+-- 0 branch only checks int_afull for exactly this reason. This
 -- invariant, along with the rest of this module's handshake behavior, is
 -- formally proven (BMC + induction) in the accompanying two_stage_buffer.psl
 -- (see f_internal in particular). Any RTL change here should be re-checked

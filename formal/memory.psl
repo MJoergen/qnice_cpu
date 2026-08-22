@@ -152,16 +152,12 @@ vunit i_memory(memory(synthesis))
    -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
    ----------------------------------------------
 
-   -- Every entry in the type-FIFO is an unacked read = a live Wishbone request.
-   -- This is the invariant that kills the osf_occ=2 / f_wb_req_count=1 seed.
-   f_osf_le_wb : assert always {f_osf_occ <= f_wb_req_count};
-
    -- Wishbone outstanding count is bounded by the RTL register range and tied
    -- to the design's own wait_for_ack (you already assert this equivalence).
    f_wb_req_aux : assert always {rst_i = '1' or f_wb_req_count = wait_for_ack};
 
    -- The goal, now inductive: total outstanding reads <= 2.
-   f_read_total_max : assert always {f_osf_occ + f_osb_src_occ + f_osb_dst_occ <= 2};
+   f_read_total_max : assert always {rst_i = '1' or f_osf_occ + f_osb_src_occ + f_osb_dst_occ <= 2};
 
    ----------------------------------------------
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING

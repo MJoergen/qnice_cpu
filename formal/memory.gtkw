@@ -1,15 +1,15 @@
 [*]
-[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Fri Aug 21 10:38:14 2026
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Fri Aug 21 12:42:43 2026
 [*]
-[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/formal/memory_prove/engine_0/trace.vcd"
-[dumpfile_mtime] "Fri Aug 21 10:37:04 2026"
-[dumpfile_size] 12247
-[savefile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/formal/memory.gtkw"
+[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/memory_prove/engine_0/trace.vcd"
+[dumpfile_mtime] "Fri Aug 21 12:41:35 2026"
+[dumpfile_size] 12467
+[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/memory.gtkw"
 [timestart] 0
 [size] 1920 1127
 [pos] -1 -1
-*-4.425648 104 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-4.425648 36 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] memory.
 [sst_width] 427
 [signals_width] 335
@@ -77,9 +77,11 @@ memory.osb_dst_in_valid
 [color] 6
 memory.osb_dst_in_ready
 memory.i_memory.f_wb_req_count[1:0]
-memory.i_memory.f_osf_occ[1:0]
-memory.i_memory.f_osb_src_occ[1:0]
-@29
+memory.osf_mem_fill[1:0]
+memory.osb_src_fill[1:0]
+memory.osb_dst_fill[1:0]
 memory.i_memory.f_osb_dst_occ[1:0]
+memory.i_memory.f_osb_src_occ[1:0]
+memory.i_memory.f_osf_occ[1:0]
 [pattern_trace] 1
 [pattern_trace] 0
