@@ -8,7 +8,13 @@ use work.cpu_constants.C_MEM_WRITE;
 -- This module multiplexes one request channel and two readback channels into a
 -- single Wishbone Master interface. It's required of the Wishbone slave that
 -- requests are ack'ed in the same order.
--- At most two outstanding requests are allowed.
+--
+-- mreq_op_i is a one-hot encoding of the request:
+-- * WRITE: This writes mreq_data_i to mreq_addr_i
+-- * READ_SRC: This reads from mreq_addr_i to msrc_dara_o
+-- * READ_DST: This reads from mreq_addr_i to mdst_data_o
+--
+-- At most two outstanding mreq's are allowed.
 
 entity memory is
    port (
@@ -26,7 +32,6 @@ entity memory is
       msrc_valid_o : out std_logic;
       msrc_ready_i : in  std_logic;
       msrc_data_o  : out std_logic_vector(15 downto 0);
-
       mdst_valid_o : out std_logic;
       mdst_ready_i : in  std_logic;
       mdst_data_o  : out std_logic_vector(15 downto 0);
@@ -58,12 +63,12 @@ architecture synthesis of memory is
    signal osf_mem_out_ready : std_logic;
    signal osf_mem_out_data  : std_logic;
 
-   signal osb_src_in_valid  : std_logic;
-   signal osb_src_in_ready  : std_logic;
-   signal osb_src_fill      : natural range 0 to 2;
-   signal osb_dst_in_valid  : std_logic;
-   signal osb_dst_in_ready  : std_logic;
-   signal osb_dst_fill      : natural range 0 to 2;
+   signal tsb_src_in_valid  : std_logic;
+   signal tsb_src_in_ready  : std_logic;
+   signal tsb_src_fill      : natural range 0 to 2;
+   signal tsb_dst_in_valid  : std_logic;
+   signal tsb_dst_in_ready  : std_logic;
+   signal tsb_dst_fill      : natural range 0 to 2;
 
    signal wait_for_ack      : natural range 0 to 2;
 
@@ -74,11 +79,15 @@ begin
    -- * DST read data is presented, but not yet accepted
    mreq_accept <= '0' when (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i) = '1' else
                   '0' when (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i) = '1' else
-                  '0' when ((mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST))
-                            and not osf_mem_in_ready) = '1' else
+                  '0' when (mreq_op_i(C_MEM_READ_SRC) and not osf_mem_in_ready) = '1' else
+                  '0' when (mreq_op_i(C_MEM_READ_DST) and not osf_mem_in_ready) = '1' else
                   '1';
 
+
+   ------------------------------------------------------------------------
    -- Buffer Wishbone request until it is accepted (wb_stall_i = '0').
+   ------------------------------------------------------------------------
+
    i_one_stage_buffer_wb : entity work.one_stage_buffer
       generic map (
          G_DATA_SIZE => 33
@@ -122,9 +131,9 @@ begin
    end process p_wait_for_ack;
 
 
-   ----------------------
+   ------------------------------------------------------------------------
    -- Store the request
-   ----------------------
+   ------------------------------------------------------------------------
 
    osf_mem_in_valid <= mreq_valid_i and mreq_ready_o and mreq_accept and (mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST));
 
@@ -148,11 +157,11 @@ begin
    osf_mem_out_ready <= wb_cyc_o and wb_ack_i;
 
 
-   ------------------------------------------
+   ------------------------------------------------------------------------
    -- Store the response for the SRC output
-   ------------------------------------------
+   ------------------------------------------------------------------------
 
-   osb_src_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and osf_mem_out_valid = '1' and osf_mem_out_data = '1' else
+   tsb_src_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and osf_mem_out_valid = '1' and osf_mem_out_data = '1' else
                        '0';
 
    -- Two-word FIFO with zero-latency forwarding
@@ -163,21 +172,21 @@ begin
       port map (
          clk_i     => clk_i,
          rst_i     => rst_i,
-         s_valid_i => osb_src_in_valid,
-         s_ready_o => osb_src_in_ready,
+         s_valid_i => tsb_src_in_valid,
+         s_ready_o => tsb_src_in_ready,
          s_data_i  => wb_data_i,
-         s_fill_o  => osb_src_fill,
+         s_fill_o  => tsb_src_fill,
          m_valid_o => msrc_valid_o,
          m_ready_i => msrc_ready_i,
          m_data_o  => msrc_data_o
       ); -- i_two_stage_buffer_src
 
 
-   ------------------------------------------
+   ------------------------------------------------------------------------
    -- Store the response for the DST output
-   ------------------------------------------
+   ------------------------------------------------------------------------
 
-   osb_dst_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and osf_mem_out_valid = '1' and osf_mem_out_data = '0' else
+   tsb_dst_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and osf_mem_out_valid = '1' and osf_mem_out_data = '0' else
                        '0';
 
    -- Two-word FIFO with zero-latency forwarding
@@ -188,10 +197,10 @@ begin
       port map (
          clk_i     => clk_i,
          rst_i     => rst_i,
-         s_valid_i => osb_dst_in_valid,
-         s_ready_o => osb_dst_in_ready,
+         s_valid_i => tsb_dst_in_valid,
+         s_ready_o => tsb_dst_in_ready,
          s_data_i  => wb_data_i,
-         s_fill_o  => osb_dst_fill,
+         s_fill_o  => tsb_dst_fill,
          m_valid_o => mdst_valid_o,
          m_ready_i => mdst_ready_i,
          m_data_o  => mdst_data_o

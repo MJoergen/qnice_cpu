@@ -8,8 +8,8 @@ vunit i_memory(memory(synthesis))
    -- Faithful occupancy: alias the sub-blocks' OWN fill counters (white-box),
    -- not a lossy port reconstruction.
    alias f_osf_occ     is osf_mem_fill;
-   alias f_osb_src_occ is osb_src_fill;
-   alias f_osb_dst_occ is osb_dst_fill;
+   alias f_tsb_src_occ is tsb_src_fill;
+   alias f_tsb_dst_occ is tsb_dst_fill;
 
 
    -- set all declarations to run on clk
@@ -24,8 +24,8 @@ vunit i_memory(memory(synthesis))
    -- Whenever a buffer input is valid it must also be ready. This holds because
    -- at most two SRC (resp. DST) requests are outstanding (mreq_accept gating +
    -- depth-2 FIFO), so a depth-2 two_stage_buffer is never pushed while full.
-   f_osb_src_in_overflow : assert always {osb_src_in_valid and not rst_i} |-> {osb_src_in_ready};
-   f_osb_dst_in_overflow : assert always {osb_dst_in_valid and not rst_i} |-> {osb_dst_in_ready};
+   f_tsb_src_in_overflow : assert always {tsb_src_in_valid and not rst_i} |-> {tsb_src_in_ready};
+   f_tsb_dst_in_overflow : assert always {tsb_dst_in_valid and not rst_i} |-> {tsb_dst_in_ready};
    f_osf_mem_in_overflow : assert always {osf_mem_in_valid and not rst_i} |-> {osf_mem_in_ready};
 
 
@@ -124,7 +124,7 @@ vunit i_memory(memory(synthesis))
 
    -- EXECUTE contract: do not offer a read while two reads are already
    -- outstanding. Stated against real occupancy, not a free counter.
-   f_exe_read_limit : assume always {f_osf_occ + f_osb_src_occ + f_osb_dst_occ >= 2} |-> {not mreq_valid_i};
+   f_exe_read_limit : assume always {f_osf_occ + f_tsb_src_occ + f_tsb_dst_occ >= 2} |-> {not mreq_valid_i};
 
 
    --------------------------------------------
@@ -157,7 +157,7 @@ vunit i_memory(memory(synthesis))
    f_wb_req_aux : assert always {rst_i = '1' or f_wb_req_count = wait_for_ack};
 
    -- The goal, now inductive: total outstanding reads <= 2.
-   f_read_total_max : assert always {rst_i = '1' or f_osf_occ + f_osb_src_occ + f_osb_dst_occ <= 2};
+   f_read_total_max : assert always {rst_i = '1' or f_osf_occ + f_tsb_src_occ + f_tsb_dst_occ <= 2};
 
    ----------------------------------------------
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
