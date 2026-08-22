@@ -64,7 +64,7 @@ architecture synthesis of memory is
    signal tsf_req_fill      : natural range 0 to 2;
    signal tsf_req_out_valid : std_logic;
    signal tsf_req_out_ready : std_logic;
-   signal tsf_req_out_data  : std_logic;
+   signal tsf_req_out_data  : std_logic_vector(2 downto 0);
 
    signal tsb_src_in_valid  : std_logic;
    signal tsb_src_in_ready  : std_logic;
@@ -87,15 +87,41 @@ begin
    -- * DST read data is presented, but not yet accepted
    mreq_accept <= '0' when (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i) = '1' else
                   '0' when (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i) = '1' else
-                  '0' when (mreq_op_i(C_MEM_READ_SRC) and not tsf_req_in_ready) = '1' else
-                  '0' when (mreq_op_i(C_MEM_READ_DST) and not tsf_req_in_ready) = '1' else
-                  '1';
+                  tsf_req_in_ready;
 
-   -- Block incoming request until ready
+   -- Block incoming Memory request until ready
    mreq_valid   <= mreq_valid_i and mreq_accept;
    mreq_ready_o <= mreq_ready and mreq_accept;
 
-   -- Buffer outgoing request until accepted
+
+   ------------------------------------------------------------------------
+   -- Store the incoming memory request
+   ------------------------------------------------------------------------
+
+   tsf_req_in_valid <= mreq_valid_i and mreq_ready_o;
+
+   -- Two-word FIFO with registered output
+   i_two_stage_fifo_mem : entity work.two_stage_fifo
+      generic map (
+         G_DATA_SIZE => 3
+      )
+      port map (
+         clk_i     => clk_i,
+         rst_i     => rst_i,
+         s_valid_i => tsf_req_in_valid,
+         s_ready_o => tsf_req_in_ready,
+         s_data_i  => mreq_op_i,
+         s_fill_o  => tsf_req_fill,
+         m_valid_o => tsf_req_out_valid,
+         m_ready_i => tsf_req_out_ready,
+         m_data_o  => tsf_req_out_data
+      ); -- i_two_stage_fifo_mem
+
+
+   ------------------------------------------------------------------------
+   -- Buffer outgoing Wishbone request until accepted
+   ------------------------------------------------------------------------
+
    i_one_stage_buffer_wb : entity work.one_stage_buffer
       generic map (
          G_DATA_SIZE => 33
@@ -115,7 +141,7 @@ begin
          m_data_o(R_WB_ADDR) => wb_addr_o
       ); -- i_one_stage_buffer_wb
 
-   -- Count number of outstandin Wishbone requests
+   -- Count number of outstanding Wishbone requests
    p_wait_for_ack : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -141,27 +167,8 @@ begin
 
 
    ------------------------------------------------------------------------
-   -- Store the request
+   -- Handle Wishbone responses
    ------------------------------------------------------------------------
-
-   tsf_req_in_valid <= mreq_valid_i and mreq_ready_o and (mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST));
-
-   -- Two-word FIFO with registered output
-   i_two_stage_fifo_mem : entity work.two_stage_fifo
-      generic map (
-         G_DATA_SIZE => 1
-      )
-      port map (
-         clk_i       => clk_i,
-         rst_i       => rst_i,
-         s_valid_i   => tsf_req_in_valid,
-         s_ready_o   => tsf_req_in_ready,
-         s_data_i(0) => mreq_op_i(C_MEM_READ_SRC),
-         s_fill_o    => tsf_req_fill,
-         m_valid_o   => tsf_req_out_valid,
-         m_ready_i   => tsf_req_out_ready,
-         m_data_o(0) => tsf_req_out_data
-      ); -- i_two_stage_fifo_mem
 
    tsf_req_out_ready <= wb_cyc_o and wb_ack_i;
 
@@ -170,7 +177,8 @@ begin
    -- Store the response for the SRC output
    ------------------------------------------------------------------------
 
-   tsb_src_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and tsf_req_out_valid = '1' and tsf_req_out_data = '1' else
+   tsb_src_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and tsf_req_out_valid = '1' and
+                                tsf_req_out_data(C_MEM_READ_SRC) = '1' else
                        '0';
 
    -- Two-word FIFO with zero-latency forwarding
@@ -195,7 +203,8 @@ begin
    -- Store the response for the DST output
    ------------------------------------------------------------------------
 
-   tsb_dst_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and tsf_req_out_valid = '1' and tsf_req_out_data = '0' else
+   tsb_dst_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and tsf_req_out_valid = '1' and
+                                tsf_req_out_data(C_MEM_READ_DST) = '1' else
                        '0';
 
    -- Two-word FIFO with zero-latency forwarding

@@ -91,13 +91,13 @@ architecture synthesis of fetch is
    signal wb_pending : natural range 0 to 3 := 0;
 
    signal tsf_in_addr_ready  : std_logic;
-   signal tsf_in_addr_fill   : std_logic_vector(1 downto 0);
+   signal tsf_in_addr_fill   : natural range 0 to 2;
    signal tsf_out_addr_valid : std_logic;
    signal tsf_out_addr_ready : std_logic;
    signal tsf_out_addr_data  : std_logic_vector(15 downto 0);
 
    signal tsb_in_data_ready  : std_logic;
-   signal tsb_in_data_fill   : std_logic_vector(1 downto 0);
+   signal tsb_in_data_fill   : natural range 0 to 2;
    signal tsb_out_data_valid : std_logic;
    signal tsb_out_data_ready : std_logic;
    signal tsb_out_data_data  : std_logic_vector(15 downto 0);
