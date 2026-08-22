@@ -7,7 +7,7 @@ vunit i_memory(memory(synthesis))
 
    -- Faithful occupancy: alias the sub-blocks' OWN fill counters (white-box),
    -- not a lossy port reconstruction.
-   alias f_osf_occ     is osf_mem_fill;
+   alias f_osf_occ     is tsf_req_fill;
    alias f_tsb_src_occ is tsb_src_fill;
    alias f_tsb_dst_occ is tsb_dst_fill;
 
@@ -26,7 +26,7 @@ vunit i_memory(memory(synthesis))
    -- depth-2 FIFO), so a depth-2 two_stage_buffer is never pushed while full.
    f_tsb_src_in_overflow : assert always {tsb_src_in_valid and not rst_i} |-> {tsb_src_in_ready};
    f_tsb_dst_in_overflow : assert always {tsb_dst_in_valid and not rst_i} |-> {tsb_dst_in_ready};
-   f_osf_mem_in_overflow : assert always {osf_mem_in_valid and not rst_i} |-> {osf_mem_in_ready};
+   f_tsf_req_in_overflow : assert always {tsf_req_in_valid and not rst_i} |-> {tsf_req_in_ready};
 
 
    ------------------------------------------------

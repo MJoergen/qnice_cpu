@@ -54,14 +54,17 @@ architecture synthesis of memory is
    subtype  R_WB_DATA is natural range 31 downto 16;
    subtype  R_WB_ADDR is natural range 15 downto 0;
 
+   signal mreq_valid : std_logic;
+   signal mreq_ready : std_logic;
+
    signal mreq_accept : std_logic;
 
-   signal osf_mem_in_valid  : std_logic;
-   signal osf_mem_in_ready  : std_logic;
-   signal osf_mem_fill      : natural range 0 to 2;
-   signal osf_mem_out_valid : std_logic;
-   signal osf_mem_out_ready : std_logic;
-   signal osf_mem_out_data  : std_logic;
+   signal tsf_req_in_valid  : std_logic;
+   signal tsf_req_in_ready  : std_logic;
+   signal tsf_req_fill      : natural range 0 to 2;
+   signal tsf_req_out_valid : std_logic;
+   signal tsf_req_out_ready : std_logic;
+   signal tsf_req_out_data  : std_logic;
 
    signal tsb_src_in_valid  : std_logic;
    signal tsb_src_in_ready  : std_logic;
@@ -74,20 +77,25 @@ architecture synthesis of memory is
 
 begin
 
+   ------------------------------------------------------------------------
+   -- Apply back-pressure to incoming requests and buffer outgoing
+   -- requests until accepted (wb_stall_i = '0').
+   ------------------------------------------------------------------------
+
    -- Accept request, EXCEPT when any one of:
    -- * SRC read data is presented, but not yet accepted
    -- * DST read data is presented, but not yet accepted
    mreq_accept <= '0' when (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i) = '1' else
                   '0' when (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i) = '1' else
-                  '0' when (mreq_op_i(C_MEM_READ_SRC) and not osf_mem_in_ready) = '1' else
-                  '0' when (mreq_op_i(C_MEM_READ_DST) and not osf_mem_in_ready) = '1' else
+                  '0' when (mreq_op_i(C_MEM_READ_SRC) and not tsf_req_in_ready) = '1' else
+                  '0' when (mreq_op_i(C_MEM_READ_DST) and not tsf_req_in_ready) = '1' else
                   '1';
 
+   -- Block incoming request until ready
+   mreq_valid   <= mreq_valid_i and mreq_accept;
+   mreq_ready_o <= mreq_ready and mreq_accept;
 
-   ------------------------------------------------------------------------
-   -- Buffer Wishbone request until it is accepted (wb_stall_i = '0').
-   ------------------------------------------------------------------------
-
+   -- Buffer outgoing request until accepted
    i_one_stage_buffer_wb : entity work.one_stage_buffer
       generic map (
          G_DATA_SIZE => 33
@@ -95,8 +103,8 @@ begin
       port map (
          clk_i               => clk_i,
          rst_i               => rst_i,
-         s_valid_i           => mreq_valid_i and mreq_accept,
-         s_ready_o           => mreq_ready_o,
+         s_valid_i           => mreq_valid,
+         s_ready_o           => mreq_ready,
          s_data_i(C_WB_WE)   => mreq_op_i(C_MEM_WRITE),
          s_data_i(R_WB_DATA) => mreq_data_i,
          s_data_i(R_WB_ADDR) => mreq_addr_i,
@@ -107,10 +115,7 @@ begin
          m_data_o(R_WB_ADDR) => wb_addr_o
       ); -- i_one_stage_buffer_wb
 
-   wb_cyc_o <= '1' when (wb_stb_o = '1' or wait_for_ack > 0) and rst_i = '0' else
-               '0';
-
-
+   -- Count number of outstandin Wishbone requests
    p_wait_for_ack : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -124,18 +129,22 @@ begin
             wait_for_ack <= wait_for_ack - 1;
          end if;
 
-         if rst_i = '1' then
+         if wb_cyc_o = '0' or rst_i = '1' then
             wait_for_ack <= 0;
          end if;
       end if;
    end process p_wait_for_ack;
+
+   -- Hold wisbhone buffer while waiting for response
+   wb_cyc_o <= '1' when (wb_stb_o = '1' or wait_for_ack > 0) and rst_i = '0' else
+               '0';
 
 
    ------------------------------------------------------------------------
    -- Store the request
    ------------------------------------------------------------------------
 
-   osf_mem_in_valid <= mreq_valid_i and mreq_ready_o and mreq_accept and (mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST));
+   tsf_req_in_valid <= mreq_valid_i and mreq_ready_o and (mreq_op_i(C_MEM_READ_SRC) or mreq_op_i(C_MEM_READ_DST));
 
    -- Two-word FIFO with registered output
    i_two_stage_fifo_mem : entity work.two_stage_fifo
@@ -145,23 +154,23 @@ begin
       port map (
          clk_i       => clk_i,
          rst_i       => rst_i,
-         s_valid_i   => osf_mem_in_valid,
-         s_ready_o   => osf_mem_in_ready,
+         s_valid_i   => tsf_req_in_valid,
+         s_ready_o   => tsf_req_in_ready,
          s_data_i(0) => mreq_op_i(C_MEM_READ_SRC),
-         s_fill_o    => osf_mem_fill,
-         m_valid_o   => osf_mem_out_valid,
-         m_ready_i   => osf_mem_out_ready,
-         m_data_o(0) => osf_mem_out_data
+         s_fill_o    => tsf_req_fill,
+         m_valid_o   => tsf_req_out_valid,
+         m_ready_i   => tsf_req_out_ready,
+         m_data_o(0) => tsf_req_out_data
       ); -- i_two_stage_fifo_mem
 
-   osf_mem_out_ready <= wb_cyc_o and wb_ack_i;
+   tsf_req_out_ready <= wb_cyc_o and wb_ack_i;
 
 
    ------------------------------------------------------------------------
    -- Store the response for the SRC output
    ------------------------------------------------------------------------
 
-   tsb_src_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and osf_mem_out_valid = '1' and osf_mem_out_data = '1' else
+   tsb_src_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and tsf_req_out_valid = '1' and tsf_req_out_data = '1' else
                        '0';
 
    -- Two-word FIFO with zero-latency forwarding
@@ -186,7 +195,7 @@ begin
    -- Store the response for the DST output
    ------------------------------------------------------------------------
 
-   tsb_dst_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and osf_mem_out_valid = '1' and osf_mem_out_data = '0' else
+   tsb_dst_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and tsf_req_out_valid = '1' and tsf_req_out_data = '0' else
                        '0';
 
    -- Two-word FIFO with zero-latency forwarding
