@@ -33,5 +33,69 @@ wb_data_i    : in  std_logic_vector(15 downto 0)
 
 ## Implementation
 
+This module multiplexes one request channel (from EXECUTE/WRITE) and two readback channels
+(SRC/DST, back to EXECUTE/WRITE) onto a single Wishbone Master interface, using three
+[`src/sub/`](../sub) elastic-pipeline primitives:
+
+* **`i_two_stage_fifo_mem`** (depth 2) tracks the one-hot op-type (`mreq_op_i`: READ_SRC / READ_DST
+  / WRITE) of each *outstanding* (issued-but-not-yet-acked) request, in issue order. It is pushed
+  whenever a request is accepted and popped whenever `wb_ack_i` arrives, so its head always tells
+  the module which response buffer (if any) the next ack should be routed to.
+* **`i_one_stage_buffer_wb`** stages the actual Wishbone request — `we`, `dat`, and `addr` packed
+  into a single 33-bit word — until the slave accepts it (`wb_stall_i='0'`).
+* **`i_two_stage_buffer_src`** / **`i_two_stage_buffer_dst`** (depth 2 each) buffer SRC/DST read
+  responses back to EXECUTE, fed by `wb_data_i` whenever `wb_ack_i` arrives and the FIFO head
+  identifies the completed request as a SRC/DST read respectively.
+
+Since the depth-2 FIFO is the only thing gating new request acceptance for outstanding-request
+counting, and the module additionally never accepts a *new* request while a SRC/DST response is
+sitting unconsumed (`mreq_accept`, below), at most two requests — and hence at most two SRC/DST
+responses — are ever outstanding at once. This is what keeps the depth-2 response buffers from
+overflowing; see `f_tsb_src_in_overflow` / `f_tsb_dst_in_overflow` / `f_tsf_req_in_overflow` in
+`formal/memory.psl`.
+
+**Back-pressure (`mreq_accept`)**: a new request is accepted except when a previously-completed
+SRC or DST response is presented but not yet consumed by EXECUTE (`m*_valid_o='1'` and
+`m*_ready_i='0'`) — this is what bounds outstanding responses to what the depth-2 buffers can hold.
+`mreq_ready_o` is the AND of this accept condition and the WB-request buffer's own readiness
+(`mreq_ready`); `mreq_valid` (fed into `i_one_stage_buffer_wb`) is gated by the same accept
+condition. A consequence worth knowing before touching this logic: `mreq_valid` can legitimately
+drop for a cycle even while EXECUTE holds `mreq_valid_i` asserted throughout (see the long comment
+at `mreq_valid <= mreq_valid_i and mreq_accept;` in `memory.vhd`) — formally confirmed reachable,
+but proven harmless, because `mreq_ready_o` never lies to EXECUTE and the buffer's `s_data_i` is
+wired directly to the (separately-guaranteed-stable) `mreq_op_i`/`mreq_addr_i`/`mreq_data_i`.
+
+**`wb_cyc_o`** stays asserted as long as either the request buffer holds an unconsumed request
+(`wb_stb_o='1'`) or the FIFO reports an outstanding (unacked) request (`tsf_req_out_valid='1'`), so
+it correctly spans a whole pipelined multi-request transaction, not just a single request/ack pair.
+
 ## Formal verification
+
+`formal/memory.psl` checks, against the module standalone (built up from the real `src/sub/`
+components, not stubs):
+
+* **Internal safety**: the three buffers above are never pushed while full (`f_tsb_src_in_overflow`,
+  `f_tsb_dst_in_overflow`, `f_tsf_req_in_overflow`).
+* **Wishbone master protocol**: `wb_cyc_o`/`wb_stb_o` are cleared under reset
+  (`f_wb_master_reset`), `wb_stb_o` never asserts while `wb_cyc_o` is low (`f_wb_master_stb_low`), a
+  stalled request's `stb`/`addr`/`we`/`dat` stay stable until accepted or reset
+  (`f_wb_master_stable`), and at most two Wishbone requests are ever outstanding at once
+  (`f_wb_master_request`).
+* **Assumptions about the environment** (the proof is only as strong as these): the Wishbone slave
+  acks in issue order with at least one cycle of latency and never acks with nothing outstanding
+  (`f_wb_slave_ack_idle`), and stalls/response delays are bounded to 3 cycles as an artificial but
+  reasonable modeling limit (`f_wb_slave_stall_delay_max`, `f_wb_slave_ack_delay_max`); EXECUTE only
+  ever presents a one-hot `mreq_op_i` (`f_exe_op`) and holds a pending request's valid/op/addr/data
+  stable until accepted (`f_mreq_stable`) — this last one is also documented directly in
+  `memory.vhd`'s header, since it's a real contract the RTL leans on.
+* **Cover statements** demonstrate reachability of interleaved SRC/DST bursts
+  (`f_cover_burst2`) and of all three request types issuing back-to-back (`f_cover_burst`).
+
+**Current status**: `bmc` (depth 10) and `cover` (depth 10) both pass — run with
+`sby --yosys "yosys -m ghdl" -f memory.sby`. There is **no `prove` (k-induction) task** at present:
+it was removed in favor of `bmc` in commit `db1e2a8` ("BMC passes. PROVE does not.") after the
+previous set of induction-support invariants failed to close. This is a known, currently open item
+— the properties above are only verified up to the bounded depth, not proven for all time — rather
+than an oversight to "fix" casually; closing it will need new inductive lemmas along the lines of
+the ones in `formal/dp_ram.psl` / `formal/two_stage_fifo.psl`.
 

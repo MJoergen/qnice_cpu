@@ -13,11 +13,18 @@ use work.cpu_constants.C_MEM_WRITE;
 --
 -- mreq_op_i is a one-hot encoding of the request:
 -- * WRITE: This writes mreq_data_i to mreq_addr_i
--- * READ_SRC: This reads from mreq_addr_i to msrc_dara_o
+-- * READ_SRC: This reads from mreq_addr_i to msrc_data_o
 -- * READ_DST: This reads from mreq_addr_i to mdst_data_o
 --
 -- At most two outstanding mreq's are allowed.
 -- Hence at most two outstanding Wishbone requests are required to be supported.
+--
+-- EXECUTE (the requester) must follow the usual valid/ready producer contract:
+-- once mreq_valid_i='1' and mreq_ready_o='0', mreq_valid_i/mreq_op_i/
+-- mreq_addr_i/mreq_data_i must all remain stable until mreq_ready_o='1' is
+-- observed. This is assumed, not checked, by this module (see f_mreq_stable
+-- in formal/memory.psl) and is relied upon by the mreq_accept subtlety noted
+-- below.
 
 entity memory is
    port (
@@ -90,6 +97,27 @@ begin
                   tsf_req_in_ready;
 
    -- Block incoming Memory request until ready
+   --
+   -- NOTE ON mreq_valid'S STABILITY: mreq_accept (and hence mreq_valid) can
+   -- legitimately drop from '1' to '0' across a clock edge even while
+   -- mreq_valid_i stays asserted throughout -- e.g. if msrc_valid_o newly
+   -- asserts with msrc_ready_i='0' in the very cycle i_one_stage_buffer_wb
+   -- becomes ready. This looks like it violates that buffer's own "s_valid_i
+   -- must stay stable until accepted" contract (formally confirmed reachable
+   -- by BMC), but it is NOT a functional bug:
+   -- * mreq_ready_o = mreq_ready and mreq_accept, so EXECUTE is never told
+   --   "accepted" while mreq_accept='0' -- it keeps holding mreq_valid_i and
+   --   the payload stable per its own contract (see header), so no data is
+   --   ever lost, just possibly delayed by one extra cycle.
+   -- * i_one_stage_buffer_wb's s_data_i is wired directly to mreq_op_i /
+   --   mreq_addr_i / mreq_data_i (NOT gated by mreq_accept), so it stays
+   --   correct throughout regardless of mreq_valid's glitching.
+   -- * tsf_req_in_valid (below) is gated by this exact same mreq_ready_o, so
+   --   the WB-request buffer and the op-type-tracking FIFO always push (or
+   --   don't) together -- they cannot desync.
+   -- Do not "fix" this by feeding i_one_stage_buffer_wb an ungated
+   -- mreq_valid_i directly: that would let it latch a request that
+   -- tsf_req_in_valid did NOT also push, desyncing the two.
    mreq_valid   <= mreq_valid_i and mreq_accept;
    mreq_ready_o <= mreq_ready and mreq_accept;
 

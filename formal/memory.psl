@@ -57,6 +57,21 @@ vunit i_memory(memory(synthesis))
      {rst_i = '1' or (stable(wb_stb_o) and stable(wb_addr_o) and stable(wb_we_o) and stable(wb_dat_o))};
 
    -- WISHBONE MASTER: Number of outstanding requests is always limited to at most two.
+   --
+   -- NOTE ON INDUCTION STATUS: this property is currently proven only up to
+   -- the bounded BMC depth (see memory.sby), not by k-induction. An attempt
+   -- to close it -- tying f_wb_req_count to the type-tracking FIFO's
+   -- type-guaranteed tsf_req_fill<=2 bound, the same technique that closed
+   -- f_tsb_src_in_overflow / f_tsb_dst_in_overflow / f_tsf_req_in_overflow
+   -- below -- got substantially further than before but did not close: the
+   -- simple "one item may be staged-but-not-yet-slave-accepted" gap term
+   -- breaks down because i_one_stage_buffer_wb (depth 1) can accept a brand
+   -- new request the SAME cycle it hands an old one to the slave, so more
+   -- than one fifo push can be "not yet reflected in f_wb_req_count" at once
+   -- -- a single wb_stb_o bit can't represent that count. Closing this
+   -- properly needs a per-item view of that gap (plausibly reusing the
+   -- p_shadow_fifo_content technique below), not just another arithmetic
+   -- adjustment.
    f_wb_master_request : assert always {rst_i = '1' or f_wb_req_count <= 2};
 
 
@@ -142,10 +157,150 @@ vunit i_memory(memory(synthesis))
    -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
    ----------------------------------------------
 
+   -- i_two_stage_fifo_mem holds up to 2 entries, in two internal slots: a
+   -- "tail" (input slot, occupied iff tsf_req_in_ready='0') and a "head"
+   -- (output slot, occupied iff tsf_req_out_valid='1', and directly visible
+   -- via tsf_req_out_data). Neither slot's storage register is a port, so
+   -- this proof cannot read them directly (GHDL's synth-for-formal flow does
+   -- not support VHDL-2008 external names for that -- confirmed by testing).
+   --
+   -- Instead, these two signals faithfully MIRROR the FIFO's own internal
+   -- transition rules (two_stage_fifo.vhd's p_s_data / p_m), using this
+   -- entity's own ports (tsf_req_in_ready/tsf_req_out_valid/tsf_req_out_ready)
+   -- as stand-ins for the FIFO's internal s_ready_r/m_valid_r/m_ready_i --
+   -- valid stand-ins because s_ready_o<=s_ready_r and m_valid_o<=m_valid_r
+   -- are direct, ungated wires in that module, and m_ready_i is simply this
+   -- entity's own port passed through.
+   --
+   -- Despite mirroring rather than reading the real registers, this is
+   -- provable: both real slots are OVERWRITTEN from mreq_op_i (a known, fully
+   -- observed value) unconditionally whenever they are "ready to accept" --
+   -- s_data_r every cycle s_ready_r='1', m_data_r whenever s_ready_r='1' and
+   -- (m_valid_r='0' or draining) -- which happens often enough that any
+   -- mismatch from an adversarial k-induction seed self-corrects within a few
+   -- cycles, rather than persisting forever the way a simple push/pop event
+   -- counter's seed value would (that was the earlier, failed approach).
+   signal f_shadow_tail_is_dst : std_logic := '0';
+   signal f_shadow_tail_is_src : std_logic := '0';
+   signal f_shadow_head_is_dst : std_logic := '0';
+   signal f_shadow_head_is_src : std_logic := '0';
+
+   p_shadow_fifo_content : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         -- Mirrors p_s_data: overwritten every cycle the tail slot is free to
+         -- accept, regardless of previous content.
+         if tsf_req_in_ready = '1' then
+            f_shadow_tail_is_dst <= mreq_op_i(C_MEM_READ_DST);
+            f_shadow_tail_is_src <= mreq_op_i(C_MEM_READ_SRC);
+         end if;
+
+         -- Mirrors p_m.
+         if tsf_req_in_ready = '1' then
+            if tsf_req_out_valid = '0' or tsf_req_out_ready = '1' then
+               f_shadow_head_is_dst <= mreq_op_i(C_MEM_READ_DST);
+               f_shadow_head_is_src <= mreq_op_i(C_MEM_READ_SRC);
+            end if;
+         else
+            if tsf_req_out_ready = '1' then
+               f_shadow_head_is_dst <= f_shadow_tail_is_dst;
+               f_shadow_head_is_src <= f_shadow_tail_is_src;
+            end if;
+         end if;
+      end if;
+   end process p_shadow_fifo_content;
+
+   -- The checkpoint: the shadow head must agree with the real, externally
+   -- visible head (tsf_req_out_data) whenever it's valid. This is provable by
+   -- induction (see comment above) and is what lets f_shadow_tail_is_dst /
+   -- f_shadow_tail_is_src be trusted below, since the same self-correcting
+   -- argument applies to the tail one step earlier (whatever the tail holds
+   -- becomes the checked head on the very next shift).
+   f_shadow_head_matches_dst : assert always {rst_i = '1' or tsf_req_out_valid = '0' or tsf_req_out_data(C_MEM_READ_DST) = f_shadow_head_is_dst};
+   f_shadow_head_matches_src : assert always {rst_i = '1' or tsf_req_out_valid = '0' or tsf_req_out_data(C_MEM_READ_SRC) = f_shadow_head_is_src};
+
+   -- Derived occupancy counts, content-based rather than event-counted: the
+   -- head's type comes straight from the real tsf_req_out_data (no shadow
+   -- needed there), the tail's from the checked shadow above.
+   signal f_dst_fifo_count : integer range 0 to 2;
+   signal f_src_fifo_count : integer range 0 to 2;
+
+   p_fifo_type_counts : process (all)
+      variable v_dst : integer range 0 to 2;
+      variable v_src : integer range 0 to 2;
+   begin
+      v_dst := 0;
+      v_src := 0;
+
+      if tsf_req_out_valid = '1' and tsf_req_out_data(C_MEM_READ_DST) = '1' then
+         v_dst := v_dst + 1;
+      end if;
+      if tsf_req_in_ready = '0' and f_shadow_tail_is_dst = '1' then
+         v_dst := v_dst + 1;
+      end if;
+
+      if tsf_req_out_valid = '1' and tsf_req_out_data(C_MEM_READ_SRC) = '1' then
+         v_src := v_src + 1;
+      end if;
+      if tsf_req_in_ready = '0' and f_shadow_tail_is_src = '1' then
+         v_src := v_src + 1;
+      end if;
+
+      f_dst_fifo_count <= v_dst;
+      f_src_fifo_count <= v_src;
+   end process p_fifo_type_counts;
+
+   -- The goal: total outstanding SRC (resp. DST) work -- entries still unacked
+   -- in the FIFO, plus responses already delivered but not yet consumed by
+   -- EXECUTE -- never exceeds 2. This is what f_tsb_src_in_overflow /
+   -- f_tsb_dst_in_overflow actually rely on.
+   f_dst_total_max : assert always {rst_i = '1' or f_dst_fifo_count + tsb_dst_fill <= 2};
+   f_src_total_max : assert always {rst_i = '1' or f_src_fifo_count + tsb_src_fill <= 2};
+
+   -- f_dst_total_max / f_src_total_max additionally rely on two cross-module
+   -- invariants of the src/sub/ instances they're built from -- see the
+   -- separate i_two_stage_buffer_internal / i_two_stage_fifo_internal vunits
+   -- below (bound directly to those sub-entities, so they apply to every
+   -- instance of them within this hierarchy).
 
    ----------------------------------------------
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
    ----------------------------------------------
 
 } -- vunit i_memory(memory(synthesis))
+
+
+-- ---------------------------------------------------------------------------
+-- Cross-module induction support.
+--
+-- These two vunits bind directly to src/sub/ entities rather than to
+-- `memory`, so GHDL/yosys attach them to EVERY elaborated instance of that
+-- entity/architecture within the `memory` hierarchy -- both
+-- i_two_stage_buffer_src and i_two_stage_buffer_dst pick up
+-- i_two_stage_buffer_internal below, for instance. This proof compiles the
+-- real src/sub/ RTL but not each module's own formal/*.psl, so without these,
+-- k-induction is free to seed those sub-instances in states that violate
+-- invariants they rely on internally (already proven standalone in their own
+-- .psl files) -- which lets their s_fill_o outputs under-report true
+-- occupancy and breaks f_dst_total_max / f_src_total_max in i_memory above.
+-- ---------------------------------------------------------------------------
+
+vunit i_two_stage_buffer_internal(two_stage_buffer(synthesis))
+{
+   default clock is rising_edge(clk_i);
+
+   -- Mirrors f_internal from two_stage_buffer.psl: this transparent 2-stage
+   -- pipe always fills "from the back", so stage 1 can never be occupied
+   -- while stage 2 is empty.
+   f_internal : assert always {not int_afull} |-> {not s_afull};
+}
+
+vunit i_two_stage_fifo_internal(two_stage_fifo(synthesis))
+{
+   default clock is rising_edge(clk_i);
+
+   -- Mirrors f_inv_empty_ready from two_stage_fifo.psl: an empty FIFO must
+   -- always be ready.
+   f_inv_empty_ready : assert always {rst_i = '0' and m_valid_o = '0'} |-> {s_ready_o = '1'};
+}
 
