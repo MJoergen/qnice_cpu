@@ -97,17 +97,31 @@ $(ROM): $(ASM)
 $(TOP).bit: hw/$(TOP).tcl $(SOURCES) $(TEST_SOURCES) hw/$(TOP).xdc $(ROM)
 	bash -c "source $(XILINX_DIR)/settings64.sh ; vivado -mode tcl -source $<"
 
+# The -directive options below are load-bearing, not decoration. With the
+# default directives this design misses timing at the 8.50 ns constraint by
+# about 0.28 ns (108 failing endpoints); with them it meets it. Most of the
+# violation was clock skew on a path crossing four module boundaries, i.e. a
+# placement problem rather than a logic-depth one. Note the SECOND
+# phys_opt_design, after route_design -- post-route physical optimisation is
+# where a good part of the recovery comes from.
+#
+# report_timing_summary writes timing_summary.rpt next to the bitstream. Check
+# the WNS line in it after every build: write_bitstream succeeds even when
+# timing is violated, so a bitstream on its own is not evidence that the design
+# met timing.
 hw/$(TOP).tcl: Makefile
 	echo "# This is a tcl command script for the Vivado tool chain" > $@
 	echo "read_vhdl -vhdl2008 { $(SOURCES) $(TEST_SOURCES) }" >> $@
 	echo "read_xdc hw/$(TOP).xdc" >> $@
 	echo "synth_design -top $(TOP) -part xc7a100tcsg324-1 -flatten_hierarchy none -generic G_ROM=$(ROM) -generic G_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH)" >> $@
 	echo "write_checkpoint -force post_synth.dcp" >> $@
-	echo "opt_design" >> $@
-	echo "place_design" >> $@
-	echo "phys_opt_design" >> $@
-	echo "route_design" >> $@
+	echo "opt_design -directive Explore" >> $@
+	echo "place_design -directive Explore" >> $@
+	echo "phys_opt_design -directive AggressiveExplore" >> $@
+	echo "route_design -directive Explore" >> $@
+	echo "phys_opt_design -directive AggressiveExplore" >> $@
 	echo "write_checkpoint -force post_route.dcp" >> $@
+	echo "report_timing_summary -file timing_summary.rpt" >> $@
 	echo "write_bitstream -force $(TOP).bit" >> $@
 	echo "exit" >> $@
 
@@ -146,6 +160,7 @@ clean:
 	rm -rf hw/$(TOP).tcl
 	rm -rf post_synth.dcp
 	rm -rf post_route.dcp
+	rm -rf timing_summary.rpt
 	rm -rf $(TOP).bit
 	rm -rf vivado*
 	rm -rf usage_statistics_webtalk*
