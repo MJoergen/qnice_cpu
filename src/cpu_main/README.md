@@ -451,6 +451,41 @@ One additional complexity handled by the DECODE module is the special case of
 jump instructions (`ABRA`, `RBRA`, `ASUB`, and `RSUB`).
 
 ### PREPARE
+
+#### Reading R15
+
+The working Program Counter lives in the FETCH stage. The register file does
+hold an `R15`, but it is only written when an instruction actually targets
+`R15` — i.e. on branches — so during sequential execution it is stale and must
+never be used as an operand value.
+
+PREPARE therefore substitutes the real PC into `src_val`/`dst_val` before
+anything downstream sees them (`src_val_pc`/`dst_val_pc` in
+[prepare.vhd](prepare.vhd)). Doing the substitution on the stage record, rather
+than only on the ALU inputs, matters because the WRITE stage derives two other
+things from `src_val`/`dst_val`: the memory address for `@R15` and `@--R15`,
+and the pre/post-increment write-back. All three have to agree.
+
+The substituted value is the address of the next word to be fetched at the
+point the operand is read, matching `qnice.c`, which advances a single PC
+register immediately after the instruction fetch and then reads both operands
+through it:
+
+| Operand | Value |
+| ------- | ----- |
+| source `R15` | `addr+1` always — an immediate belongs to the destination, and is fetched only after the source has been read |
+| destination `R15` | `addr+2` when the source was an immediate (that fetch has already advanced the PC), otherwise `addr+1` |
+
+`@R15++` never reaches this logic: DECODE flags it as an immediate and FETCH
+supplies the value inline.
+
+Because this is the value of the register itself, it applies in every
+addressing mode. `test/prog_r15.asm` covers the source path, the destination
+path, and `@R15`; `CMP R15, R15` is a useful differential check, since it must
+set `Z` only if the two paths agree.
+
+#### Sequencing
+
 This stage holds the [Sequencer](sub/sequencer.vhd), which expands the single
 beat received from DECODE into one beat per micro-operation. The Sequencer adds
 no latency (it is combinatorial in the forward direction), but it holds its

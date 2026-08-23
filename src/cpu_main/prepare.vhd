@@ -45,6 +45,10 @@ architecture synthesis of prepare is
    signal alu_src_val : std_logic_vector(15 downto 0);
    signal alu_dst_val : std_logic_vector(15 downto 0);
 
+   -- Operand register values with the Program Counter substituted for R15.
+   signal src_val_pc  : std_logic_vector(15 downto 0);
+   signal dst_val_pc  : std_logic_vector(15 downto 0);
+
 begin
 
    ------------------------------------------------------------
@@ -89,13 +93,44 @@ begin
    alu_oper    <= seq_stage.inst(R_OPCODE);
    alu_ctrl    <= seq_stage.inst(R_CTRL_CMD);
    alu_flags   <= seq_stage.r14;
+   -- Reading R15 as an ordinary operand.
+   --
+   -- The working Program Counter lives in the FETCH stage; the register file's
+   -- R15 copy is only written when an instruction actually targets R15, so it
+   -- is stale during sequential execution and must never be used as an operand
+   -- value. src_val_pc/dst_val_pc substitute the real PC, and are then used for
+   -- BOTH the ALU inputs below and the copies latched into the stage record --
+   -- the latter matters because the WRITE stage derives the memory address and
+   -- the pre/post-increment write-back from src_val/dst_val, so @R15, @--R15
+   -- and R15 as a plain operand all have to agree.
+   --
+   -- The value is the address of the next word to be fetched at the point the
+   -- operand is read, matching the reference implementation (qnice.c advances
+   -- PC immediately after the instruction fetch, then reads both operands
+   -- through the same read_register(PC)):
+   --
+   --   * source R15      -> addr+1 always. If the instruction carries an
+   --                        immediate it belongs to the destination, and is
+   --                        fetched only after the source has been read.
+   --   * destination R15 -> addr+2 when the source was an immediate (that
+   --                        fetch has already advanced the PC), else addr+1.
+   --
+   -- This is the value of the register itself, so it applies in every
+   -- addressing mode. @R15++ never reaches here: DECODE flags it as an
+   -- immediate and FETCH supplies the value inline.
+   src_val_pc <= seq_stage.addr+1 when seq_stage.src_addr = C_REG_PC else
+                 seq_stage.src_val;
+   dst_val_pc <= seq_stage.addr+2 when seq_stage.dst_addr = C_REG_PC and
+                                       seq_stage.src_imm = '1'       else
+                 seq_stage.addr+1 when seq_stage.dst_addr = C_REG_PC else
+                 seq_stage.dst_val;
+
    alu_src_val <= seq_stage.immediate when seq_stage.src_imm                          else
                   mem_src_data_i      when seq_stage.microcodes(C_MEM_WAIT_SRC) = '1' else
-                  seq_stage.addr+1    when seq_stage.src_addr = C_REG_PC              else
-                  seq_stage.src_val;
-   alu_dst_val <= seq_stage.immediate when seq_stage.dst_imm else
-                  mem_dst_data_i when seq_stage.microcodes(C_MEM_WAIT_DST) = '1' else
-                  seq_stage.dst_val;
+                  src_val_pc;
+   alu_dst_val <= seq_stage.immediate when seq_stage.dst_imm                          else
+                  mem_dst_data_i      when seq_stage.microcodes(C_MEM_WAIT_DST) = '1' else
+                  dst_val_pc;
 
 
    ------------------------------------------------------------
@@ -114,6 +149,8 @@ begin
          if seq_valid and seq_ready then
             wr_valid_o             <= seq_valid;
             wr_stage_o             <= seq_stage;
+            wr_stage_o.src_val     <= src_val_pc;
+            wr_stage_o.dst_val     <= dst_val_pc;
             wr_stage_o.alu_oper    <= alu_oper;
             wr_stage_o.alu_ctrl    <= alu_ctrl;
             wr_stage_o.alu_flags   <= alu_flags;

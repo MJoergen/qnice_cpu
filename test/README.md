@@ -37,6 +37,7 @@ src/cpu_constants.vhd:238:13:@837960ns:(report note): 1692 (E000) HALT
 | `prog_pipeline.asm`    | `0x0015`        | The first `HALT` after `L_START`. The twelve `HALT`s at `0x0004`-`0x000F` are padding that must be jumped over. |
 | `prog_interleave.asm`  | `0x001E`        | The only `HALT` in the program, so here reaching `HALT` at all is sufficient. |
 | `prog_flags.asm`       | `0x0085`        | The `HALT` after the `EXIT` label at `0x0083`. Each of the eight sub-tests has its own `E_T*` failure `HALT`. |
+| `prog_r15.asm`         | `0x001E`        | The `HALT` after the `EXIT` label at `0x001C`. Each of the four sub-tests has its own `E_T*` failure `HALT`. |
 
 If you add a program, find its success address in the generated `.lis` file and
 add a row here.
@@ -71,6 +72,24 @@ where a stale flags value would show up:
   micro-op instruction that stalls on the memory read.
 * `T7`/`T8` — differential `SUBC` and `SHR`: the same operands with the SR input
   bit clear and set must give different results.
+
+`prog_r15.asm` covers `R15` used as an ordinary ALU operand. The working Program
+Counter lives in the FETCH stage, so the register file's `R15` copy is stale
+during sequential execution and PREPARE has to substitute the real PC; these
+tests pin that down against the reference semantics in `qnice.c`, where a single
+PC register is advanced right after the instruction fetch and both operands are
+read through it:
+
+* `T1` — `CMP R15, R15`: the source and destination read paths must agree. This
+  is the differential probe that originally exposed the bug, when only the
+  source path was being substituted.
+* `T2` — `R15` as a source reads the address of the next instruction.
+* `T3` — `ADD 0x0002, R15`, a PC-relative jump, which exercises `R15` as a
+  destination on a two-word instruction (so the PC has already advanced past
+  the immediate).
+* `T4` — `@R15`, PC-relative memory addressing, which reaches the PC through a
+  different path again: the WRITE stage derives the memory address from
+  `src_val`, not from the ALU operand.
 
 ## Caveat: the pipeline is throttled
 

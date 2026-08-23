@@ -19,9 +19,10 @@ See the following block diagram:
 The block diagram contains two additional blocks:
 * Registers: Contains the CPU registers and supports two read ports (connected
   to DECODE) and one write port (connected to WRITE). Note that the working copy
-  of the Program Counter `R15` lives in the FETCH stage, not here; reading `R15`
-  as a source operand is special-cased in PREPARE to use the address of the
-  current instruction rather than the register file.
+  of the Program Counter `R15` lives in the FETCH stage, not here. The register
+  file's `R15` copy is only written when an instruction targets `R15`, so it is
+  stale during sequential execution; PREPARE substitutes the real PC for either
+  operand whenever `R15` is read, in any addressing mode.
 * Memory: Interfaces to the Wishbone memory bus and supports two read ports
   (connected to PREPARE) and one write port (connected to WRITE).
 
