@@ -44,31 +44,24 @@ architecture synthesis of write is
    signal mem_data    : std_logic_vector(15 downto 0);
    signal mem_valid   : std_logic;
 
-   signal reg_r14_we_d : std_logic;
-   signal reg_r14_d    : std_logic_vector(15 downto 0);
-   signal reg_we_d     : std_logic;
-   signal reg_addr_d   : std_logic_vector(3 downto 0);
-   signal reg_val_d    : std_logic_vector(15 downto 0);
-   signal r14          : std_logic_vector(15 downto 0);
 
 begin
 
    prep_ready_o <= mem_req_ready_i when or(mem_req_op_o) = '1' else '1';
 
-   p_bypass : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         reg_r14_we_d <= reg_r14_we_o;
-         reg_r14_d    <= reg_r14_o;
-         reg_we_d     <= reg_we_o;
-         reg_addr_d   <= reg_addr_o;
-         reg_val_d    <= reg_val_o;
-      end if;
-   end process p_bypass;
-
-   r14 <= reg_val_d when reg_we_d = '1' and reg_addr_d = C_REG_SR else
-          reg_r14_d when reg_r14_we_d = '1' else
-          prep_stage_i.r14;
+   -- NOTE: prep_stage_i.r14 is used directly, with no bypass of this stage's own
+   -- Status Register writes. There used to be one (a p_bypass process holding a
+   -- one-cycle-delayed copy of everything written to the Register module, and a
+   -- priority mux in front of prep_stage_i.r14). It was removed as dead code: a
+   -- probe on it never fired once in 8286 accepted beats of test/prog.asm, and
+   -- removing it left every test program passing with test/writes.txt
+   -- byte-identical.
+   --
+   -- The reason is structural. registers.vhd forwards BOTH Status Register
+   -- write ports combinationally onto sr_val_o; DECODE passes reg_r14_i through
+   -- as a live, unregistered signal; and this stage only ever issues a register
+   -- write on a cycle where PREPARE is simultaneously latching a fresh beat. So
+   -- the value arriving here has already absorbed the write this stage made.
 
 
    ------------------------------------------------------------
@@ -105,7 +98,7 @@ begin
    -- Update register (combinatorial)
    ------------------------------------------------------------
 
-   update_reg <= r14(to_integer(prep_stage_i.inst(R_JMP_COND))) xor prep_stage_i.inst(R_JMP_NEG)
+   update_reg <= prep_stage_i.r14(to_integer(prep_stage_i.inst(R_JMP_COND))) xor prep_stage_i.inst(R_JMP_NEG)
                  when prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP
               else '1';
 

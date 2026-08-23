@@ -517,7 +517,9 @@ Whenever one has a pipelined architecture, where later stages write back to
 storage (i.e. register file) that is read in an earlier stage, we have a
 potential data hazard. In other words, we need to ensure that the register
 values read in the DECODE stage are not stale compared to the values written in
-the WRITE stage.  This is handled by two separate mechanisms.
+the WRITE stage. In this design that is handled entirely inside the Register
+module; `cpu_main` itself carries no bypass logic, which is less obvious than it
+sounds and is explained below.
 
 ### Write-before-read in the Register module
 The Register module resolves the common case itself: a write from the WRITE
@@ -527,38 +529,34 @@ register file, described in
 [registers/README.md](../registers/README.md#Operation). No action is needed in
 `cpu_main` for this case.
 
-### Status Register bypass inside WRITE
-The Status Register needs extra care, because the WRITE stage both consumes and
-produces it within the same instruction. The value arriving with the stage
-record, `prep_stage_i.r14`, was sampled one pipeline beat earlier, so it can be
-stale with respect to a write that the WRITE stage itself issued in the previous
-clock cycle.
+### Why the WRITE stage needs no Status Register bypass
 
-The process `p_bypass` in [write.vhd](write.vhd) therefore keeps a
-one-cycle-delayed copy of everything this stage last wrote to the Register
-module, and the internal signal `r14` picks the freshest value available:
+The WRITE stage both consumes and produces the Status Register within the same
+instruction, so it looks like it should need a bypass of its own — and it used
+to have one: a `p_bypass` process holding a one-cycle-delayed copy of everything
+this stage wrote to the Register module, feeding a priority mux in front of
+`prep_stage_i.r14`.
 
-| Priority | Condition                                  | Value used            |
-| -------- | ------------------------------------------ | --------------------- |
-| 1        | previous cycle wrote `R14` as an ordinary register (`reg_we_d` and `reg_addr_d = C_REG_SR`) | `reg_val_d`           |
-| 2        | previous cycle updated the SR via the dedicated port (`reg_r14_we_d`) | `reg_r14_d`           |
-| 3        | otherwise                                  | `prep_stage_i.r14`    |
+That was removed as dead code. A probe on it never fired once in 8286 accepted
+beats of `test/prog.asm`, and removing it left every test program passing with
+`test/writes.txt` byte-identical. The reason is structural, and worth
+understanding before anyone adds it back:
 
-Note that `r14` feeds only the conditional-branch decision (the `update_reg`
-signal).
+* `registers.vhd` forwards **both** Status Register write ports combinationally
+  onto `sr_val_o` (see
+  [registers/README.md](../registers/README.md#Write-Before-Read-on-the-dedicated-SR-port)).
+* DECODE passes `reg_r14_i` through as a *live*, unregistered signal — see the
+  note on latched versus live elements under
+  [Internal interfaces](#Internal-interfaces).
+* WRITE only ever issues a register write on a cycle where PREPARE is
+  simultaneously latching a fresh beat, because both are gated by the same
+  ready signal.
 
-**This bypass appears to be redundant.** A probe on `r14 /= prep_stage_i.r14`
-never fired once in 8286 accepted beats of `prog.asm`, and replacing the whole
-mux with a plain `r14 <= prep_stage_i.r14` leaves every test program passing and
-`test/writes.txt` byte-identical. The reason is structural: `registers.vhd`
-forwards both SR write ports combinationally onto `sr_val_o`, DECODE passes
-`reg_r14_i` through as a live (unregistered) signal, and WRITE only ever issues a
-register write on a cycle where PREPARE is simultaneously latching a fresh beat —
-so the value arriving here has already absorbed that write. It costs five
-registers plus a mux in the path feeding the conditional-branch decision, and is
-a candidate for removal; it is documented rather than deleted because the
-argument above is a simulation result plus reasoning, not a proof. The flags input of the ALU comes from `prep_stage_i.alu_flags`, which
-the PREPARE stage latched separately.
+Put together: the `r14` value arriving at WRITE has already absorbed any write
+WRITE itself made. `prep_stage_i.r14` is therefore used directly, and it feeds
+only the conditional-branch decision (`update_reg`). The ALU takes its flags
+from `prep_stage_i.alu_flags`, which PREPARE latched from the same source in the
+same cycle — the two are always bit-identical.
 
 ## Pipeline flush
 Any update of the Program Counter invalidates whatever DECODE and PREPARE have

@@ -31,16 +31,22 @@ begin
    p_shift_left : process (src_data_i, dst_data_i, sr_i)
       variable tmp   : std_logic_vector(32 downto 0);
       variable res   : std_logic_vector(16 downto 0);
-      variable shift : integer;
+      variable shift : natural range 0 to 16;
    begin
       -- Prepare for shift
       tmp(32)           := sr_i(C_SR_C);  -- Old value of C
       tmp(31 downto 16) := dst_data_i;
       tmp(15 downto 0)  := (15 downto 0 => sr_i(C_SR_X));  -- Fill with X
 
-      shift := to_integer(unsigned(src_data_i));
-      if shift <= 16 then
-         res := tmp(32-shift downto 16-shift);
+      -- The shift amount is constrained to 0 to 16 and sliced from the low five
+      -- bits INSIDE the guard, not derived from the full 16-bit operand. Both
+      -- forms are functionally identical, but indexing tmp with an unconstrained
+      -- integer makes the synthesiser build a far wider barrel shifter than the
+      -- 17 positions that are actually reachable: doing it this way took
+      -- alu_data from 230 to 194 LUTs.
+      if unsigned(src_data_i) <= 16 then
+         shift := to_integer(unsigned(src_data_i(4 downto 0)));
+         res   := tmp(32-shift downto 16-shift);
       else
          res := (others => sr_i(C_SR_X));
       end if;
@@ -53,16 +59,17 @@ begin
    p_shift_right : process (src_data_i, dst_data_i, sr_i)
       variable tmp   : std_logic_vector(32 downto 0);
       variable res   : std_logic_vector(16 downto 0);
-      variable shift : integer;
+      variable shift : natural range 0 to 16;
    begin
       -- Prepare for shift
       tmp(32 downto 17) := (32 downto 17 => sr_i(C_SR_C));  -- Fill with C
       tmp(16 downto 1)  := dst_data_i;
       tmp(0)            := sr_i(C_SR_X);  -- Old value of X
 
-      shift := to_integer(unsigned(src_data_i));
-      if shift <= 16 then
-         res := tmp(shift+16 downto shift);
+      -- See the note in p_shift_left about the constrained shift amount.
+      if unsigned(src_data_i) <= 16 then
+         shift := to_integer(unsigned(src_data_i(4 downto 0)));
+         res   := tmp(shift+16 downto shift);
       else
          res := (others => sr_i(C_SR_C));
       end if;

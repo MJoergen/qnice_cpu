@@ -36,9 +36,8 @@ clock cycles in the FETCH stage (two cycles if it uses an immediate operand),
 and up to three clock cycles in DECODE -- one per micro-operation, because the
 Sequencer in PREPARE holds DECODE stalled until it has issued the last one. The
 PREPARE stage additionally waits for any memory operands to be read. The WRITE
-stage is combinatorial apart from a small set of shadow registers used for
-bypassing (`p_bypass` in [write.vhd](../src/cpu_main/write.vhd)); the ALU itself
-is entirely combinatorial.
+stage is entirely combinatorial, the ALU included; the only registers it drives
+are the outputs of the other blocks.
 
 In the above we see a Harvard architecture, where we have a separate
 instruction and data interface. This main reason for this choice is to simplify
@@ -176,16 +175,68 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-A synthesis run (using Vivado 2022.2 on commit #a426381) reported the following utilization:
+Measured with Vivado 2022.2 on commit `58b57db`, after the switch to
+`G_PAUSE_SIZE => 0`.
 
-|   Name    | LUTs | Regs | Slices |
-| --------- | ---- | ---- | ------ |
-| FETCH     |   56 |   90 |    37  |
-| CACHE     |   24 |   66 |    18  |
-| DECODE    |   53 |   74 |    31  |
-| PREPARE   |   88 |  133 |    80  |
-| WRITE     |  481 |   21 |    52  |
-| Registers |  167 |  142 |    88  |
-| Memory    |   59 |   74 |    35  |
-| TOTAL     |  930 |  600 |   319  |
+### Device totals
 
+From the shipping build (`make system.bit`), **after place-and-route**. These
+cover the whole `system`, i.e. the CPU plus the testbench memory model — but the
+memory model is essentially all Block RAM, so the LUTs are the CPU's:
+
+| Resource        | Used | Available | %    |
+| --------------- | ---- | --------- | ---- |
+| Slice LUTs      |  899 |     63400 | 1.42 |
+| Slice Registers |  579 |    126800 | 0.46 |
+| Slices          |  297 |     15850 | 1.87 |
+| Block RAM Tile  |    6 |       135 | 4.44 |
+
+Timing at the 8.50 ns constraint: **WNS +0.228 ns**, no failing endpoints. The
+build aborts on negative slack, so a bitstream implies timing was met — see the
+comment above the tcl-generating rule in the top-level `Makefile`.
+
+### Where the logic is
+
+The shipping build uses `-flatten_hierarchy rebuilt`, which lets synthesis
+optimise across module boundaries. That is worth real slack here, because the
+critical path crosses four modules — but it makes a per-module breakdown of that
+build useless as a design statement: the ALU ends up reported inside PREPARE,
+and `i_write` shows 16 LUTs.
+
+The table below therefore comes from a **separate `-flatten_hierarchy none`
+synthesis of the same source**, which keeps each module's logic where it was
+written:
+
+| Module          | LUTs | FFs |
+| --------------- | ---- | --- |
+| FETCH           |   52 |  90 |
+| CACHE (icache)  |   23 |  66 |
+| DECODE          |   53 |  74 |
+| PREPARE         |   79 | 131 |
+| WRITE           |  395 |   0 |
+| Registers       |  166 | 142 |
+| Memory          |   54 |  74 |
+| **CPU total**   |  824 | 577 |
+
+The module rows sum to 822 LUTs; the remaining 2 are glue at the `cpu_main` and
+`fetch_cache` levels (1 LUT each), which belong to no sub-module.
+
+Two things stand out:
+
+* **WRITE dominates, at 48% of the CPU's LUTs**, and 246 of its 395 are the ALU
+  (`alu_data` 194, `alu_flags` 52). The two barrel shifters in `alu_data` are the
+  single largest block in the design. They were 230 LUTs until the shift amount
+  was constrained to its reachable range of 0 to 16 — indexing with an
+  unconstrained integer made the synthesiser build a far wider shifter than
+  necessary. Further reduction there is the most promising area optimisation
+  left.
+* **WRITE holds no registers at all.** It is purely combinatorial: the ALU is
+  combinatorial, and the Status Register shadow registers it used to carry were
+  removed once they were shown to be dead — see
+  [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
+
+The two tables do not add up to each other (824 vs 899 LUTs). That is expected:
+the first is measured after place-and-route, where physical optimisation
+replicates logic to meet timing, while the second stops after synthesis. Slices
+are not listed per module because slices are shared between modules and are not
+attributable that way.
