@@ -79,12 +79,10 @@ vunit i_cpu_main(cpu_main(synthesis))
    signal c_src_reg : std_logic_vector(3 downto 0);
    signal c_src_val : std_logic_vector(15 downto 0);
    signal c_dst_reg : std_logic_vector(3 downto 0);
-   signal c_dst_val : std_logic_vector(15 downto 0);
    attribute anyconst : boolean;
    attribute anyconst of c_src_reg : signal is true;
    attribute anyconst of c_src_val : signal is true;
    attribute anyconst of c_dst_reg : signal is true;
-   attribute anyconst of c_dst_val : signal is true;
 
    signal f_move_reg_reg : std_logic;
    signal f_reg_read : std_logic;
@@ -99,17 +97,53 @@ vunit i_cpu_main(cpu_main(synthesis))
    f_reg_read <= '1' when reg_rd_en_o = '1' and reg_src_reg_o=c_src_reg and reg_dst_reg_o=c_dst_reg else '0';
    f_reg_write <= '1' when reg_we_o = '1' and reg_addr_o = c_dst_reg and reg_val_o = c_src_val else '0';
 
-   f_mov_r_r : assert always {fetch_valid_i = '1' and fetch_ready_o = '1' and
-                              f_move_reg_reg = '1' and
-                              c_src_reg /= 15} |->
+   -- Correctness of a MOVE <REG>,<REG> instruction, as two SAFETY properties.
+   --
+   -- This was once a single property of the shape
+   --    {accepted} |-> {f_reg_read; true[*]; <completion>}
+   -- which was vacuous past its first term: "true[*]" is an unbounded SERE
+   -- repetition, so on a finite BMC trace the tail is always merely "pending"
+   -- rather than violated. Inverting the written value, corrupting the written
+   -- address, or suppressing the register write altogether were all NOT caught.
+   --
+   -- Bounding the repetition instead ("true[*0 to N]" -- note GHDL spells the
+   -- range with "to", not ":") does not work either: the completion latency is
+   -- genuinely unbounded here, because a preceding load stalls the pipeline
+   -- until mem_src_valid_i arrives and nothing forces a response ever to
+   -- arrive. The failure step just tracks N. Making it bounded would need
+   -- fairness assumptions that BMC cannot discharge and that would remove the
+   -- stall scenarios the other properties in this file rely on.
+   --
+   -- So the eventuality is dropped. What remains are two safety properties,
+   -- one at each end of the instruction. Neither claims the instruction
+   -- eventually completes -- that is liveness, and out of reach for BMC.
 
-                             {f_reg_read = '1';
+   -- (1) On accepting a MOVE <REG>,<REG>, the matching register read must be
+   -- issued in that same cycle.
+   f_mov_r_r_read : assert always {fetch_valid_i = '1' and fetch_ready_o = '1' and
+                                   f_move_reg_reg = '1' and
+                                   c_src_reg /= 15} |-> {f_reg_read = '1'};
 
-                              true[*];
+   -- (2) Whenever a MOVE <REG>,<REG> completes in the WRITE stage, it must
+   -- write the destination register with the value read for the source, update
+   -- the flags, and issue no memory request.
+   --
+   -- The rst_i guard is required: during reset prep2wr_valid is unconstrained
+   -- and the WRITE stage is forcing its reset-time write of R15, which matches
+   -- the trigger by accident when c_src_reg = c_dst_reg = 0.
+   signal f_mov_in_write : std_logic;
+   f_mov_in_write <= '1' when prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_MOVE and
+                              prep2wr_stage.inst(11 downto 8) = c_src_reg and
+                              prep2wr_stage.inst(7 downto 6) = work.cpu_constants.C_MODE_REG and
+                              prep2wr_stage.inst(5 downto 2) = c_dst_reg and
+                              prep2wr_stage.inst(1 downto 0) = work.cpu_constants.C_MODE_REG else '0';
 
-                              mem_req_valid_o = '0' and
-                              reg_r14_we_o = '1' and
-                              f_reg_write = '1'};
+   f_mov_r_r_write : assert always {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and
+                                    f_mov_in_write = '1' and
+                                    c_src_reg /= 15} |->
+                                   {mem_req_valid_o = '0' and
+                                    reg_r14_we_o = '1' and
+                                    f_reg_write = '1'};
 
 
    -----------------------------
@@ -127,8 +161,14 @@ vunit i_cpu_main(cpu_main(synthesis))
    assume always {mem_dst_valid_i and not mem_dst_ready_o} |=> {stable(mem_dst_valid_i) and stable(mem_dst_data_i)};
 
    assume always {reg_rd_en_o = '1' and reg_src_reg_o=c_src_reg} |=> {reg_src_val_i = c_src_val};
-   assume always {reg_rd_en_o = '1' and reg_dst_reg_o=c_dst_reg} |=> {reg_dst_val_i = c_dst_val};
    assume always {reg_rd_en_o = '0'} |=> {stable(reg_src_val_i) and stable(reg_dst_val_i)};
+
+   -- NOTE: the assumption above models register c_src_reg as permanently
+   -- holding c_src_val -- a read of it always returns the same value, even
+   -- after the design writes to that register. That is what gives the MOVE
+   -- properties something concrete to check against, but it is an
+   -- over-constraint: traces in which a write changes c_src_reg are excluded
+   -- from EVERY property in this file, not just those two.
 
    assume always {reg_r14_we_o = '0'} |=> {stable(reg_r14_i)};
 
@@ -178,6 +218,14 @@ vunit i_cpu_main(cpu_main(synthesis))
    --------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    --------------------------------------------
+
+   -- Non-vacuity of the two MOVE properties. The trigger of each must be
+   -- reachable, and the completion one must be reachable both for an ordinary
+   -- destination and for c_dst_reg = R15, where the MOVE doubles as a jump.
+   c_mov_read     : cover {fetch_valid_i = '1' and fetch_ready_o = '1' and f_move_reg_reg = '1' and c_src_reg /= 15};
+   c_mov_write    : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_mov_in_write = '1' and c_src_reg /= 15};
+   c_mov_write_pc : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_mov_in_write = '1' and c_src_reg /= 15 and c_dst_reg = 15};
+   c_mov_write_gp : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_mov_in_write = '1' and c_src_reg /= 15 and c_dst_reg /= 15};
 
    -- Non-vacuity: the stall condition that f_dec2prep_valid_stable predicates
    -- on must actually be reachable, otherwise that assertion proves nothing.

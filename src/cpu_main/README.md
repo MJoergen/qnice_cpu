@@ -558,11 +558,32 @@ The assertions fall into three groups:
   word when we need two; `f_mem_src_ready_stable` / `f_mem_dst_ready_stable`
   check the ready signals towards the Memory module; `f_r14_bit0` checks the
   QNICE invariant that bit 0 of the Status Register always reads back as `1`.
-* **End-to-end instruction behaviour.** `f_mov_r_r` is the one property that
-  reasons about an actual instruction. Using `anyconst` source/destination
-  register numbers, it asserts that an accepted `MOVE Rs, Rd` (with `Rs /= R15`)
-  causes exactly one register read of that pair, and eventually a register write
-  of the read value into `Rd`, with no memory request in between.
+* **Instruction behaviour.** `f_mov_r_r_read` and `f_mov_r_r_write` are the two
+  properties that reason about an actual instruction. Using `anyconst`
+  source/destination register numbers, they assert that accepting a
+  `MOVE Rs, Rd` (with `Rs /= R15`) issues the matching register read in that
+  same cycle, and that whenever such a MOVE *completes* in WRITE it writes `Rd`
+  with the value read for `Rs`, updates the flags, and issues no memory request.
+  `c_mov_read`, `c_mov_write`, `c_mov_write_pc` and `c_mov_write_gp` cover both
+  triggers, including the `Rd = R15` case where the MOVE doubles as a jump.
+
+  These two replace an earlier single property of the shape
+  `{accepted} |-> {read; true[*]; completion}`, which was **vacuous past its
+  first term**: `true[*]` is an unbounded SERE repetition, so on a finite BMC
+  trace the tail is always merely "pending" rather than violated. Inverting the
+  written value, corrupting the written address, and suppressing the register
+  write altogether all went undetected; only the read term had any effect.
+  Bounding the repetition is not an option either, because the completion
+  latency is genuinely unbounded — a preceding load stalls the pipeline until
+  `mem_src_valid_i` arrives, and nothing forces a response ever to arrive. The
+  eventuality is therefore dropped rather than faked: neither property claims
+  the instruction eventually completes, which is liveness and out of reach for
+  BMC anyway.
+
+  Note also what the environment does *not* cover: the assumption tying reads of
+  `c_src_reg` to the constant `c_src_val` models that register as never
+  changing, so traces where the design writes to it are excluded from every
+  property in the file.
 
 The Sequencer is additionally verified standalone in `formal/sequencer.psl`,
 where `prove` (k-induction) passes: output valid is a pure pass-through of input
@@ -573,7 +594,9 @@ under [DECODE](#DECODE) is an *assume* there, not an assert - it is a
 requirement on the microcode ROM, not a property of the Sequencer.
 
 **Status.** `cpu_main.sby` defines a `cover` and a `bmc` task, both at depth 20.
-Both pass. (They also pass at depth 30, which takes about 40 seconds; depth 20
+Both pass, and the assertions are mutation-tested: corrupting the register read
+address, the register write address, the written value, or the write enable each
+produces a failure. (They also pass at depth 30, which takes about 40 seconds; depth 20
 runs in under ten.) K-induction (`prove`) is not attempted for `cpu_main`.
 
 `bmc` used to fail at depth 4 on `f_dec2prep_valid_stable`. That was a defect in
