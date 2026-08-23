@@ -95,6 +95,54 @@ register reads) are handled via bypass logic described in
 built into the Registers module itself (see
 [src/registers/README.md](src/registers/README.md#Operation)).
 
+### Elastic pipeline building blocks (`src/sub/`)
+
+Six small, reusable valid/ready ("AXI-style") primitives that the rest of the design (FETCH,
+Registers, Memory, `cpu_main`) is built from. All are formally verified (`formal/<name>.{psl,sby}`)
+— **run `sby -f <name>.sby` after touching any of these**; several of the properties below only
+hold because of non-obvious interactions that BMC/induction catches but casual reading won't.
+
+| Module | Depth | Forward path (valid+data) | Backward path (ready) | Notes |
+|---|---|---|---|---|
+| `one_stage_buffer.vhd` | 1 | combinational when empty | combinational | zero-latency cut-through both ways |
+| `one_stage_fifo.vhd` | 1 | **registered** (always ≥1 cycle) | combinational | only `ready` cuts through |
+| `two_stage_buffer.vhd` | 2 | combinational when empty | combinational | 2× chained `one_stage_buffer` |
+| `two_stage_fifo.vhd` | 2 | registered | combinational, gated by `rst_i` | hand-built, not chained |
+| `dp_ram.vhd` | — | registered, 1-cycle, gated by `rd_en_i` | n/a | read-first on same-address collision |
+| `pipe_concat.vhd` | 0 | fully combinational | fully combinational | pure join, no storage, `clk_i`/`rst_i` unused |
+
+Subtleties worth knowing before reusing or modifying any of these:
+
+- **`one_stage_buffer` / `two_stage_buffer` are combinational in *both* directions when empty** —
+  valid+data ripple forward, ready ripples backward, in the same cycle. Chaining N of them creates
+  an O(N) combinational path each way; budget this against Fmax. `one_stage_fifo` / `two_stage_fifo`
+  avoid this by registering the forward path, at the cost of a guaranteed cycle of latency.
+- **`s_afull_o` (on `one_stage_buffer`) is raw occupancy, not "not ready."** `s_ready_o` can still be
+  `'1'` while `s_afull_o='1'` if downstream drains in the same cycle. Gate acceptance on `s_ready_o`,
+  never on `s_afull_o`.
+- **`m_valid_o` on `one_stage_buffer`/`two_stage_buffer` is gated combinationally by `rst_i`**
+  (`(m_valid_r or s_valid_i) and not rst_i`), so asserting reset clears it *within the same cycle*,
+  not just on the next clock edge. Any PSL property (or downstream logic) reasoning about "stability
+  until accepted" must account for this — a missing `abort rst_i`/`rst_i='1' or ...` escape here is
+  exactly the kind of bug that silently breaks k-induction (this has happened before; see git
+  history on `formal/two_stage_buffer.psl`).
+- **`two_stage_fifo`'s reset is asymmetric by design**, because it doubles as a mid-stream pipeline
+  flush (callers like FETCH OR it with the global reset): `s_ready_o` IS gated by `rst_i` (no input
+  can be accepted during a flush), but `m_valid_o` is deliberately NOT gated by `rst_i` (an output
+  handshake can still complete on the same cycle a flush is asserted). This means **the consumer
+  must share the same `rst_i`**, or it will silently accept a word the flush is discarding upstream.
+- **`dp_ram` read/write collision is read-first**: a read and write to the same address in the same
+  cycle returns the *old* value; the new value is visible from the next read. `G_RAM_STYLE="block"`
+  adds a falling-edge staging register to ease BRAM timing (requires a reasonably balanced clock
+  duty cycle) — `"distributed"` is a plain single rising-edge read register. Memory contents are
+  never reset by `rst_i` (unused, kept only for interface uniformity).
+- **`pipe_concat` has `clk_i`/`rst_i` ports that do nothing** — it's stateless combinational logic;
+  the ports exist only so it fits the same instantiation convention and formal-env uniformity as
+  everything else.
+- All six modules require the standard valid/ready contract from upstream: once `s_valid_i='1'` and
+  `s_ready_o='0'`, both `s_valid_i` and `s_data_i` must hold stable until accepted. Several files
+  check this in simulation only (`pragma translate_off`/`on`), not in synthesis.
+
 ### Directory layout
 
 - `src/cpu_constants.vhd` — shared constants/types used across modules.
@@ -102,8 +150,8 @@ built into the Registers module itself (see
 - `src/registers/` — register file (dual-port RAM based, write-before-read).
 - `src/memory/` — Wishbone-facing memory arbiter (source/destination operand buffers).
 - `src/cpu_main/` — DECODE, PREPARE, WRITE, and the `sub/` microcode ROM, sequencer, ALU.
-- `src/sub/` — reusable low-level building blocks (buffers, FIFOs, dual-port RAM, `pipe_concat`)
-  shared across the above; most have their own formal verification in `formal/`.
+- `src/sub/` — reusable elastic-pipeline building blocks, see
+  [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-src-sub) above.
 - `src/cpu.vhd` — top-level entity tying FETCH, Registers, Memory, and `cpu_main` together.
 - `test/` — testbench (`tb_cpu.vhd`), memory models, and `.asm` test programs.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).
