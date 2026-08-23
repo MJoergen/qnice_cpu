@@ -143,6 +143,31 @@ Subtleties worth knowing before reusing or modifying any of these:
   `s_ready_o='0'`, both `s_valid_i` and `s_data_i` must hold stable until accepted. Several files
   check this in simulation only (`pragma translate_off`/`on`), not in synthesis.
 
+### Memory module (`src/memory/memory.vhd`)
+
+Multiplexes one request channel (from EXECUTE) and two read-response channels (SRC/DST, back to
+EXECUTE) onto a single Wishbone Master interface. Full design writeup, including the back-pressure
+argument and the formal property list, is in [src/memory/README.md](src/memory/README.md); the
+key thing worth knowing up front:
+
+**Wishbone ACKs carry no identifying information** — a bare pulse, not tagged with which request
+or what type. This module recovers that itself via `i_two_stage_fifo_mem`, a depth-2 FIFO that
+records each accepted-but-unacked request's op-type in issue order; each `wb_ack_i` is matched to
+the *oldest* outstanding request (the FIFO's head) and that entry is popped to decide whether to
+route `wb_data_i` to the SRC buffer, the DST buffer, or nowhere (a WRITE ack). This is correct, but
+depends entirely on the Wishbone slave acking in issue order (stated in the module's header) — safe
+here since `wbd_*` (see `cpu.vhd`) connects to a single, non-reordering physical memory, but would
+silently misattribute data against a slave that completed requests out of order.
+
+Formal status (`formal/memory.psl`): `bmc`/`cover` (depth 10) pass. K-induction (`prove`, not
+currently in `formal/memory.sby`'s task list) is **partially closed**: the three buffer/FIFO
+overflow-safety properties that blocked the original attempt now prove inductively, via a
+self-correcting shadow register that mirrors the type-tracking FIFO's internal transition rules
+(needed because GHDL's synth-for-formal flow can't read a sub-instance's internal registers
+directly — confirmed by testing external names). One property, `f_wb_master_request` (≤2
+outstanding Wishbone requests), remains open under induction — true up to the checked BMC depth,
+with the specific remaining obstacle documented in a comment right above it in `memory.psl`.
+
 ### Directory layout
 
 - `src/cpu_constants.vhd` — shared constants/types used across modules.

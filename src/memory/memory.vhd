@@ -10,6 +10,24 @@ use work.cpu_constants.C_MEM_WRITE;
 -- * Requests are ack'ed in the same order.
 -- * Responses (ACKs) return at least one clock cycle later. No zero-latency
 --   ACKs.
+-- * A reset (or equivalently a mid-transaction rst_i pulse, which drops
+--   wb_cyc_o and so aborts any in-flight Wishbone cycle -- see wb_cyc_o
+--   below) is not followed by a stray wb_ack_i for the aborted request. This
+--   module's own bookkeeping (i_two_stage_fifo_mem) is wiped by the same
+--   rst_i, so a late ack for an already-forgotten request cannot be
+--   correctly attributed to anything.
+--
+-- WISHBONE ACKs carry no identifying information -- wb_ack_i is just a pulse,
+-- not tagged with which request it completes or what kind it was. This
+-- module recovers that information itself via i_two_stage_fifo_mem, which
+-- records the op-type (mreq_op_i) of every accepted-but-unacked request, in
+-- issue order. Each wb_ack_i is matched to the OLDEST outstanding request
+-- (the FIFO's head, tsf_req_out_data) and that head is popped -- so this
+-- relies entirely on the "ack'ed in the same order" contract above; if a
+-- Wishbone slave ever completed requests out of order, this scheme (and the
+-- src/dst read-response routing built on it, see below) would silently
+-- misattribute data. This is safe here because wbd_* (see cpu.vhd) connects
+-- to a single physical memory device with no internal reordering path.
 --
 -- mreq_op_i is a one-hot encoding of the request:
 -- * WRITE: This writes mreq_data_i to mreq_addr_i
@@ -128,7 +146,11 @@ begin
 
    tsf_req_in_valid <= mreq_valid_i and mreq_ready_o;
 
-   -- Two-word FIFO with registered output
+   -- This is the type-tagging FIFO described in the header: it exists purely
+   -- to recover, on each anonymous wb_ack_i, WHICH kind of request (WRITE /
+   -- READ_SRC / READ_DST) is being completed -- see tsf_req_out_ready and
+   -- tsb_src_in_valid/tsb_dst_in_valid below, which are what actually consume
+   -- that information. Two-word FIFO with registered output.
    i_two_stage_fifo_mem : entity work.two_stage_fifo
       generic map (
          G_DATA_SIZE => 3
@@ -145,6 +167,12 @@ begin
          m_data_o  => tsf_req_out_data
       ); -- i_two_stage_fifo_mem
 
+   -- Every wb_ack_i is matched to the OLDEST outstanding request (the FIFO
+   -- head, tsf_req_out_data) and pops it -- this is the "acks return in
+   -- issue order" assumption from the header, applied. Gating with wb_cyc_o
+   -- additionally protects against ever popping on a stray ack that arrives
+   -- while nothing is genuinely outstanding (e.g. right after a
+   -- reset/abort) -- see the reset/abort note in the header.
    tsf_req_out_ready <= wb_cyc_o and wb_ack_i;
 
 
@@ -172,6 +200,13 @@ begin
       ); -- i_one_stage_buffer_wb
 
    -- Hold wishbone buffer while waiting for response
+   --
+   -- Note: wb_cyc_o can drop for a cycle between two logically separate
+   -- transactions that happen not to overlap (nothing staged, nothing
+   -- outstanding) even while more mreq's are still to come. This is
+   -- intentional -- CYC spans one Wishbone bus cycle, not the whole
+   -- lifetime of this module -- and is fine under pipelined Wishbone B4, but
+   -- worth knowing if this signal looks "flickery" on a waveform.
    wb_cyc_o <= '1' when (wb_stb_o = '1' or tsf_req_out_valid = '1') and rst_i = '0' else
                '0';
 
@@ -180,6 +215,11 @@ begin
    -- Store the response for the SRC output
    ------------------------------------------------------------------------
 
+   -- wb_data_i itself doesn't say which read it belongs to -- this reads the
+   -- type recovered above (tsf_req_out_data, the FIFO head) to decide the ack
+   -- just received is for a READ_SRC and should be routed here. A WRITE ack
+   -- (tsf_req_out_data(C_MEM_READ_SRC)='0') correctly produces neither this
+   -- nor the DST valid below, and wb_data_i is simply ignored for it.
    tsb_src_in_valid <= '1' when wb_ack_i = '1' and tsf_req_out_valid = '1' and
                                 tsf_req_out_data(C_MEM_READ_SRC) = '1' else
                        '0';
@@ -206,6 +246,7 @@ begin
    -- Store the response for the DST output
    ------------------------------------------------------------------------
 
+   -- Mirror of tsb_src_in_valid above, for READ_DST.
    tsb_dst_in_valid <= '1' when wb_ack_i = '1' and tsf_req_out_valid = '1' and
                                 tsf_req_out_data(C_MEM_READ_DST) = '1' else
                        '0';
