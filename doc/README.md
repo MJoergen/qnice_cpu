@@ -176,28 +176,16 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-A synthesis run reported the following utilization:
+A synthesis run (using Vivado 2022.2 on commit #a426381) reported the following utilization:
 
 |   Name    | LUTs | Regs | Slices |
 | --------- | ---- | ---- | ------ |
-| FETCH     |   70 |  152 |    37  |
-| DECODE    |   63 |   76 |    31  |
-| PREPARE   |   52 |  129 |    71  |
-| WRITE     |  427 |    0 |   148  |
-| Registers |  132 |  142 |    66  |
-| Memory    |   31 |   37 |    15  |
-| TOTAL     |  777 |  536 |   260  |
-
-**These figures are stale and should be regenerated** (`make system.bit`, then
-read the utilization report). Specifically:
-
-* WRITE is listed with 0 registers, which predates the `p_bypass` shadow
-  registers now in [write.vhd](../src/cpu_main/write.vhd).
-* The LUT column sums to 775, not the 777 shown, so either a row is out of date
-  or a couple of LUTs of top-level glue are unaccounted for.
-* Slice counts are not additive -- slices are shared between blocks -- so the
-  total being smaller than the sum of the rows is expected, not an error.
-* No tool version, part number or date was recorded, and no report is checked
-  in, so none of this can be re-verified as it stands.
-
+| FETCH     |   56 |   90 |    37  |
+| CACHE     |   24 |   66 |    18  |
+| DECODE    |   53 |   74 |    31  |
+| PREPARE   |   88 |  133 |    80  |
+| WRITE     |  481 |   21 |    52  |
+| Registers |  167 |  142 |    88  |
+| Memory    |   59 |   74 |    35  |
+| TOTAL     |  930 |  600 |   319  |
 
