@@ -198,7 +198,7 @@ vunit i_two_stage_fifo(two_stage_fifo(synthesis))
    f_size : assert always {0 <= f_count and f_count <= 2};
 
    -- The FIFO size is as expected
-   f_fill : assert always {f_count = to_integer(s_fill_o)};
+   f_fill : assert always {f_count = s_fill_o};
 
 
    ----------------------------------------------------
@@ -345,13 +345,13 @@ vunit i_two_stage_fifo(two_stage_fifo(synthesis))
    -- deliberately disagree during a reset or flush cycle: the gate reports
    -- "not accepting", whereas the stored occupancy is unchanged until the
    -- clock edge.
-   f_inv_fill_zero : assert always {rst_i = '0' and m_valid_o = '0'} |-> {s_fill_o = "00"};
+   f_inv_fill_zero : assert always {rst_i = '0' and m_valid_o = '0'} |-> {s_fill_o = 0};
 
    f_inv_fill_one : assert always {rst_i = '0' and m_valid_o = '1' and s_ready_o = '1'}
-                              |-> {s_fill_o = "01"};
+                              |-> {s_fill_o = 1};
 
    f_inv_fill_two : assert always {rst_i = '0' and m_valid_o = '1' and s_ready_o = '0'}
-                              |-> {s_fill_o = "10"};
+                              |-> {s_fill_o = 2};
 
    -- STRENGTHENING INVARIANTS FOR THE NO-GARBAGE PROPERTIES
    --

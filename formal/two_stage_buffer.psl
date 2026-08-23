@@ -24,8 +24,16 @@ vunit i_two_stage_buffer(two_stage_buffer(synthesis))
    -- asserted at the consequent cycle.
    f_after_reset_ready : assert always {rst_i} |=> s_ready_o abort rst_i;
 
-   -- Output must be stable until accepted or reset
-   f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o)};
+   -- Output must be stable until accepted or reset.
+   -- "abort rst_i" is required here: the top-level m_valid_o is inherited
+   -- combinatorially from stage 2's own m_valid_o, which is itself gated by
+   -- "and not rst_i" (see one_stage_buffer's m_valid_o). So asserting rst_i
+   -- clears m_valid_o within the SAME cycle it is sampled as the "next"
+   -- state, not merely in some later cycle -- that is intended reset
+   -- behavior, not a stability violation. Mirrors one_stage_buffer.psl's own
+   -- f_output_stable, which needs the identical escape for the identical
+   -- reason.
+   f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o)} abort rst_i;
 
    -- Ready must be stable until new data or reset.
    -- Same class of issue as f_after_reset_ready: with no new data, the
@@ -70,7 +78,7 @@ vunit i_two_stage_buffer(two_stage_buffer(synthesis))
    f_count_0_input : assert always {f_count = 0 and s_valid_i = '1'} |-> {m_valid_o = '1' and m_data_o = s_data_i} abort rst_i;
 
    -- Verify BUFFER filling
-   f_fill : assert always {f_count = to_integer(s_fill_o)};
+   f_fill : assert always {f_count = s_fill_o};
 
    -- Verify internal signal. This is needed for induction proof.
    --

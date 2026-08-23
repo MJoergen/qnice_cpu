@@ -10,21 +10,22 @@
 ##                       regression; also catches basecase-only issues).
 ##
 ##   bmc_block         - bounded safety check on the timing-accurate block RTL.
-##                       Block adds a falling-edge read register (rd_data) with no
-##                       RTL initializer and read-during-write collision, which
-##                       makes a clean single-cycle inductive invariant awkward,
-##                       so block is covered in bounded mode. Block and
-##                       distributed are behaviourally identical at the rising-
-##                       edge sample points (see the input-stability assumption in
-##                       dp_ram.psl), so prove_distributed + bmc_block cover both.
+##                       Block adds a falling-edge read register (rd_data) with a
+##                       read-during-write collision, which makes a clean
+##                       single-cycle inductive invariant harder to state. Kept
+##                       alongside prove_block as a fast sanity / regression
+##                       check on the same asserts.
+##
+##   prove_block       - unbounded k-induction of the block-style RTL. Closed by
+##                       f_rd_data in dp_ram.psl, an explicit mirror invariant
+##                       for the falling-edge register rd_data (initialised in
+##                       dp_ram.vhd specifically so induction has a defined
+##                       starting value for it), in addition to f_mem_shadow.
 ##
 ##   cover_distributed /
 ##   cover_block       - reachability of the cover statements (f_toggle), i.e.
 ##                       that the harness can actually drive rd_en_i through its
 ##                       toggle sequence for each style.
-##
-## NOTE: prove_block is intentionally omitted - unbounded induction through the
-## uninitialised, collision-prone falling-edge rd_data register is still open.
 ##
 ## Run one task:   sby -f dp_ram.sby bmc_block
 ## Run everything: sby -f dp_ram.sby
