@@ -118,17 +118,26 @@ The `src_val_o`/`dst_val_o` priority chain is, from highest to lowest:
 | 1 | `wr_val_i`               | ordinary write this cycle, to the register being read |
 | 2 | `wr_sr_val_i or X"0001"` | dedicated SR write this cycle, register read is `R14` |
 | 3 | `wr_val_d`               | ordinary write last cycle, to the register being read |
-| 4 | `wr_sr_val_d or X"0001"` | dedicated SR write last cycle, register read is `R14` |
-| 5 | `src_val_d`/`dst_val_d`  | no read issued: hold the previous output              |
-| 6 | `reg_sr`                 | the register being read is `R14`                      |
-| 7 | RAM output               | ordinary register                                     |
+| 4 | `src_val_d`/`dst_val_d`  | no read issued: hold the previous output              |
+| 5 | `reg_sr`                 | the register being read is `R14`                      |
+| 6 | RAM output               | ordinary register                                     |
 
-Terms 3 and 4 exist because the held output must keep tracking writes while
-`rd_en_i` is low; since `src_val_d`/`dst_val_d` re-sample `src_val_o`/`dst_val_o`
-every cycle, a forwarded value stays visible for arbitrarily long stalls. The
-`or X"0001"` on terms 2 and 4 mirrors `p_sr` and `sr_val_o`, which force bit 0
-of the Status Register to `1`; it is redundant in practice, since the WRITE
-stage never drives `wr_sr_val_i(0)` low (asserted by `f_r14_bit0` in
+Term 3 exists because the held output must keep tracking writes while `rd_en_i`
+is low; since `src_val_d`/`dst_val_d` re-sample `src_val_o`/`dst_val_o` every
+cycle, a forwarded value stays visible for arbitrarily long stalls.
+
+**There is deliberately no delayed counterpart to term 2.** The two ports have
+different fallbacks: a general register falls back to the RAM output (term 6),
+which holds a stale value until the next read is issued, so it needs term 3;
+`R14` falls back to `reg_sr` (term 5), which `p_sr` refreshes on every clock
+edge regardless of whether a read was issued. A `wr_sr_val_d` term was added and
+then removed again — a simulation probe comparing the output with and without it
+never differed once across all seven test programs at full fetch throughput, and
+`formal/registers.psl` passes without it.
+
+The `or X"0001"` on term 2 mirrors `p_sr` and `sr_val_o`, which force bit 0 of
+the Status Register to `1`; it is redundant in practice, since the WRITE stage
+never drives `wr_sr_val_i(0)` low (asserted by `f_r14_bit0` in
 `formal/cpu_main.psl`).
 
 

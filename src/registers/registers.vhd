@@ -225,17 +225,23 @@ begin
    -- src_reg_d" a single register.
    -- Potential improvement: Small
 
-   -- The two wr_sr_* terms forward writes made through the dedicated SR port,
-   -- mirroring the wr_* terms that forward writes made through the ordinary
-   -- port. Without them, reading R14 as an ordinary register in the cycle
-   -- after (or the same cycle as) an SR update returns reg_sr, which has not
-   -- caught up yet. Priority matches p_sr and sr_val_o: within one cycle the
-   -- ordinary port wins over the SR port, and a same-cycle write wins over the
-   -- delayed copy of the previous cycle's write.
+   -- The wr_sr_val_i term forwards a write made through the dedicated SR port,
+   -- mirroring the wr_val_i term that forwards the ordinary port. Without it,
+   -- reading R14 as an ordinary register in the cycle an SR update lands
+   -- returns reg_sr, which has not caught up yet. Priority matches p_sr and
+   -- sr_val_o: within one cycle the ordinary port wins over the SR port.
+   --
+   -- Note the deliberate asymmetry: the ordinary port needs a DELAYED forward
+   -- as well (wr_val_d, for a write seen while no new read is being issued),
+   -- but the SR port does not. Their fallbacks differ -- a general register
+   -- falls back to the RAM output, which holds a stale value until the next
+   -- read, whereas R14 falls back to reg_sr, which p_sr refreshes on every
+   -- clock edge regardless. A wr_sr_val_d term was tried and removed again:
+   -- it never changed either output in any test program, and registers.psl
+   -- passes without it.
    src_val_o <= wr_val_i               when wr_en_i = '1' and wr_reg_i = src_reg_d else
                 wr_sr_val_i or X"0001" when wr_sr_en_i = '1' and src_reg_d = C_REG_SR else
                 wr_val_d               when wr_en_d = '1' and wr_addr_d = src_reg_d else
-                wr_sr_val_d or X"0001" when wr_sr_en_d = '1' and src_reg_d = C_REG_SR else
                 src_val_d              when rd_en_d = '0' else
                 reg_sr                 when src_reg_d = C_REG_SR else
                 upper_rd_data_src      when src_reg_d >= 8 else
@@ -243,7 +249,6 @@ begin
    dst_val_o <= wr_val_i               when wr_en_i = '1' and wr_reg_i = dst_reg_d else
                 wr_sr_val_i or X"0001" when wr_sr_en_i = '1' and dst_reg_d = C_REG_SR else
                 wr_val_d               when wr_en_d = '1' and wr_addr_d = dst_reg_d else
-                wr_sr_val_d or X"0001" when wr_sr_en_d = '1' and dst_reg_d = C_REG_SR else
                 dst_val_d              when rd_en_d = '0' else
                 reg_sr                 when dst_reg_d = C_REG_SR else
                 upper_rd_data_dst      when dst_reg_d >= 8 else

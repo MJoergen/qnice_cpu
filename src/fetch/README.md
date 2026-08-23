@@ -40,23 +40,25 @@ simple instruction cache icache.vhd.
 
 ## Instruction stream throttle
 
-`fetch_cache.vhd` instantiates `axi_pause` with `G_PAUSE_SIZE => -8`. A negative
-`G_PAUSE_SIZE` means "insert an empty cycle *except* every Nth cycle", so `-8`
-passes one word every eight clock cycles, i.e. roughly 12.5% fetch throughput.
+`fetch_cache.vhd` instantiates `axi_pause`, which can insert empty cycles into
+the instruction stream. **It is now set to `G_PAUSE_SIZE => 0`: no pauses, full
+fetch throughput**, and in that mode `axi_pause` reduces to a pure wire.
 
-**This is not a performance tuning knob.** It was introduced as a workaround: it
-drains the pipeline between instructions, so two instructions are never in
-flight close enough together for a data hazard to arise, and the bypass paths in
-`cpu_main` are never exercised. It makes the design look hazard-free.
+It is not a performance knob — set it negative only to reproduce the old
+throttled behaviour while debugging. A negative value inserts an empty cycle
+*except* every Nth cycle, so the historical `-8` passed one word every eight
+clocks.
 
-The correct value is `0`, which removes the pauses entirely.
+### Why it was throttled, and what changed
 
-### The bug it was hiding (fixed)
+`-8` drained the pipeline between instructions, so two instructions were never
+in flight close enough together for a data hazard to arise and the bypass logic
+was never exercised. It made the design look hazard-free while masking real
+bugs.
 
-With `G_PAUSE_SIZE => 0`, `test/prog.asm` used to fail at `0x04A8` — the
+With the throttle at `0`, `test/prog.asm` used to fail at `0x04A8` — the
 fall-through `HALT` of the `ADDC` sub-test, reached when the *expected status*
-check fails while the expected result check one instruction earlier passes. The
-sequence is:
+check fails while the expected result check one instruction earlier passes:
 
 ```
                 MOVE    R2, R14                 ; Set carry input
@@ -72,32 +74,45 @@ none for the dedicated SR port, so that read returned `reg_sr`, one clock cycle
 behind. Tellingly, `wr_sr_en_d`/`wr_sr_val_d` were already being registered in
 `p_wbr` and never read anywhere — the path had been intended and left unwired.
 
-This is now fixed: `src_val_o`/`dst_val_o` forward the dedicated SR port as
-well, see
-[registers/README.md](../registers/README.md#Write-Before-Read-on-the-dedicated-SR-port).
-The regression is pinned by `f_wbr_sr_src`/`f_wbr_sr_dst` in
-`formal/registers.psl`, which fail against the old register file.
+That is fixed (see
+[registers/README.md](../registers/README.md#Write-Before-Read-on-the-dedicated-SR-port)),
+and pinned by `f_wbr_sr_src`/`f_wbr_sr_dst` in `formal/registers.psl`, which
+fail against the old register file. A second bug in the same area — `R15` read
+as an operand returning the stale register-file copy instead of the Program
+Counter — was found and fixed separately; see
+[cpu_main/README.md](../cpu_main/README.md#Reading-R15).
 
-### Current status
+### Evidence for removing it
 
-All six test programs now pass in **both** configurations, with
-`test/writes.txt` byte-identical in both:
+All seven test programs pass at `0`, with `test/writes.txt` byte-identical to
+the run at `-8` — the CPU produces the same sequence of register and memory
+writes, just faster:
 
-| Program                | `G_PAUSE_SIZE => -8` | `G_PAUSE_SIZE => 0` |
-| ---------------------- | -------------------- | ------------------- |
-| `prog.asm`             | passes (`0x1692`)    | passes (`0x1692`)   |
-| `prog_flags.asm`       | passes (`0x0085`)    | passes (`0x0085`)   |
-| `prog_simple.asm`      | passes (`0x0027`)    | passes (`0x0027`)   |
-| `prog_pipeline.asm`    | passes (`0x0015`)    | passes (`0x0015`)   |
-| `prog_interleave.asm`  | passes (`0x001E`)    | passes (`0x001E`)   |
-| `prog_r15.asm`         | passes (`0x001E`)    | passes (`0x001E`)   |
+| Program                | halt   | at `-8`    | at `0`     | speedup |
+| ---------------------- | ------ | ---------- | ---------- | ------- |
+| `prog.asm`             | `0x1692` | 837960 ns | 143510 ns | 5.8x |
+| `prog_flags.asm`       | `0x0085` |  10200 ns |   1820 ns | 5.6x |
+| `prog_simple.asm`      | `0x0027` |   3160 ns |    990 ns | 3.2x |
+| `prog_pipeline.asm`    | `0x0015` |    920 ns |    320 ns | 2.9x |
+| `prog_interleave.asm`  | `0x001E` |   2600 ns |    610 ns | 4.3x |
+| `prog_r15.asm`         | `0x001E` |   2200 ns |    630 ns | 3.5x |
+| `prog_hazard.asm`      | `0x0076` |   8760 ns |   1850 ns | 4.7x |
 
-The throttle has nevertheless been **left at `-8`** for now. Passing the current
-test programs is not evidence that no other pipeline bug remains — the suite
-would have to be strengthened first, and the throttle is what has been masking
-this class of bug all along, so removing it is a deliberate decision to make
-rather than a side effect of this fix. Changing it to `0` is a one-line edit;
-re-run all six programs and `make formal` when you do.
+Two of those programs exist specifically for this: `prog_hazard.asm` covers
+read-after-write hazards between adjacent instructions (inert at `-8` by
+construction), and `prog_r15.asm` covers `R15` as an operand. Coverage of the
+bypass paths was also checked by mutation — breaking each forwarding term in
+`registers.vhd` and confirming the suite catches it at full throughput.
+
+**What this does not prove.** Mutation testing only probes the paths someone
+thought to break, and the suite is still small. If a hazard-related failure ever
+appears, reproducing it with a negative `G_PAUSE_SIZE` is a quick way to confirm
+that is the class of bug you are looking at.
+
+**Timing has not been re-checked.** The design now runs the pipeline at full
+occupancy for the first time, and recent fixes added logic to two paths that
+feed DECODE (the SR forwarding in `registers.vhd` and the PC substitution in
+`prepare.vhd`). Neither has been through a Vivado timing run.
 
 ## Formal verification
 

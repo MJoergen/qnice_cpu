@@ -6,8 +6,10 @@
 ; reaching the ALU were one pipeline beat stale, these would read the previous
 ; instruction's flags instead.
 ;
-; Note that STIM_ADDC in prog.asm only ever uses ST_____X (C = 0) as carry
-; input, so prog.asm never distinguishes ADDC from ADD.
+; Note: prog.asm already covers the VALUES on this path -- its stimulus tables
+; run both polarities of the relevant SR bit. What this program adds is timing:
+; producer and consumer in adjacent clock cycles, at several spacings and in
+; several addressing modes.
 ;
 ; Every failed sub-test branches to its own HALT. Success falls through to EXIT.
 

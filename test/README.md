@@ -38,6 +38,7 @@ src/cpu_constants.vhd:238:13:@837960ns:(report note): 1692 (E000) HALT
 | `prog_interleave.asm`  | `0x001E`        | The only `HALT` in the program, so here reaching `HALT` at all is sufficient. |
 | `prog_flags.asm`       | `0x0085`        | The `HALT` after the `EXIT` label at `0x0083`. Each of the eight sub-tests has its own `E_T*` failure `HALT`. |
 | `prog_r15.asm`         | `0x001E`        | The `HALT` after the `EXIT` label at `0x001C`. Each of the four sub-tests has its own `E_T*` failure `HALT`. |
+| `prog_hazard.asm`      | `0x0076`        | The `HALT` after the `EXIT` label at `0x0074`. Each of the eleven sub-tests has its own `E_H*` failure `HALT`. |
 
 If you add a program, find its success address in the generated `.lis` file and
 add a row here.
@@ -53,15 +54,19 @@ accesses.
 
 `prog_flags.asm` covers the ALU's *flags input* path, i.e. the value that
 reaches `sr_i` in `src/cpu_main/sub/alu_flags.vhd` and `alu_data.vhd`. That path
-is used as the carry-in of `ADDC`/`SUBC` and as the fill bits of `SHL`/`SHR`,
-and it is not covered by `prog.asm`: every row of `STIM_ADDC` and `STIM_SUBC`
-uses `ST_____X` (C = 0), and every row of `STIM_SHL`/`STIM_SHR` uses
-`ST______`, so in that suite `ADDC` never differs from `ADD`, `SUBC` never
-differs from `SUB`, and the shift fill bits are never exercised as 1.
+is used as the carry-in of `ADDC`/`SUBC` and as the fill bits of `SHL`/`SHR`.
 
-`prog_flags.asm` therefore makes an instruction *consume* the Status Register on
-the clock cycle right after another instruction *produced* it, which is the case
-where a stale flags value would show up:
+`prog.asm` already covers the *values* on that path well — its stimulus tables
+run both polarities of the relevant bit (`STIM_ADDC` has 7 rows with C=0 and 7
+with C=1, `STIM_SUBC` 6 and 6, and `STIM_SHL`/`STIM_SHR` sweep four SR-input
+patterns each across 69 and 65 rows). Note when reading those tables that they
+are split into blank-line-separated groups, so looking at only the first group
+gives a misleading picture.
+
+What `prog_flags.asm` adds is *timing*: it makes an instruction consume the
+Status Register on the clock cycle right after another instruction produced it,
+across several producer/consumer spacings and addressing modes, which is where
+a stale flags value would show up:
 
 * `T1`/`T2` — carry produced by `ADD`, consumed by the immediately following
   `ADDC`, for C = 1 and C = 0.
@@ -91,15 +96,27 @@ read through it:
   different path again: the WRITE stage derives the memory address from
   `src_val`, not from the ALU operand.
 
-## Caveat: the pipeline is throttled
+`prog_hazard.asm` covers read-after-write data hazards between *adjacent*
+instructions: a register written and then read, used as a memory pointer, used
+as both ALU operands, chained through four instructions; the Status Register
+written and then consumed by a branch condition, read back as an ordinary
+register, and read while a multi-micro-op instruction is in flight; a
+post-increment pointer reused immediately; and the stack pointer written and
+then used as a pre-decrement pointer.
 
-`src/fetch/fetch_cache.vhd` throttles instruction fetch to one word every eight
-clock cycles (`axi_pause` with `G_PAUSE_SIZE => -8`) to work around open
-pipeline bugs. This drains the pipeline between instructions, so **none of these
-programs exercise the data-hazard/bypass paths at the default setting**, no
-matter how they are written — including the back-to-back sequences in
-`prog_flags.asm`. All six programs pass at both `-8` and `0`, so when you touch
-hazard-related code it is worth re-running them at `0` too. See
+These were written as the evidence for removing the fetch throttle: they are
+inert when `G_PAUSE_SIZE` is negative, because the pipeline is drained between
+instructions and no hazard can arise.
+
+## Instruction fetch throughput
+
+These programs run at full instruction fetch throughput (`G_PAUSE_SIZE => 0` in
+`src/fetch/fetch_cache.vhd`), so the data-hazard and bypass paths are genuinely
+exercised. Fetch used to be throttled to one word every eight clock cycles as a
+workaround for pipeline bugs, which drained the pipeline between instructions
+and made every hazard unreachable no matter how a test was written. If a
+hazard-looking failure ever appears, setting `G_PAUSE_SIZE` negative again is a
+quick way to confirm that is the class of bug. See
 [src/fetch/README.md](../src/fetch/README.md#Instruction-stream-throttle).
 
 ## The simulation always reports a failure

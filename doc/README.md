@@ -68,8 +68,8 @@ There are two sources of back-pressure in the design:
   read from the memory bus. This is part of the Wishbone protocol and allows
   for an I/O device to take several clock cycles to respond.
 
-Note that at the default settings neither of these is really exercised against
-data hazards, because instruction fetch is deliberately throttled -- see
+Both are exercised at full instruction fetch throughput; the `axi_pause`
+throttle that used to suppress them is now set to zero, see
 [Instruction stream throttle](../src/fetch/README.md#Instruction-stream-throttle).
 
 
@@ -171,8 +171,6 @@ I have a few ideas for cycle optimizations at the moment:
   modules, thirty-five tasks). What is still missing is `fetch_cache.vhd`, which
   has no job at all; a `prove` (k-induction) task for `cpu_main`; and closing the
   last open property of `memory`'s inductive proof.
-* Remove the instruction stream throttle in `fetch_cache.vhd` -- see
-  [Instruction stream throttle](../src/fetch/README.md#Instruction-stream-throttle).
 * Add interrupts.
 
 

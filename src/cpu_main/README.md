@@ -507,11 +507,10 @@ module.  Additionally, it handles pre- and post-increment of the registers.
 
 ## Bypass
 
-> **Caveat.** None of this is exercised by simulation at the default settings.
-> `src/fetch/fetch_cache.vhd` throttles instruction fetch to one word every
-> eight cycles (`G_PAUSE_SIZE => -8`), which drains the pipeline between
-> instructions so that no data hazard ever arises. All six test programs do
-> pass with the throttle set to `0`, but it is deliberately left at `-8`. See
+> This logic is exercised by simulation: `test/prog_hazard.asm` drives
+> read-after-write hazards between adjacent instructions, and instruction fetch
+> now runs at full throughput (`G_PAUSE_SIZE => 0`). It used to be throttled,
+> which drained the pipeline and made every hazard unreachable — see
 > [fetch/README.md](../fetch/README.md#Instruction-stream-throttle).
 
 Whenever one has a pipelined architecture, where later stages write back to

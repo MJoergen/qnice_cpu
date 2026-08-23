@@ -109,10 +109,17 @@ vunit i_registers(registers(synthesis))
    -- wr_sr_* forwarding terms in src_val_o/dst_val_o this fails, which is the
    -- bug that forced the instruction-stream throttle in fetch_cache.vhd
    -- (see src/fetch/README.md#Instruction-stream-throttle).
-   f_wbr_sr_src : assert always {wr_sr_en_i = '1' and wr_en_i = '0' and rd_en_i = '1' and src_reg_i = C_REG_SR} |=>
-      {(wr_en_i = '1' and wr_reg_i = C_REG_SR) or wr_sr_en_i = '1' or src_val_o = (prev(wr_sr_val_i) or X"0001")};
-   f_wbr_sr_dst : assert always {wr_sr_en_i = '1' and wr_en_i = '0' and rd_en_i = '1' and dst_reg_i = C_REG_SR} |=>
-      {(wr_en_i = '1' and wr_reg_i = C_REG_SR) or wr_sr_en_i = '1' or dst_val_o = (prev(wr_sr_val_i) or X"0001")};
+   -- The rst_i guards are required. p_sr gives reset top priority over both
+   -- write ports, so an SR write coinciding with reset leaves reg_sr at X"0001"
+   -- rather than the written value; src_val_o/dst_val_o are don't-care there,
+   -- since DECODE and PREPARE are flushed. Without these guards the properties
+   -- hold only because the wr_sr_val_d term happens to return the written value
+   -- during reset -- i.e. they would be testing an accident rather than the
+   -- forwarding behaviour they are meant to pin down.
+   f_wbr_sr_src : assert always {wr_sr_en_i = '1' and wr_en_i = '0' and rd_en_i = '1' and rst_i = '0' and src_reg_i = C_REG_SR} |=>
+      {(wr_en_i = '1' and wr_reg_i = C_REG_SR) or wr_sr_en_i = '1' or rst_i = '1' or src_val_o = (prev(wr_sr_val_i) or X"0001")};
+   f_wbr_sr_dst : assert always {wr_sr_en_i = '1' and wr_en_i = '0' and rd_en_i = '1' and rst_i = '0' and dst_reg_i = C_REG_SR} |=>
+      {(wr_en_i = '1' and wr_reg_i = C_REG_SR) or wr_sr_en_i = '1' or rst_i = '1' or dst_val_o = (prev(wr_sr_val_i) or X"0001")};
 
    -- Output only changes when rd_en_i is high (or during write-before-read)
    f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or (f_sr_fwd = '1' and src_reg_d = C_REG_SR) or stable(src_val_o)};
