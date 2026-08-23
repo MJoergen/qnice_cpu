@@ -6,8 +6,10 @@ use work.cpu_constants.C_MEM_READ_DST;
 use work.cpu_constants.C_MEM_WRITE;
 
 -- This module multiplexes one request channel and two readback channels into a
--- single Wishbone Master interface. It's required of the Wishbone slave that
--- requests are ack'ed in the same order.
+-- single Wishbone Master interface. The Wishbone slave is expected to follow:
+-- * Requests are ack'ed in the same order.
+-- * Responses (ACKs) return at least one clock cycle later. No zero-latency
+--   ACKs.
 --
 -- mreq_op_i is a one-hot encoding of the request:
 -- * WRITE: This writes mreq_data_i to mreq_addr_i
@@ -15,6 +17,7 @@ use work.cpu_constants.C_MEM_WRITE;
 -- * READ_DST: This reads from mreq_addr_i to mdst_data_o
 --
 -- At most two outstanding mreq's are allowed.
+-- Hence at most two outstanding Wishbone requests are required to be supported.
 
 entity memory is
    port (
@@ -54,10 +57,9 @@ architecture synthesis of memory is
    subtype  R_WB_DATA is natural range 31 downto 16;
    subtype  R_WB_ADDR is natural range 15 downto 0;
 
-   signal mreq_valid : std_logic;
-   signal mreq_ready : std_logic;
-
    signal mreq_accept : std_logic;
+   signal mreq_valid  : std_logic;
+   signal mreq_ready  : std_logic;
 
    signal tsf_req_in_valid  : std_logic;
    signal tsf_req_in_ready  : std_logic;
@@ -72,8 +74,6 @@ architecture synthesis of memory is
    signal tsb_dst_in_valid  : std_logic;
    signal tsb_dst_in_ready  : std_logic;
    signal tsb_dst_fill      : natural range 0 to 2;
-
-   signal wait_for_ack      : natural range 0 to 2;
 
 begin
 
@@ -117,6 +117,8 @@ begin
          m_data_o  => tsf_req_out_data
       ); -- i_two_stage_fifo_mem
 
+   tsf_req_out_ready <= wb_cyc_o and wb_ack_i;
+
 
    ------------------------------------------------------------------------
    -- Buffer outgoing Wishbone request until accepted
@@ -141,43 +143,16 @@ begin
          m_data_o(R_WB_ADDR) => wb_addr_o
       ); -- i_one_stage_buffer_wb
 
-   -- Count number of outstanding Wishbone requests
-   p_wait_for_ack : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         -- Request without response
-         if (wb_cyc_o and wb_stb_o and not wb_stall_i) and not (wb_cyc_o and wb_ack_i) then
-            wait_for_ack <= wait_for_ack + 1;
-         end if;
-
-         -- Reponse without request
-         if not (wb_cyc_o and wb_stb_o and not wb_stall_i) and (wb_cyc_o and wb_ack_i) then
-            wait_for_ack <= wait_for_ack - 1;
-         end if;
-
-         if wb_cyc_o = '0' or rst_i = '1' then
-            wait_for_ack <= 0;
-         end if;
-      end if;
-   end process p_wait_for_ack;
-
-   -- Hold wisbhone buffer while waiting for response
-   wb_cyc_o <= '1' when (wb_stb_o = '1' or wait_for_ack > 0) and rst_i = '0' else
+   -- Hold wishbone buffer while waiting for response
+   wb_cyc_o <= '1' when (wb_stb_o = '1' or tsf_req_out_valid = '1') and rst_i = '0' else
                '0';
-
-
-   ------------------------------------------------------------------------
-   -- Handle Wishbone responses
-   ------------------------------------------------------------------------
-
-   tsf_req_out_ready <= wb_cyc_o and wb_ack_i;
 
 
    ------------------------------------------------------------------------
    -- Store the response for the SRC output
    ------------------------------------------------------------------------
 
-   tsb_src_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and tsf_req_out_valid = '1' and
+   tsb_src_in_valid <= '1' when wb_ack_i = '1' and tsf_req_out_valid = '1' and
                                 tsf_req_out_data(C_MEM_READ_SRC) = '1' else
                        '0';
 
@@ -203,7 +178,7 @@ begin
    -- Store the response for the DST output
    ------------------------------------------------------------------------
 
-   tsb_dst_in_valid <= '1' when wait_for_ack > 0 and wb_ack_i = '1' and tsf_req_out_valid = '1' and
+   tsb_dst_in_valid <= '1' when wb_ack_i = '1' and tsf_req_out_valid = '1' and
                                 tsf_req_out_data(C_MEM_READ_DST) = '1' else
                        '0';
 

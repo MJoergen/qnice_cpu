@@ -1,17 +1,6 @@
 vunit i_memory(memory(synthesis))
 {
 
-   signal f_wb_req_count   : integer range 0 to 3 := 0;
-   signal f_wb_stall_delay : integer range 0 to 3 := 0;
-   signal f_wb_ack_delay   : integer range 0 to 3 := 0;
-
-   -- Faithful occupancy: alias the sub-blocks' OWN fill counters (white-box),
-   -- not a lossy port reconstruction.
-   alias f_osf_occ     is tsf_req_fill;
-   alias f_tsb_src_occ is tsb_src_fill;
-   alias f_tsb_dst_occ is tsb_dst_fill;
-
-
    -- set all declarations to run on clk
    default clock is rising_edge(clk_i);
 
@@ -32,6 +21,8 @@ vunit i_memory(memory(synthesis))
    ------------------------------------------------
    -- PROPERTIES OF THE WISHBONE MASTER INTERFACE
    ------------------------------------------------
+
+   signal f_wb_req_count   : integer range 0 to 3 := 0;
 
    -- Count the number of outstanding WISHBONE requests
    p_wb_req_count : process (clk_i)
@@ -65,10 +56,16 @@ vunit i_memory(memory(synthesis))
    f_wb_master_stable : assert always {wb_stb_o and wb_stall_i and not rst_i} |=>
      {rst_i = '1' or (stable(wb_stb_o) and stable(wb_addr_o) and stable(wb_we_o) and stable(wb_dat_o))};
 
+   -- WISHBONE MASTER: Number of outstanding requests is always limited to at most two.
+   f_wb_master_request : assert always {rst_i = '1' or f_wb_req_count <= 2};
+
 
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
+
+   signal f_wb_stall_delay : integer range 0 to 4 := 0;
+   signal f_wb_ack_delay   : integer range 0 to 4 := 0;
 
    -- Count the number of clock cycles the WISHBONE SLAVE stalls
    p_wb_stall_delay : process (clk_i)
@@ -103,11 +100,11 @@ vunit i_memory(memory(synthesis))
    -- WISHBONE SLAVE: No ACKs without a request
    f_wb_slave_ack_idle : assume always {f_wb_req_count = 0} |-> {not wb_ack_i};
 
-   -- WISHBONE SLAVE: Only stall for at most 2 clock cycles. This is an artifical constraint.
-   f_wb_slave_stall_delay_max : assume always {f_wb_stall_delay <= 2};
+   -- WISHBONE SLAVE: Only stall for at most 3 clock cycles. This is an artifical constraint.
+   f_wb_slave_stall_delay_max : assume always {f_wb_stall_delay <= 3};
 
-   -- WISHBONE SLAVE: Respond within at most 2 clock cycles. This is an artifical constraint.
-   f_wb_slave_ack_delay_max : assume always {f_wb_ack_delay <= 2};
+   -- WISHBONE SLAVE: Respond within at most 3 clock cycles. This is an artifical constraint.
+   f_wb_slave_ack_delay_max : assume always {f_wb_ack_delay <= 3};
 
    -- EXECUTE: Restrict valid inputs to one-hot encoding
    f_exe_op : assume always {mreq_valid_i} |-> {mreq_op_i = "001" or mreq_op_i = "010" or mreq_op_i = "100"};
@@ -116,15 +113,8 @@ vunit i_memory(memory(synthesis))
    -- accepted (mreq_ready_o low), valid must stay asserted and the payload
    -- must remain stable. This mirrors how the real EXECUTE stage behaves and
    -- is what the combinational Wishbone request path relies on.
-   f_mreq_stable : assume always
-      {mreq_valid_i and not mreq_ready_o and not rst_i} |=>
-      {mreq_valid_i = '1' and stable(mreq_op_i)
-                          and stable(mreq_addr_i)
-                          and stable(mreq_data_i)};
-
-   -- EXECUTE contract: do not offer a read while two reads are already
-   -- outstanding. Stated against real occupancy, not a free counter.
-   f_exe_read_limit : assume always {f_osf_occ + f_tsb_src_occ + f_tsb_dst_occ >= 2} |-> {not mreq_valid_i};
+   f_mreq_stable : assume always {mreq_valid_i and not mreq_ready_o and not rst_i} |=>
+         {rst_i = '1' or (stable(mreq_valid_i) and stable(mreq_op_i) and stable(mreq_addr_i) and stable(mreq_data_i))};
 
 
    --------------------------------------------
@@ -152,18 +142,10 @@ vunit i_memory(memory(synthesis))
    -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
    ----------------------------------------------
 
-   -- Wishbone outstanding count is bounded by the RTL register range and tied
-   -- to the design's own wait_for_ack (you already assert this equivalence).
-   f_wb_req_aux : assert always {rst_i = '1' or f_wb_req_count = wait_for_ack};
-
-   -- The goal, now inductive: total outstanding reads <= 2.
-   f_read_total_max : assert always {rst_i = '1' or f_osf_occ + f_tsb_src_occ + f_tsb_dst_occ <= 2};
 
    ----------------------------------------------
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
    ----------------------------------------------
-
---   assume always {not rst_i} |=> {not rst_i};
 
 } -- vunit i_memory(memory(synthesis))
 
