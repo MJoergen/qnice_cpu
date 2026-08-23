@@ -216,7 +216,8 @@ begin
    end process p_rden_keep;
 
 
-   sr_val_o <= wr_val_i or X"0001"    when wr_en_i = '1' and wr_reg_i = C_REG_SR else
+   sr_val_o <= X"0001"                when rst_i = '1' else
+               wr_val_i or X"0001"    when wr_en_i = '1' and wr_reg_i = C_REG_SR else
                wr_sr_val_i or X"0001" when wr_sr_en_i = '1' else
                reg_sr;
 

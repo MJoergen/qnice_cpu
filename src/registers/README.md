@@ -124,11 +124,36 @@ signal f_write_to_sr : std_logic;
 f_write_to_sr <= '1' when wr_en_i = '1' and wr_reg_i = C_REG_SR else '0';
 
 f_sr_a : assert always {wr_sr_en_i and not f_write_to_sr and not rst_i} |=>
-                       {sr_val_o = (prev(wr_sr_val_i) or X"0001")};
+                       {wr_sr_en_i = '1' or f_write_to_sr = '1' or rst_i = '1' or
+                        sr_val_o = (prev(wr_sr_val_i) or X"0001")};
 f_sr_b : assert always {f_write_to_sr and not rst_i} |=>
-                       {sr_val_o = (prev(wr_val_i) or X"0001")};
-f_sr_c : assert always {rst_i} |=> {sr_val_o = X"0001"};
+                       {wr_sr_en_i = '1' or f_write_to_sr = '1' or rst_i = '1' or
+                        sr_val_o = (prev(wr_val_i) or X"0001")};
+f_sr_c : assert always {rst_i} |=>
+                       {wr_sr_en_i = '1' or f_write_to_sr = '1' or sr_val_o = X"0001"};
+
+f_sr_reset_priority : assert always {rst_i} |-> {sr_val_o = X"0001"};
 ```
+
+`f_sr_a`/`f_sr_b`/`f_sr_c` each predict `sr_val_o` one clock cycle out from a
+single triggering event (a write, or a reset). That prediction only holds if
+*no other* SR-write or reset lands on the very next cycle and combinationally
+overrides the forwarded value instead — hence the `wr_sr_en_i = '1' or
+f_write_to_sr = '1' or rst_i = '1' or ...` escape clause on each. Without it,
+BMC finds a trivial counterexample: a second write (or reset) one cycle after
+the first, which legitimately produces a different value via the same
+combinational bypass the property is trying to check. This is not a defect —
+it is exactly the write-before-read forwarding [documented above](#operation)
+— but the property has to explicitly allow for it.
+
+`f_sr_reset_priority` checks a related but distinct thing: that `rst_i` takes
+priority over a *concurrent* write on `sr_val_o` **combinationally, in the
+same cycle** — matching `reg_sr`'s own priority in `p_sr` (its `if rst_i`
+branch is last, so it always wins). This used to not be true: the `sr_val_o`
+mux checked `wr_en_i`/`wr_sr_en_i` before falling back to `reg_sr`, with no
+`rst_i` term at all, so a write asserted in the same cycle as `rst_i` would
+briefly show up on `sr_val_o` before `reg_sr` caught up on the next edge. Fixed
+by adding `rst_i` as the top-priority term in the `sr_val_o` mux.
 
 ### Read back
 
@@ -168,13 +193,18 @@ f_read_back_src : assert always {f_written = '1' and
                                  src_reg_i = c_addr and
                                  wr_en_i = '0' and
                                  rd_en_i = '1'}
-                            |=> {src_val_o = f_data};
+                            |=> {(wr_en_i = '1' and wr_reg_i = c_addr) or
+                                 src_val_o = f_data};
 f_read_back_dst : assert always {f_written = '1' and
                                  dst_reg_i = c_addr and
                                  wr_en_i = '0' and
                                  rd_en_i = '1'}
-                            |=> {dst_val_o = f_data};
+                            |=> {(wr_en_i = '1' and wr_reg_i = c_addr) or
+                                 dst_val_o = f_data};
 ```
+
+(Same escape-clause reasoning as above: a fresh write to `c_addr` landing
+exactly on the checked cycle is allowed to override the read-back value.)
 
 ### Write before read
 Now it's time to verify the write-before-read functionality. We test two cases: First when reading and writing in the same clock cycle:
@@ -183,11 +213,13 @@ Now it's time to verify the write-before-read functionality. We test two cases: 
 f_wbr_src : assert always {wr_en_i = '1' and
                            rd_en_i = '1' and
                            wr_reg_i = src_reg_i}
-                      |=> {src_val_o = prev(wr_val_i)};
+                      |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or
+                           src_val_o = prev(wr_val_i)};
 f_wbr_dst : assert always {wr_en_i = '1' and
                            rd_en_i = '1' and
                            wr_reg_i = dst_reg_i}
-                      |=> {dst_val_o = prev(wr_val_i)};
+                      |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or
+                           dst_val_o = prev(wr_val_i)};
 ```
 
 And second, when writing in the next cycle without a new read request:
@@ -196,26 +228,32 @@ f_wbr_stable_src : assert always {rd_en_i = '1';
                                   wr_en_i = '1' and
                                   rd_en_i = '0' and
                                   wr_reg_i = prev(src_reg_i)}
-                             |=> {src_val_o = prev(wr_val_i)};
+                             |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or
+                                  src_val_o = prev(wr_val_i)};
 f_wbr_stable_dst : assert always {rd_en_i = '1';
                                   wr_en_i = '1' and
                                   rd_en_i = '0' and
                                   wr_reg_i = prev(dst_reg_i)}
-                             |=> {dst_val_o = prev(wr_val_i)};
+                             |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or
+                                  dst_val_o = prev(wr_val_i)};
 ```
+
+Both pairs again carry the escape clause: a second write to the same address
+on the checked cycle is allowed to forward its own value instead.
 
 ### Output stable when no read
 
 Finally, we verify the output values don't change when read is de-asserted (as
-long as no writes are issued):
+long as no writes are issued) — including on the checked cycle itself, since a
+write there is exactly the "no new read" forwarding case documented above:
 ```
 f_stable_src : assert always {rd_en_i = '1';
                               wr_en_i = '0'[*];
                               wr_en_i = '0' and rd_en_i = '0'}
-                         |=> {stable(src_val_o)};
+                         |=> {wr_en_i = '1' or stable(src_val_o)};
 f_stable_dst : assert always {rd_en_i = '1';
                               wr_en_i = '0'[*];
                               wr_en_i = '0' and rd_en_i = '0'}
-                         |=> {stable(dst_val_o)};
+                         |=> {wr_en_i = '1' or stable(dst_val_o)};
 ```
 

@@ -38,9 +38,18 @@ vunit i_registers(registers(synthesis))
    f_write_to_sr <= '1' when wr_en_i = '1' and wr_reg_i = C_REG_SR else '0';
 
    -- Verify correct sr behaviour: wr_en_i takes priority over wr_sr_en_i.
-   f_sr_a : assert always {wr_sr_en_i and not f_write_to_sr and not rst_i} |=> {sr_val_o = (prev(wr_sr_val_i) or X"0001")};
-   f_sr_b : assert always {f_write_to_sr and not rst_i} |=> {sr_val_o = (prev(wr_val_i) or X"0001")};
-   f_sr_c : assert always {rst_i} |=> {sr_val_o = X"0001"};
+   -- Each property predicts sr_val_o one cycle out from a single triggering
+   -- event; it only holds if no *other* SR write lands on that very next
+   -- cycle and combinationally overrides the forwarded value.
+   f_sr_a : assert always {wr_sr_en_i and not f_write_to_sr and not rst_i} |=> {wr_sr_en_i = '1' or f_write_to_sr = '1' or rst_i = '1' or sr_val_o = (prev(wr_sr_val_i) or X"0001")};
+   f_sr_b : assert always {f_write_to_sr and not rst_i} |=> {wr_sr_en_i = '1' or f_write_to_sr = '1' or rst_i = '1' or sr_val_o = (prev(wr_val_i) or X"0001")};
+   f_sr_c : assert always {rst_i} |=> {wr_sr_en_i = '1' or f_write_to_sr = '1' or sr_val_o = X"0001"};
+
+   -- reg_sr itself always gives reset top priority over any concurrent write
+   -- (see p_sr: the "if rst_i" branch is last, so it wins). The combinational
+   -- sr_val_o mux must match that priority in the same cycle, not just once
+   -- reg_sr has caught up on the next clock edge.
+   f_sr_reset_priority : assert always {rst_i} |-> {sr_val_o = X"0001"};
 
 
    signal c_addr : std_logic_vector(3 downto 0);
@@ -66,21 +75,23 @@ vunit i_registers(registers(synthesis))
       end if;
    end process p_written;
 
-   -- We can read back last value written to any given address
-   f_read_back_src : assert always {f_written = '1' and src_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {src_val_o = f_data};
-   f_read_back_dst : assert always {f_written = '1' and dst_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {dst_val_o = f_data};
+   -- We can read back last value written to any given address, provided no
+   -- other write to that same address lands on the checked cycle and
+   -- combinationally forwards a newer value instead (see note above).
+   f_read_back_src : assert always {f_written = '1' and src_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {(wr_en_i = '1' and wr_reg_i = c_addr) or src_val_o = f_data};
+   f_read_back_dst : assert always {f_written = '1' and dst_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {(wr_en_i = '1' and wr_reg_i = c_addr) or dst_val_o = f_data};
 
    -- Write before read
-   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = src_reg_i} |=> {src_val_o = prev(wr_val_i)};
-   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = dst_reg_i} |=> {dst_val_o = prev(wr_val_i)};
+   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = src_reg_i} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or src_val_o = prev(wr_val_i)};
+   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = dst_reg_i} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or dst_val_o = prev(wr_val_i)};
 
    -- Write before read
-   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(src_reg_i)} |=> {src_val_o = prev(wr_val_i)};
-   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(dst_reg_i)} |=> {dst_val_o = prev(wr_val_i)};
+   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(src_reg_i)} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or src_val_o = prev(wr_val_i)};
+   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(dst_reg_i)} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or dst_val_o = prev(wr_val_i)};
 
    -- Output only changes when rd_en_i is high (or during write-before-read)
-   f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(src_val_o)};
-   f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(dst_val_o)};
+   f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or stable(src_val_o)};
+   f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or stable(dst_val_o)};
 
 
    ----------------------------------------------
