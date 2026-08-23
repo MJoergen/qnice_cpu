@@ -70,6 +70,30 @@ This is during execution of the `SUB @R1++, @R1` instruction.  The first cycle
 shows a read from register 1, the second cycle shows a write to register 1, and
 cycles 3 and 4 both present the new value, despite no read request.
 
+### Write-Before-Read on the dedicated SR port
+
+`R14` can be written through two different ports: the ordinary write port
+(`wr_en_i`/`wr_reg_i`/`wr_val_i`), used when an instruction targets `R14`
+explicitly, and the dedicated Status Register port
+(`wr_sr_en_i`/`wr_sr_val_i`), used by the WRITE stage to update the flags at the
+end of nearly every instruction.
+
+Write-Before-Read applies to **both** ports. Reading `R14` as an ordinary
+register — for instance the `MOVE R14, R9` that follows an `ADDC` — must return
+the flags that `ADDC` just produced, even though those arrived on the dedicated
+port. `src_val_o`/`dst_val_o` therefore forward `wr_sr_val_i` and its delayed
+copy `wr_sr_val_d`, exactly mirroring the `wr_val_i`/`wr_val_d` terms that
+forward the ordinary port.
+
+Priority within a single cycle matches `p_sr` and `sr_val_o`: the ordinary port
+wins over the dedicated SR port, and a same-cycle write wins over the delayed
+copy of the previous cycle's write.
+
+This forwarding was missing until recently, and was the cause of the
+instruction-stream throttle in `fetch_cache.vhd` — see
+[fetch/README.md](../fetch/README.md#Instruction-stream-throttle) for that
+history.
+
 
 ## Implementation
 
@@ -80,6 +104,26 @@ module.
 
 Additionally, we must have extra circuitry to disable update of the output when
 `rd_en_i` is de-asserted.
+
+The `src_val_o`/`dst_val_o` priority chain is, from highest to lowest:
+
+| # | Term                     | Condition                                            |
+| - | ------------------------ | ---------------------------------------------------- |
+| 1 | `wr_val_i`               | ordinary write this cycle, to the register being read |
+| 2 | `wr_sr_val_i or X"0001"` | dedicated SR write this cycle, register read is `R14` |
+| 3 | `wr_val_d`               | ordinary write last cycle, to the register being read |
+| 4 | `wr_sr_val_d or X"0001"` | dedicated SR write last cycle, register read is `R14` |
+| 5 | `src_val_d`/`dst_val_d`  | no read issued: hold the previous output              |
+| 6 | `reg_sr`                 | the register being read is `R14`                      |
+| 7 | RAM output               | ordinary register                                     |
+
+Terms 3 and 4 exist because the held output must keep tracking writes while
+`rd_en_i` is low; since `src_val_d`/`dst_val_d` re-sample `src_val_o`/`dst_val_o`
+every cycle, a forwarded value stays visible for arbitrarily long stalls. The
+`or X"0001"` on terms 2 and 4 mirrors `p_sr` and `sr_val_o`, which force bit 0
+of the Status Register to `1`; it is redundant in practice, since the WRITE
+stage never drives `wr_sr_val_i(0)` low (asserted by `f_r14_bit0` in
+`formal/cpu_main.psl`).
 
 
 ## Formal verification
@@ -113,6 +157,29 @@ assume always {not clk_i} |-> {f_falling_rd_en = rd_en_i and
                                f_falling_dst_reg = dst_reg_i};
 ```
 
+
+### Escape clauses for SR forwarding
+
+Because `src_val_o`/`dst_val_o` now forward the dedicated SR port too, a write
+on that port can combinationally override a value that a property is predicting
+from an earlier event — the same situation the ordinary-port escape clauses
+already handle. `formal/registers.psl` defines one shared helper for this,
+
+```
+signal f_sr_fwd : std_logic;
+f_sr_fwd <= '1' when wr_sr_en_i = '1' or wr_sr_en_d = '1' else '0';
+```
+
+and every affected property (`f_read_back_*`, `f_wbr_*`, `f_wbr_stable_*`,
+`f_stable_*`) carries an escape of the form
+`(f_sr_fwd = '1' and <register being read> = C_REG_SR)`.
+
+These escapes only *permit* the forwarding. The properties that *require* it are
+`f_wbr_sr_src` and `f_wbr_sr_dst`: reading `R14` in the cycle a dedicated SR
+write lands must return the newly written value, not the not-yet-updated
+`reg_sr`. Both fail against the register file as it was before the forwarding
+terms were added, which is what makes them a genuine regression test rather than
+a restatement of the implementation.
 
 ### SR (R14)
 We start by verifying the SR behaviour. It is important that in the case of

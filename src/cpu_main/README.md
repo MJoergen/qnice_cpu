@@ -460,6 +460,14 @@ This stage contains the ALU and writes result back to the Register or Memory
 module.  Additionally, it handles pre- and post-increment of the registers.
 
 ## Bypass
+
+> **Caveat.** None of this is exercised by simulation at the default settings.
+> `src/fetch/fetch_cache.vhd` throttles instruction fetch to one word every
+> eight cycles (`G_PAUSE_SIZE => -8`), which drains the pipeline between
+> instructions so that no data hazard ever arises. All five test programs do
+> pass with the throttle set to `0`, but it is deliberately left at `-8`. See
+> [fetch/README.md](../fetch/README.md#Instruction-stream-throttle).
+
 Whenever one has a pipelined architecture, where later stages write back to
 storage (i.e. register file) that is read in an earlier stage, we have a
 potential data hazard. In other words, we need to ensure that the register

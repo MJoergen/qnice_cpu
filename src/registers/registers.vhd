@@ -225,17 +225,28 @@ begin
    -- src_reg_d" a single register.
    -- Potential improvement: Small
 
-   src_val_o <= wr_val_i          when wr_en_i = '1' and wr_reg_i = src_reg_d else
-                wr_val_d          when wr_en_d = '1' and wr_addr_d = src_reg_d else
-                src_val_d         when rd_en_d = '0' else
-                reg_sr            when src_reg_d = C_REG_SR else
-                upper_rd_data_src when src_reg_d >= 8 else
+   -- The two wr_sr_* terms forward writes made through the dedicated SR port,
+   -- mirroring the wr_* terms that forward writes made through the ordinary
+   -- port. Without them, reading R14 as an ordinary register in the cycle
+   -- after (or the same cycle as) an SR update returns reg_sr, which has not
+   -- caught up yet. Priority matches p_sr and sr_val_o: within one cycle the
+   -- ordinary port wins over the SR port, and a same-cycle write wins over the
+   -- delayed copy of the previous cycle's write.
+   src_val_o <= wr_val_i               when wr_en_i = '1' and wr_reg_i = src_reg_d else
+                wr_sr_val_i or X"0001" when wr_sr_en_i = '1' and src_reg_d = C_REG_SR else
+                wr_val_d               when wr_en_d = '1' and wr_addr_d = src_reg_d else
+                wr_sr_val_d or X"0001" when wr_sr_en_d = '1' and src_reg_d = C_REG_SR else
+                src_val_d              when rd_en_d = '0' else
+                reg_sr                 when src_reg_d = C_REG_SR else
+                upper_rd_data_src      when src_reg_d >= 8 else
                 lower_rd_data_src;
-   dst_val_o <= wr_val_i          when wr_en_i = '1' and wr_reg_i = dst_reg_d else
-                wr_val_d          when wr_en_d = '1' and wr_addr_d = dst_reg_d else
-                dst_val_d         when rd_en_d = '0' else
-                reg_sr            when dst_reg_d = C_REG_SR else
-                upper_rd_data_dst when dst_reg_d >= 8 else
+   dst_val_o <= wr_val_i               when wr_en_i = '1' and wr_reg_i = dst_reg_d else
+                wr_sr_val_i or X"0001" when wr_sr_en_i = '1' and dst_reg_d = C_REG_SR else
+                wr_val_d               when wr_en_d = '1' and wr_addr_d = dst_reg_d else
+                wr_sr_val_d or X"0001" when wr_sr_en_d = '1' and dst_reg_d = C_REG_SR else
+                dst_val_d              when rd_en_d = '0' else
+                reg_sr                 when dst_reg_d = C_REG_SR else
+                upper_rd_data_dst      when dst_reg_d >= 8 else
                 lower_rd_data_dst;
 
 end architecture synthesis;

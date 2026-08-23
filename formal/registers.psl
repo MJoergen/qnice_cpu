@@ -52,6 +52,16 @@ vunit i_registers(registers(synthesis))
    f_sr_reset_priority : assert always {rst_i} |-> {sr_val_o = X"0001"};
 
 
+   -- src_val_o/dst_val_o forward writes made through the dedicated SR port as
+   -- well as the ordinary port, in the write cycle itself (wr_sr_en_i) and in
+   -- the following cycle (wr_sr_en_d). Whenever this is asserted and the
+   -- register being read back is R14, that forwarding combinationally
+   -- overrides whatever older value a property below is predicting. That is
+   -- the intended behaviour, not a defect, so every such property carries an
+   -- escape clause built from this signal.
+   signal f_sr_fwd : std_logic;
+   f_sr_fwd <= '1' when wr_sr_en_i = '1' or wr_sr_en_d = '1' else '0';
+
    signal c_addr : std_logic_vector(3 downto 0);
    attribute anyconst : boolean;
    attribute anyconst of c_addr : signal is true;
@@ -78,20 +88,35 @@ vunit i_registers(registers(synthesis))
    -- We can read back last value written to any given address, provided no
    -- other write to that same address lands on the checked cycle and
    -- combinationally forwards a newer value instead (see note above).
-   f_read_back_src : assert always {f_written = '1' and src_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {(wr_en_i = '1' and wr_reg_i = c_addr) or src_val_o = f_data};
-   f_read_back_dst : assert always {f_written = '1' and dst_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {(wr_en_i = '1' and wr_reg_i = c_addr) or dst_val_o = f_data};
+   f_read_back_src : assert always {f_written = '1' and src_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {(wr_en_i = '1' and wr_reg_i = c_addr) or (f_sr_fwd = '1' and c_addr = C_REG_SR) or src_val_o = f_data};
+   f_read_back_dst : assert always {f_written = '1' and dst_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {(wr_en_i = '1' and wr_reg_i = c_addr) or (f_sr_fwd = '1' and c_addr = C_REG_SR) or dst_val_o = f_data};
+
+   -- Write before read.
+   -- The escape clause covers a *newer* write to the same register landing on
+   -- the checked cycle and combinationally overriding the prediction. Since
+   -- src_val_o/dst_val_o now also forward the dedicated SR port, such a newer
+   -- write can arrive on either port when the register in question is R14.
+   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = src_reg_i} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or (f_sr_fwd = '1' and prev(wr_reg_i) = C_REG_SR) or src_val_o = prev(wr_val_i)};
+   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = dst_reg_i} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or (f_sr_fwd = '1' and prev(wr_reg_i) = C_REG_SR) or dst_val_o = prev(wr_val_i)};
 
    -- Write before read
-   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = src_reg_i} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or src_val_o = prev(wr_val_i)};
-   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = dst_reg_i} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or dst_val_o = prev(wr_val_i)};
+   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(src_reg_i)} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or (f_sr_fwd = '1' and prev(wr_reg_i) = C_REG_SR) or src_val_o = prev(wr_val_i)};
+   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(dst_reg_i)} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or (f_sr_fwd = '1' and prev(wr_reg_i) = C_REG_SR) or dst_val_o = prev(wr_val_i)};
 
-   -- Write before read
-   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(src_reg_i)} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or src_val_o = prev(wr_val_i)};
-   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(dst_reg_i)} |=> {(wr_en_i = '1' and wr_reg_i = prev(wr_reg_i)) or dst_val_o = prev(wr_val_i)};
+   -- Write before read, through the DEDICATED SR port.
+   -- Reading R14 as an ordinary register must see a value written via
+   -- wr_sr_en_i/wr_sr_val_i, not the not-yet-updated reg_sr. Without the
+   -- wr_sr_* forwarding terms in src_val_o/dst_val_o this fails, which is the
+   -- bug that forced the instruction-stream throttle in fetch_cache.vhd
+   -- (see src/fetch/README.md#Instruction-stream-throttle).
+   f_wbr_sr_src : assert always {wr_sr_en_i = '1' and wr_en_i = '0' and rd_en_i = '1' and src_reg_i = C_REG_SR} |=>
+      {(wr_en_i = '1' and wr_reg_i = C_REG_SR) or wr_sr_en_i = '1' or src_val_o = (prev(wr_sr_val_i) or X"0001")};
+   f_wbr_sr_dst : assert always {wr_sr_en_i = '1' and wr_en_i = '0' and rd_en_i = '1' and dst_reg_i = C_REG_SR} |=>
+      {(wr_en_i = '1' and wr_reg_i = C_REG_SR) or wr_sr_en_i = '1' or dst_val_o = (prev(wr_sr_val_i) or X"0001")};
 
    -- Output only changes when rd_en_i is high (or during write-before-read)
-   f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or stable(src_val_o)};
-   f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or stable(dst_val_o)};
+   f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or (f_sr_fwd = '1' and src_reg_d = C_REG_SR) or stable(src_val_o)};
+   f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or (f_sr_fwd = '1' and dst_reg_d = C_REG_SR) or stable(dst_val_o)};
 
 
    ----------------------------------------------

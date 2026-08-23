@@ -12,6 +12,19 @@ It is not a drop-in replacement for the original QNICE-FPGA CPU.
 All VHDL in this repo is **VHDL-2008** (`ghdl --std=08`, `read_vhdl -vhdl2008` in the Vivado flow).
 Use 2008 constructs freely (e.g. `ieee.numeric_std_unsigned`, unconstrained record elements).
 
+**Caveat before trusting any simulation result:** `src/fetch/fetch_cache.vhd` instantiates
+`axi_pause` with `G_PAUSE_SIZE => -8`, which throttles instruction fetch to one word every eight
+cycles. This is a deliberate workaround, not tuning — it drains the pipeline between instructions
+so that data hazards never arise and the bypass logic in `cpu_main` is never exercised. So a
+passing simulation at the default setting does **not** demonstrate that the bypass logic works.
+The correct value is `0`. The bug that originally forced the workaround (missing write-before-read
+forwarding of the dedicated SR write port in `src/registers/registers.vhd`, which failed
+`test/prog.asm` at `0x04A8`) is fixed, and all five test programs now pass at both `-8` and `0` —
+but the throttle is deliberately left at `-8`, since passing the current suite does not prove no
+other pipeline bug remains. See
+[src/fetch/README.md](src/fetch/README.md#Instruction-stream-throttle). When touching
+hazard-related code, run the tests at `0` as well.
+
 Full architecture description: [doc/README.md](doc/README.md). Per-module design notes live next
 to the code: [src/fetch/README.md](src/fetch/README.md), [src/registers/README.md](src/registers/README.md),
 [src/memory/README.md](src/memory/README.md), [src/cpu_main/README.md](src/cpu_main/README.md).
@@ -101,7 +114,10 @@ Data hazards from this pipelining (later WRITE-stage register writes vs. earlier
 register reads) are handled via bypass logic described in
 [src/cpu_main/README.md](src/cpu_main/README.md#Bypass), and via write-before-read semantics
 built into the Registers module itself (see
-[src/registers/README.md](src/registers/README.md#Operation)).
+[src/registers/README.md](src/registers/README.md#Operation)). Note that at the default
+`G_PAUSE_SIZE => -8` this hazard handling is **not** exercised by the test suite — see the caveat
+above. Write-before-read applies to both `R14` write ports: the ordinary one and the dedicated SR
+port (`wr_sr_en_i`), the latter forwarded by `src_val_o`/`dst_val_o` as well.
 
 That write-before-read/bypass forwarding is also the thing to remember when writing PSL for
 `registers.vhd`: a property that predicts a forwarded `src_val_o`/`dst_val_o`/`sr_val_o` value one

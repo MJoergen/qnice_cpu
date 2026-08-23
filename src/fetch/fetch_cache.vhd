@@ -70,8 +70,22 @@ begin
       ); -- i_fetch
 
 
-   -- This block is just for debugging.
-   -- Setting the value of G_PAUSE_SIZE to -8 generates pauses between each fetched word.
+   -- WORKAROUND, NOT A DEBUG AID. G_PAUSE_SIZE = -8 throttles the instruction
+   -- stream to one word every eight clock cycles. That drains the pipeline
+   -- between instructions, so two instructions are never close enough together
+   -- for a data hazard to occur and the bypass logic is never exercised.
+   --
+   -- The correct value is 0 (full throughput, no pauses). The bug that
+   -- originally forced this workaround -- a missing write-before-read forward
+   -- of the dedicated SR write port in registers.vhd, which made test/prog.asm
+   -- fail at 0x04A8 -- has been fixed, and all five test programs now pass at
+   -- both -8 and 0.
+   --
+   -- It is kept at -8 anyway: passing the current test programs does not prove
+   -- that no other pipeline bug remains, and this throttle is what has been
+   -- masking that whole class of bug. Flipping it to 0 is a deliberate decision.
+   --
+   -- See src/fetch/README.md#Instruction-stream-throttle.
    i_axi_pause : entity work.axi_pause
       generic map (
          G_TDATA_SIZE => 32,

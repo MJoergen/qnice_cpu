@@ -72,6 +72,17 @@ where a stale flags value would show up:
 * `T7`/`T8` — differential `SUBC` and `SHR`: the same operands with the SR input
   bit clear and set must give different results.
 
+## Caveat: the pipeline is throttled
+
+`src/fetch/fetch_cache.vhd` throttles instruction fetch to one word every eight
+clock cycles (`axi_pause` with `G_PAUSE_SIZE => -8`) to work around open
+pipeline bugs. This drains the pipeline between instructions, so **none of these
+programs exercise the data-hazard/bypass paths at the default setting**, no
+matter how they are written — including the back-to-back sequences in
+`prog_flags.asm`. All five programs pass at both `-8` and `0`, so when you touch
+hazard-related code it is worth re-running them at `0` too. See
+[src/fetch/README.md](../src/fetch/README.md#Instruction-stream-throttle).
+
 ## The simulation always reports a failure
 
 The `disassemble` procedure in `src/cpu_constants.vhd` ends the run with
