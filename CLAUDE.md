@@ -19,7 +19,7 @@ so that data hazards never arise and the bypass logic in `cpu_main` is never exe
 passing simulation at the default setting does **not** demonstrate that the bypass logic works.
 The correct value is `0`. The bug that originally forced the workaround (missing write-before-read
 forwarding of the dedicated SR write port in `src/registers/registers.vhd`, which failed
-`test/prog.asm` at `0x04A8`) is fixed, and all five test programs now pass at both `-8` and `0` —
+`test/prog.asm` at `0x04A8`) is fixed, and all six test programs now pass at both `-8` and `0` —
 but the throttle is deliberately left at `-8`, since passing the current suite does not prove no
 other pipeline bug remains. See
 [src/fetch/README.md](src/fetch/README.md#Instruction-stream-throttle). When touching
@@ -86,13 +86,19 @@ single VHDL entity `cpu_main` (in `src/cpu_main/cpu_main.vhd`) mainly to simplif
 verification of the interactions between them.
 
 Stage-to-stage handshaking uses an AXI-style `VALID`/`READY` protocol throughout (also on the
-Wishbone bus, via `stall`/`ack`). Two independent sources of back-pressure exist: DECODE can emit
-up to three cycles of micro-ops per fetched instruction (stalling FETCH), and the Memory module
+Wishbone bus, via `stall`/`ack`). Two independent sources of back-pressure exist: an
+instruction may expand into up to three micro-ops, and the Sequencer in PREPARE issues one per
+cycle while holding its ready low, which stalls DECODE and in turn FETCH; and the Memory module
 stalls PREPARE while waiting on the Wishbone bus.
 
 Instruction and data memory are separate interfaces (Harvard-style) but backed by the same
 physical dual-port RAM, since a program must be loadable and then executable from the same memory.
-The Program Counter (`R15`) lives entirely inside FETCH and is *not* part of the register file;
+The working Program Counter (`R15`) lives inside FETCH. The register file *does* have an `R15`
+slot in its upper bank and WRITE writes it whenever an instruction targets `R15` (i.e. on
+branches), but it is stale during sequential execution, so PREPARE substitutes the real PC for
+either operand whenever `R15` is read, in any addressing mode (`src_val_pc`/`dst_val_pc` in
+`prepare.vhd`; see [src/cpu_main/README.md](src/cpu_main/README.md#Reading-R15)). Reading that
+stale slot directly was a real bug, fixed by that substitution;
 `R14` (Status Register) is handled specially in the register file (written alongside any regular
 register write at the end of most instructions); `R13` (Stack Pointer) is an ordinary register,
 handled in DECODE.
@@ -102,8 +108,9 @@ handled in DECODE.
 The core trick of this design: DECODE dynamically translates each CISC-like QNICE instruction into
 1-3 RISC-like micro-operations via a combinational ROM (`src/cpu_main/sub/microcode.vhd`), indexed
 by a 4-bit classification of the instruction (reads-from-dst / writes-to-dst / src-in-memory /
-dst-in-memory). The `Sequencer` (`src/cpu_main/sub/sequencer.vhd`) then issues that list of
-micro-ops one per clock cycle. This exists because an instruction like `ADD @R0, @R1` needs two
+dst-in-memory). DECODE emits that whole list in a single beat; the `Sequencer`
+(`src/cpu_main/sub/sequencer.vhd`), which lives in **PREPARE**, then issues it one micro-op per
+clock cycle. This exists because an instruction like `ADD @R0, @R1` needs two
 memory reads and one memory write, but only one memory operation is possible per cycle — the
 micro-ops serialize that. Each micro-op is a 12-bit word (`LAST`, `REG_MOD_SRC`, `REG_MOD_DST`,
 `MEM_WAIT_SRC`, `MEM_WAIT_DST`, `REG_WRITE`, `MEM_READ_SRC`, `MEM_READ_DST`, `MEM_WRITE`); the

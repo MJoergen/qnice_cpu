@@ -80,7 +80,7 @@ The regression is pinned by `f_wbr_sr_src`/`f_wbr_sr_dst` in
 
 ### Current status
 
-All five test programs now pass in **both** configurations, with
+All six test programs now pass in **both** configurations, with
 `test/writes.txt` byte-identical in both:
 
 | Program                | `G_PAUSE_SIZE => -8` | `G_PAUSE_SIZE => 0` |
@@ -90,13 +90,14 @@ All five test programs now pass in **both** configurations, with
 | `prog_simple.asm`      | passes (`0x0027`)    | passes (`0x0027`)   |
 | `prog_pipeline.asm`    | passes (`0x0015`)    | passes (`0x0015`)   |
 | `prog_interleave.asm`  | passes (`0x001E`)    | passes (`0x001E`)   |
+| `prog_r15.asm`         | passes (`0x001E`)    | passes (`0x001E`)   |
 
 The throttle has nevertheless been **left at `-8`** for now. Passing the current
 test programs is not evidence that no other pipeline bug remains — the suite
 would have to be strengthened first, and the throttle is what has been masking
 this class of bug all along, so removing it is a deliberate decision to make
 rather than a side effect of this fix. Changing it to `0` is a one-line edit;
-re-run all five programs and `make formal` when you do.
+re-run all six programs and `make formal` when you do.
 
 ## Formal verification
 

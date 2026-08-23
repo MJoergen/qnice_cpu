@@ -9,8 +9,14 @@ Register (R14). This is because this register is usually written to at the end
 of each instruction together with any optional register writes.
 
 The Stack Pointer (R13) is treated like a normal register (this is handled in
-the DECODE stage). The Program Counter (R15) is not used in the register file;
-instead the Program Counter resides entirely within the FETCH stage.
+the DECODE stage). The Program Counter (R15) has a slot in the upper
+register bank like any other register, and the WRITE stage writes it whenever an
+instruction targets R15 — that is how a branch updates the PC. But it is *not*
+the working Program Counter: that resides in the FETCH stage, which increments
+it without telling the register file. The R15 slot here is therefore stale
+during sequential execution, and must never be used as an operand value; the
+PREPARE stage substitutes the real PC instead (see
+[cpu_main/README.md](../cpu_main/README.md#Reading-R15)).
 
 
 ## Interface
@@ -127,6 +133,11 @@ stage never drives `wr_sr_val_i(0)` low (asserted by `f_r14_bit0` in
 
 
 ## Formal verification
+
+`formal/registers.sby` defines a `bmc` and a `cover` task, both at depth 8 with
+`multiclock on` (needed because `dp_ram` uses the falling clock edge). Both
+pass. There is no `prove` task. The properties are described below.
+
 
 ### Falling edge
 

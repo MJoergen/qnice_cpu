@@ -92,10 +92,23 @@ components, not stubs):
   (`f_cover_burst2`) and of all three request types issuing back-to-back (`f_cover_burst`).
 
 **Current status**: `bmc` (depth 10) and `cover` (depth 10) both pass — run with
-`sby --yosys "yosys -m ghdl" -f memory.sby`. There is **no `prove` (k-induction) task** at present:
-it was removed in favor of `bmc` in commit `db1e2a8` ("BMC passes. PROVE does not.") after the
-previous set of induction-support invariants failed to close. This is a known, currently open item
-— the properties above are only verified up to the bounded depth, not proven for all time — rather
-than an oversight to "fix" casually; closing it will need new inductive lemmas along the lines of
-the ones in `formal/dp_ram.psl` / `formal/two_stage_fifo.psl`.
+`sby --yosys "yosys -m ghdl" -f memory.sby`. There is still **no `prove` (k-induction) task** in
+`memory.sby`; it was removed in favor of `bmc` in commit `db1e2a8` ("BMC passes. PROVE does not.").
+
+K-induction is now **partially closed**, though. The three buffer/FIFO overflow-safety properties
+that blocked the original attempt (`f_tsb_src_in_overflow`, `f_tsb_dst_in_overflow`,
+`f_tsf_req_in_overflow`) do prove inductively, using the `p_shadow_fifo_content` block under
+"ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION" in `formal/memory.psl`. That block mirrors
+`i_two_stage_fifo_mem`'s own transition rules from this entity's ports, because GHDL's
+synth-for-formal flow cannot read a sub-instance's internal registers directly (VHDL-2008 external
+names are unsupported there — confirmed by testing). It is self-correcting rather than a
+push/pop counter, which is why an adversarial induction seed cannot make it diverge forever.
+
+**One property remains open under induction**: `f_wb_master_request` (at most two outstanding
+Wishbone requests). The obstacle is documented in full in a comment directly above it in
+`formal/memory.psl` — briefly, `i_one_stage_buffer_wb` (depth 1) can accept a new request in the
+same cycle it hands an old one to the slave, so more than one FIFO push can be unreflected in the
+count at once, and a single `wb_stb_o` bit cannot represent that. Closing it needs a per-item view
+of that gap, plausibly reusing the same shadow technique. Until then that one property is verified
+only to the bounded depth, not for all time.
 

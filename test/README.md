@@ -98,7 +98,7 @@ clock cycles (`axi_pause` with `G_PAUSE_SIZE => -8`) to work around open
 pipeline bugs. This drains the pipeline between instructions, so **none of these
 programs exercise the data-hazard/bypass paths at the default setting**, no
 matter how they are written — including the back-to-back sequences in
-`prog_flags.asm`. All five programs pass at both `-8` and `0`, so when you touch
+`prog_flags.asm`. All six programs pass at both `-8` and `0`, so when you touch
 hazard-related code it is worth re-running them at `0` too. See
 [src/fetch/README.md](../src/fetch/README.md#Instruction-stream-throttle).
 

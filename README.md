@@ -29,17 +29,40 @@ memory operation is possible in each clock cycle, such an instruction will
 need to be serialized and will take a total of three clock cycles.
 
 ## Documentation
-Please go to the [doc](doc) directory for more in-depth descrition of the
+Please go to the [doc](doc) directory for more in-depth description of the
 architecture and the design.
 
 ## Makefile
 The current makefile supports the following targets:
-* `make sim`        : Run simulation
+* `make sim`        : Run simulation, then open the waveform in gtkwave
 * `make system.bit` : Run synthesis using Vivado
 * `make synth`      : Run synthesis using yosys
 * `make formal`     : Run formal verification
 * `make clean`      : Remove all generated files
 
-The simulation and synthesis options assemble and run the test program in
-[`test/prog.asm`](test/prog.asm).
+By default these assemble and run [`test/prog.asm`](test/prog.asm); pass
+`TEST=<name>` to pick one of the other programs in [`test/`](test).
+
+### Reading a simulation result
+
+Two things will mislead you on a first run:
+
+* **Every run ends in an error.** The disassembler terminates the simulation
+  with `report "HALT" severity failure`, so GHDL exits non-zero and `make`
+  prints `Error 1` whether the test passed or failed.
+* **Reaching `HALT` does not mean the test passed.** Most of the test programs
+  contain many `HALT` instructions, and the self-checking `prog.asm` branches to
+  one on every failed sub-test. A run is judged by *which address* it halted at.
+
+[`test/README.md`](test/README.md) lists the success address for each program,
+and describes the stronger golden-output check against `test/writes.txt`.
+
+### One caveat before drawing conclusions
+
+Instruction fetch is currently throttled on purpose
+(`G_PAUSE_SIZE => -8` in [`src/fetch/fetch_cache.vhd`](src/fetch/fetch_cache.vhd)),
+which drains the pipeline between instructions so that data hazards never arise.
+A passing simulation at the default setting therefore does not exercise the
+bypass logic. See
+[Instruction stream throttle](src/fetch/README.md#Instruction-stream-throttle).
 
