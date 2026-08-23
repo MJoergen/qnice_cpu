@@ -157,12 +157,12 @@ begin
          src_val_o   => decode2reg_src_val,
          dst_reg_i   => decode2reg_dst_reg,
          dst_val_o   => decode2reg_dst_val,
-         r14_o       => reg2decode_r14,
-         wr_r14_en_i => exe2reg_r14_we,
-         wr_r14_i    => exe2reg_r14,
          wr_en_i     => exe2reg_we,
-         wr_addr_i   => exe2reg_addr,
-         wr_val_i    => exe2reg_val
+         wr_reg_i    => exe2reg_addr,
+         wr_val_i    => exe2reg_val,
+         sr_val_o    => reg2decode_r14,
+         wr_sr_en_i  => exe2reg_r14_we,
+         wr_sr_val_i => exe2reg_r14
       ); -- i_registers
 
 

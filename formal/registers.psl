@@ -9,6 +9,9 @@ vunit i_registers(registers(synthesis))
    -- ASSUMPTIONS ABOUT INPUTS
    ----------------------------------------------
 
+   -- First clock cycle is reset
+   f_reset : assume {rst_i};
+
    signal f_falling_rd_en   : std_logic;
    signal f_falling_src_reg : std_logic_vector(3 downto 0);
    signal f_falling_dst_reg : std_logic_vector(3 downto 0);
@@ -31,13 +34,13 @@ vunit i_registers(registers(synthesis))
    -- ASSERTIONS ON OUTPUTS
    ----------------------------------------------
 
-   signal f_write_to_r14 : std_logic;
-   f_write_to_r14 <= '1' when wr_en_i = '1' and wr_addr_i = 14 else '0';
+   signal f_write_to_sr : std_logic;
+   f_write_to_sr <= '1' when wr_en_i = '1' and wr_reg_i = C_REG_SR else '0';
 
-   -- Verify correct R14 behaviour: wr_en_i takes priority over wr_r14_en_i.
-   f_r14_a : assert always {wr_r14_en_i and not f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_r14_i) or X"0001")};
-   f_r14_b : assert always {f_write_to_r14 and not rst_i} |=> {r14_o = (prev(wr_val_i) or X"0001")};
-   f_r14_c : assert always {rst_i} |=> {r14_o = X"0001"};
+   -- Verify correct sr behaviour: wr_en_i takes priority over wr_sr_en_i.
+   f_sr_a : assert always {wr_sr_en_i and not f_write_to_sr and not rst_i} |=> {sr_val_o = (prev(wr_sr_val_i) or X"0001")};
+   f_sr_b : assert always {f_write_to_sr and not rst_i} |=> {sr_val_o = (prev(wr_val_i) or X"0001")};
+   f_sr_c : assert always {rst_i} |=> {sr_val_o = X"0001"};
 
 
    signal c_addr : std_logic_vector(3 downto 0);
@@ -51,13 +54,13 @@ vunit i_registers(registers(synthesis))
    begin
       if rising_edge(clk_i) then
          -- Store value written
-         if wr_en_i = '1' and wr_addr_i = c_addr then
+         if wr_en_i = '1' and wr_reg_i = c_addr then
             f_data    <= wr_val_i;
             f_written <= '1';
          end if;
 
-         -- Clear in case R14 is updated.
-         if (wr_en_i = '1' and wr_addr_i = 14) or wr_r14_en_i = '1' or rst_i = '1' then
+         -- Clear in case SR is updated.
+         if (wr_en_i = '1' and wr_reg_i = 14) or wr_sr_en_i = '1' or rst_i = '1' then
             f_written <= '0';
          end if;
       end if;
@@ -67,15 +70,13 @@ vunit i_registers(registers(synthesis))
    f_read_back_src : assert always {f_written = '1' and src_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {src_val_o = f_data};
    f_read_back_dst : assert always {f_written = '1' and dst_reg_i = c_addr and wr_en_i = '0' and rd_en_i = '1'} |=> {dst_val_o = f_data};
 
+   -- Write before read
+   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = src_reg_i} |=> {src_val_o = prev(wr_val_i)};
+   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_reg_i = dst_reg_i} |=> {dst_val_o = prev(wr_val_i)};
 
    -- Write before read
-   f_wbr_src : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = src_reg_i} |=> {src_val_o = prev(wr_val_i)};
-   f_wbr_dst : assert always {wr_en_i = '1' and rd_en_i = '1' and wr_addr_i = dst_reg_i} |=> {dst_val_o = prev(wr_val_i)};
-
-   -- Write before read
-   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(src_reg_i)} |=> {src_val_o = prev(wr_val_i)};
-   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_addr_i = prev(dst_reg_i)} |=> {dst_val_o = prev(wr_val_i)};
-
+   f_wbr_stable_src : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(src_reg_i)} |=> {src_val_o = prev(wr_val_i)};
+   f_wbr_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '1' and rd_en_i = '0' and wr_reg_i = prev(dst_reg_i)} |=> {dst_val_o = prev(wr_val_i)};
 
    -- Output only changes when rd_en_i is high (or during write-before-read)
    f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {stable(src_val_o)};
@@ -86,9 +87,6 @@ vunit i_registers(registers(synthesis))
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    ----------------------------------------------
 
-   -- Useful for debugging, to make sure that the rd_en_i input signal is able to toggle.
-   f_toggle : cover {rd_en_i = '1'; rd_en_i = '0'; rd_en_i = '1'};
-
 
    ----------------------------------------------
    -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
@@ -98,7 +96,6 @@ vunit i_registers(registers(synthesis))
    ----------------------------------------------
    -- ADDITIONAL ASSUMES HELPFUL WHEN DEBUGGING
    ----------------------------------------------
-
 
 } -- vunit i_registers(registers(synthesis))
 
