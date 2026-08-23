@@ -15,10 +15,12 @@ use work.cpu_constants.C_UCODE_BITS;
 -- chunk whose C_LAST bit is set. A new DECODE beat is not accepted until
 -- the chunk marked 'last' has been accepted downstream.
 --
--- CONTRACT: The C_LAST bit MUST be set no later than chunk index 3.
--- 'index' has subtype range 0 to 3; a fifth (index = 4) chunk would
--- violate the range. This contract is enforced formally in sequencer.psl
--- (see the "index = 3 |-> last" assume).
+-- CONTRACT: The C_LAST bit MUST be set in the top chunk of the list, i.e. no
+-- later than chunk index C_NUM_CHUNKS-1 (= 2 for the current 36-bit
+-- 'microcodes' field, which holds three 12-bit chunks). One chunk beyond that
+-- would push 'index' past its subtype range and slice 'microcodes' out of
+-- bounds. This contract is enforced formally in sequencer.psl (see the
+-- "index = C_NUM_CHUNKS-1 |-> last" assume).
 
 entity sequencer is
    port (
@@ -37,9 +39,12 @@ end entity sequencer;
 
 architecture synthesis of sequencer is
 
-   -- Index of the chunk currently being presented on m_stage_o.
-   -- Range 0 to 3 => at most four chunks per DECODE beat (see CONTRACT).
-   signal index : natural range 0 to 3 := 0;
+   -- Number of microcode chunks carried by one DECODE beat, derived from the
+   -- width of the 'microcodes' field (36 bits / 12 bits per chunk = 3).
+   constant C_NUM_CHUNKS : positive := s_stage_i.microcodes'length / C_UCODE_BITS;
+
+   -- Index of the chunk currently being presented on m_stage_o (see CONTRACT).
+   signal index : natural range 0 to C_NUM_CHUNKS - 1 := 0;
 
 begin
 
@@ -48,6 +53,12 @@ begin
    -- read from a stale upper bit of the raw, unselected microcode list.
    assert C_LAST < C_UCODE_BITS
       report "C_LAST must be inside the chunk slice (C_LAST < C_UCODE_BITS)"
+      severity failure;
+
+   -- Elaboration-time sanity check: the list must divide evenly into chunks,
+   -- otherwise the top chunk would slice past the end of 'microcodes'.
+   assert s_stage_i.microcodes'length = C_NUM_CHUNKS * C_UCODE_BITS
+      report "'microcodes' width must be a whole multiple of C_UCODE_BITS"
       severity failure;
 
    -- Accept a new sequence only when the microcode chunk marked 'last' is

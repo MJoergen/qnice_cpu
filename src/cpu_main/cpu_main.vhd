@@ -2,7 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std_unsigned.all;
 
-use work.cpu_constants.all;
+use work.cpu_constants.t_stage;
 
 -- NOTE: The DECODE and PREPARE modules are explicitly reset (using fetch_valid_o)
 -- following any update to the Program Counter (as determined by the WRITE module).

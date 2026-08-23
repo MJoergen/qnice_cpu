@@ -34,6 +34,14 @@ Test programs live in `test/*.asm` and are assembled with the external QNICE ass
 `$HOME/git/sy2002/QNICE-FPGA/assembler/asm` (must be checked out separately; path is hardcoded in
 the top-level `Makefile`).
 
+**Reaching `HALT` does not mean the test passed.** Most test programs contain many `HALT`
+instructions — in the self-checking `prog.asm` every failed sub-test branches to its own `HALT` —
+so a run is judged by *which address* it halted at, printed on the last disassembler line
+(`... : 1692 (E000) HALT`). Also, `disassemble` ends every run with `report "HALT" severity
+failure`, so GHDL exits non-zero and `make` prints `Error 1` whether the test passed or failed;
+that trailing error means nothing on its own. Per-program success addresses, and the stronger
+`test/writes.txt` golden-output check, are in [test/README.md](test/README.md).
+
 ### Formal verification
 
 `make formal` runs `make -C formal`, which uses SymbiYosys (`sby`) with the GHDL plugin to
@@ -189,7 +197,8 @@ with the specific remaining obstacle documented in a comment right above it in `
 - `src/sub/` — reusable elastic-pipeline building blocks, see
   [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-src-sub) above.
 - `src/cpu.vhd` — top-level entity tying FETCH, Registers, Memory, and `cpu_main` together.
-- `test/` — testbench (`tb_cpu.vhd`), memory models, and `.asm` test programs.
+- `test/` — testbench (`tb_cpu.vhd`), memory models, and `.asm` test programs. See
+  [test/README.md](test/README.md) for how to tell a passing run from a failing one.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).
 - `formal/` — one `.psl`/`.sby`/`.gtkw` triplet per formally-verified module.
 - `doc/` — architecture overview and block diagram source (`cpu.drawio`/`cpu.png`).

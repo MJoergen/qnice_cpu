@@ -45,6 +45,12 @@ vunit i_sequencer(sequencer(synthesis))
    f_index_stable : assert always
       {not (m_valid_o and m_ready_i) and not rst_i} |=> {stable(index)};
 
+   -- 'index' never leaves its declared subtype. Trivially true in VHDL, but
+   -- needed by k-induction: 'index' synthesises to ceil(log2(C_NUM_CHUNKS))
+   -- bits, so induction would otherwise be free to start from an encoding
+   -- above C_NUM_CHUNKS-1 that the subtype makes unreachable.
+   f_index_range : assert always {index <= C_NUM_CHUNKS - 1};
+
 
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
@@ -54,10 +60,11 @@ vunit i_sequencer(sequencer(synthesis))
    assume always
       {s_valid_i and not s_ready_o} |=> {stable(s_valid_i) and stable(s_stage_i)};
 
-   -- Contract: 'last' must be set no later than chunk 3, else 'index'
-   -- overflows its 0..3 subtype (see CONTRACT note in sequencer.vhd).
+   -- Contract: 'last' must be set in the top chunk of the list, else 'index'
+   -- overflows its 0..C_NUM_CHUNKS-1 subtype and the chunk slice runs past the
+   -- end of 'microcodes' (see CONTRACT note in sequencer.vhd).
    assume always
-      {index = 3 and m_valid_o = '1'} |-> {m_stage_o.microcodes(C_LAST) = '1'};
+      {index = C_NUM_CHUNKS - 1 and m_valid_o = '1'} |-> {m_stage_o.microcodes(C_LAST) = '1'};
 
 
    --------------------------------------------

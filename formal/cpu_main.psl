@@ -4,6 +4,10 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- set all declarations to run on clk
    default clock is rising_edge(clk_i);
 
+   -- NOTE: cpu_main.vhd deliberately imports only 't_stage' from cpu_constants,
+   -- so the constants below are referenced by selected name rather than relying
+   -- on a 'use work.cpu_constants.all' in the architecture.
+
 
    --------------------------------------------
    -- INTERNAL ASSERTIONS
@@ -55,11 +59,11 @@ vunit i_cpu_main(cpu_main(synthesis))
    signal f_reg_read : std_logic;
    signal f_reg_write : std_logic;
 
-   f_move_reg_reg <= '1' when fetch_data_i(15 downto 12) = C_OPCODE_MOVE and
+   f_move_reg_reg <= '1' when fetch_data_i(15 downto 12) = work.cpu_constants.C_OPCODE_MOVE and
                               fetch_data_i(11 downto 8) = c_src_reg and
-                              fetch_data_i(7 downto 6) = C_MODE_REG and
+                              fetch_data_i(7 downto 6) = work.cpu_constants.C_MODE_REG and
                               fetch_data_i(5 downto 2) = c_dst_reg and
-                              fetch_data_i(1 downto 0) = C_MODE_REG else '0';
+                              fetch_data_i(1 downto 0) = work.cpu_constants.C_MODE_REG else '0';
 
    f_reg_read <= '1' when reg_rd_en_o = '1' and reg_src_reg_o=c_src_reg and reg_dst_reg_o=c_dst_reg else '0';
    f_reg_write <= '1' when reg_we_o = '1' and reg_addr_o = c_dst_reg and reg_val_o = c_src_val else '0';
@@ -104,9 +108,9 @@ vunit i_cpu_main(cpu_main(synthesis))
    signal f_mem_src_oustanding : std_logic;
    signal f_mem_dst_oustanding : std_logic;
 
-   f_mem_src_request  <= mem_req_valid_o and mem_req_ready_i and mem_req_op_o(C_MEM_READ_SRC);
+   f_mem_src_request  <= mem_req_valid_o and mem_req_ready_i and mem_req_op_o(work.cpu_constants.C_MEM_READ_SRC);
    f_mem_src_response <= mem_src_valid_i and mem_src_ready_o;
-   f_mem_dst_request  <= mem_req_valid_o and mem_req_ready_i and mem_req_op_o(C_MEM_READ_DST);
+   f_mem_dst_request  <= mem_req_valid_o and mem_req_ready_i and mem_req_op_o(work.cpu_constants.C_MEM_READ_DST);
    f_mem_dst_response <= mem_dst_valid_i and mem_dst_ready_o;
 
    p_memory : process (clk_i)
