@@ -23,13 +23,13 @@ src_reg_i   : in  std_logic_vector(3 downto 0);
 src_val_o   : out std_logic_vector(15 downto 0);
 dst_reg_i   : in  std_logic_vector(3 downto 0);
 dst_val_o   : out std_logic_vector(15 downto 0);
-r14_o       : out std_logic_vector(15 downto 0);
+sr_val_o    : out std_logic_vector(15 downto 0);
 
 -- Write interface, connected to EXECUTE stage
-wr_r14_en_i : in  std_logic;
-wr_r14_i    : in  std_logic_vector(15 downto 0);
+wr_sr_en_i  : in  std_logic;
+wr_sr_val_i : in  std_logic_vector(15 downto 0);
 wr_en_i     : in  std_logic;
-wr_addr_i   : in  std_logic_vector(3 downto 0);
+wr_reg_i    : in  std_logic_vector(3 downto 0);
 wr_val_i    : in  std_logic_vector(15 downto 0)
 ```
 
@@ -43,7 +43,7 @@ when `rd_en_i` is asserted.
 This module supports Write-Before-Read, which means that special care is needed
 when writing to a register currently (or previously) read. Specifically, if a
 register is read from and written to in the same clock cycle (i.e. `rd_en_i`
-are `wr_en_i` are both asserted, and `wr_addr_i` is equal to one of `src_reg_i`
+are `wr_en_i` are both asserted, and `wr_reg_i` is equal to one of `src_reg_i`
 or `dst_reg_i`) then the value presented on the next clock cycle is the value
 just written.
 
@@ -114,20 +114,20 @@ assume always {not clk_i} |-> {f_falling_rd_en = rd_en_i and
 ```
 
 
-### R14
-We start by verifying the R14 behaviour. It is important that in the case of
-simultaneously asserting `wr_en_i` and `wr_r14_en_i`, the former takes
+### SR (R14)
+We start by verifying the SR behaviour. It is important that in the case of
+simultaneously asserting `wr_en_i` and `wr_sr_en_i`, the former takes
 priority.
 
 ```
-signal f_write_to_r14 : std_logic;
-f_write_to_r14 <= '1' when wr_en_i = '1' and wr_addr_i = 14 else '0';
+signal f_write_to_sr : std_logic;
+f_write_to_sr <= '1' when wr_en_i = '1' and wr_reg_i = C_REG_SR else '0';
 
-f_r14_a : assert always {wr_r14_en_i and not f_write_to_r14 and not rst_i} |=>
-                        {r14_o = (prev(wr_r14_i) or X"0001")};
-f_r14_b : assert always {f_write_to_r14 and not rst_i} |=>
-                        {r14_o = (prev(wr_val_i) or X"0001")};
-f_r14_c : assert always {rst_i} |=> {r14_o = X"0001"};
+f_sr_a : assert always {wr_sr_en_i and not f_write_to_sr and not rst_i} |=>
+                       {sr_val_o = (prev(wr_sr_val_i) or X"0001")};
+f_sr_b : assert always {f_write_to_sr and not rst_i} |=>
+                       {sr_val_o = (prev(wr_val_i) or X"0001")};
+f_sr_c : assert always {rst_i} |=> {sr_val_o = X"0001"};
 ```
 
 ### Read back
@@ -137,7 +137,7 @@ complicated due to the register banking. I first introduce an arbitrary
 constant `c_addr` containing the register address in question.  Then I define
 two signals `f_data` and `f_written` containing information about which value
 has been written to the address in question. The `f_written` signal is cleared
-in case `R14` is updated. Finally, I can check that if the register is read and
+in case `SR` is updated. Finally, I can check that if the register is read and
 not written the correct value is returned.
 
 ```
@@ -152,13 +152,13 @@ p_written : process (clk_i)
 begin
    if rising_edge(clk_i) then
       -- Store value written
-      if wr_en_i = '1' and wr_addr_i = c_addr then
+      if wr_en_i = '1' and wr_reg_i = c_addr then
          f_data    <= wr_val_i;
          f_written <= '1';
       end if;
 
-      -- Clear in case R14 is updated.
-      if (wr_en_i = '1' and wr_addr_i = 14) or wr_r14_en_i = '1' or rst_i = '1' then
+      -- Clear in case SR is updated.
+      if (wr_en_i = '1' and wr_reg_i = 14) or wr_sr_en_i = '1' or rst_i = '1' then
          f_written <= '0';
       end if;
    end if;
@@ -182,11 +182,11 @@ Now it's time to verify the write-before-read functionality. We test two cases: 
 ```
 f_wbr_src : assert always {wr_en_i = '1' and
                            rd_en_i = '1' and
-                           wr_addr_i = src_reg_i}
+                           wr_reg_i = src_reg_i}
                       |=> {src_val_o = prev(wr_val_i)};
 f_wbr_dst : assert always {wr_en_i = '1' and
                            rd_en_i = '1' and
-                           wr_addr_i = dst_reg_i}
+                           wr_reg_i = dst_reg_i}
                       |=> {dst_val_o = prev(wr_val_i)};
 ```
 
@@ -195,12 +195,12 @@ And second, when writing in the next cycle without a new read request:
 f_wbr_stable_src : assert always {rd_en_i = '1';
                                   wr_en_i = '1' and
                                   rd_en_i = '0' and
-                                  wr_addr_i = prev(src_reg_i)}
+                                  wr_reg_i = prev(src_reg_i)}
                              |=> {src_val_o = prev(wr_val_i)};
 f_wbr_stable_dst : assert always {rd_en_i = '1';
                                   wr_en_i = '1' and
                                   rd_en_i = '0' and
-                                  wr_addr_i = prev(dst_reg_i)}
+                                  wr_reg_i = prev(dst_reg_i)}
                              |=> {dst_val_o = prev(wr_val_i)};
 ```
 
