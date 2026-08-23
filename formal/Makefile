@@ -1,5 +1,4 @@
-# Simple Makefile which just runs through all the DUTs
-# and does Bounded Model Check on each of them.
+# Simple Makefile which just runs through all the DUTs.
 
 DUTS  = one_stage_buffer
 DUTS += one_stage_fifo
@@ -14,20 +13,36 @@ DUTS += registers
 DUTS += fetch
 DUTS += cpu_main
 
-BMC   = $(patsubst %,%_bmc,$(DUTS))
-COVER = $(patsubst %,%_cover,$(DUTS))
-PROVE = $(patsubst %,%_prove,$(DUTS))
-BMC_PASS   = $(patsubst %,%_bmc/PASS,$(DUTS))
-COVER_PASS = $(patsubst %,%_cover/PASS,$(DUTS))
+# One stamp file per DUT, touched only when sby exits successfully.
+#
+# The stamp deliberately does NOT name a task output directory. Task names vary
+# between jobs -- sequencer.sby has cover+prove and no bmc at all, and
+# dp_ram.sby parameterises its tasks (bmc_block, bmc_distributed, ...) -- so
+# there is no single "<dut>_bmc/PASS" that every job produces. Depending on one
+# made those two jobs re-run on every invocation while the other ten never
+# re-ran at all, even after their sources changed.
+STAMPS = $(addsuffix .stamp,$(DUTS))
 
-all: $(BMC_PASS)
+all: $(STAMPS)
 
-%_bmc/PASS: DUT=$(patsubst %_bmc/PASS,%,$@)
-%_bmc/PASS:
-	sby --yosys "yosys -m ghdl" -f $(DUT).sby
+# Every file a job reads, taken from that job's own [files] section, so the
+# prerequisites cannot drift out of step with the job description.
+sby_files = $(shell sed -n '/^\[files\]/,$$p' $(1).sby | tail -n +2)
+
+$(foreach d,$(DUTS),$(eval $(d).stamp: $(d).sby $(call sby_files,$(d))))
+
+# The stamp is removed before sby runs and recreated only on success, so
+# "stamp exists" always means "the last run of this job passed" -- a failed run
+# can never be mistaken for an up-to-date one. (.DELETE_ON_ERROR is not enough:
+# make only deletes a target it considers changed, and a recipe that dies at the
+# sby line never touches the stamp at all.)
+%.stamp:
+	rm -f $@
+	sby --yosys "yosys -m ghdl" -f $*.sby
+	@touch $@
 
 clean:
-	rm -rf $(BMC)
-	rm -rf $(COVER)
-	rm -rf $(PROVE)
+	rm -rf $(STAMPS)
+	rm -rf $(foreach d,$(DUTS),$(d) $(d)_bmc* $(d)_cover* $(d)_prove*)
 
+.PHONY: all clean

@@ -61,9 +61,12 @@ that trailing error means nothing on its own. Per-program success addresses, and
 check the modules listed in the `DUTS` variable at the top of
 [formal/Makefile](formal/Makefile). All twelve DUTs are currently enabled and **the whole suite
 passes** (35 tasks); if you want to narrow scope while iterating, comment lines out there — but
-put them back. Note the Makefile's `all` target depends only on the `%_bmc/PASS` markers, so a
-module whose `.sby` has no `bmc` task (e.g. `sequencer`, which has `cover`+`prove`) is re-run
-every time. To run/inspect a single module directly:
+put them back. The Makefile tracks each job with a `<dut>.stamp` file whose prerequisites are read
+from that job's own `[files]` section, so `make` re-runs exactly the jobs whose `.sby`, `.psl` or
+VHDL sources changed, and nothing otherwise. A stamp exists only if that job's last run passed
+(the recipe deletes it before invoking `sby`), so a failure is always retried. Note `make` still
+stops at the first failing job — pass `-k` to attempt the whole suite. To run/inspect a single
+module directly:
 
 ```
 cd formal
