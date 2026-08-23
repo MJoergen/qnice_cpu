@@ -23,7 +23,17 @@ ghdl --std=08 fetch.vhd            fetch.psl \
               pipe_concat.vhd      pipe_concat.psl \
               -e fetch
 prep -top fetch
+
+# Turn the sub-blocks' own input assumptions into assertions on fetch, so that
+# this job also proves fetch drives them legally.
 chformal -assume2assert fetch/* %M
+
+# pipe_concat's f_s0_waits covers "s0 arrives before s1". Inside fetch, s1 is
+# the address FIFO (filled when a request is ISSUED) and s0 is the data buffer
+# (filled when the response ARRIVES), so the address is always present first
+# and this ordering is unreachable by construction. It is still covered by
+# pipe_concat.sby standalone, where both orderings are reachable.
+chformal -cover -remove c:*i_pipe_concat.f_s0_waits*
 
 [files]
 fetch.psl

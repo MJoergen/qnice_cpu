@@ -180,8 +180,16 @@ vunit i_fetch(fetch(synthesis))
 
    -- The data buffer must always accept an incoming response.
    -- This prevents data loss and/or corruption.
+   --
+   -- Same escape clause, and same reasoning, as f_addr_ready above:
+   -- i_two_stage_buffer_data is reset with "rst_i or dc_valid_i", and
+   -- one_stage_buffer gates s_ready_o with "and not rst_i". So a response the
+   -- slave acks in the very cycle DECODE issues a redirect (or in reset) meets
+   -- a low tsb_in_data_ready. That is not data loss: the response belongs to
+   -- the instruction stream being abandoned, and the buffer is flushed on the
+   -- same edge. Without the escape, BMC finds this immediately.
    f_data_ready : assert always
-      {wb_rsp_accept} |-> {tsb_in_data_ready};
+      {wb_rsp_accept = '1' and dc_valid_i = '0' and rst_i = '0'} |-> {tsb_in_data_ready = '1'};
 
    -- The RTL bookkeeping must agree with the port-derived shadow state.
    f_outstanding_match : assert always
@@ -238,9 +246,16 @@ vunit i_fetch(fetch(synthesis))
 
    -- DECODE ASSERT: The output must be stable while not accepted, unless the
    -- transaction is aborted.
+   -- The "abort" is required on the consequent side as well as the trigger
+   -- side: dc_valid_o comes straight out of i_pipe_concat, whose producers gate
+   -- their m_valid_o with "and not rst_i", and whose reset here is
+   -- "rst_i or dc_valid_i". A redirect asserted by DECODE in the consequent
+   -- cycle therefore drops dc_valid_o in that same cycle -- which is exactly
+   -- what DECODE just asked for, not a stability violation.
    f_dc_assert_stable : assert always
       {dc_valid_o and not dc_ready_i and not rst_i and not dc_valid_i} |=>
-      {stable(dc_valid_o) and stable(dc_addr_o) and stable(dc_data_o)};
+      {stable(dc_valid_o) and stable(dc_addr_o) and stable(dc_data_o)}
+      abort (rst_i or dc_valid_i);
 
    -- DECODE ASSERT: Addresses forwarded to DECODE increment by one.  Note that
    -- f_dc_last_addr_valid is already cleared on reset and abort, so the
@@ -370,7 +385,7 @@ vunit i_fetch(fetch(synthesis))
    f_cover_stall : cover {wb_stb_o and wb_stall_i};
 
    -- The address FIFO completely full
-   f_cover_addr_fifo_full : cover {tsf_in_addr_fill = "10"};
+   f_cover_addr_fifo_full : cover {tsf_in_addr_fill = 2};
 
    -- The bus cycle terminating and later restarting
    f_cover_cyc_restart : cover {wb_cyc_o; not wb_cyc_o; wb_cyc_o};
@@ -412,13 +427,13 @@ vunit i_fetch(fetch(synthesis))
    -- the addition is performed in two bits and wraps modulo four, which makes
    -- the comparison unsound.
    f_inv_pending : assert always
-      {not rst_i} |-> {wb_pending = to_integer(tsf_in_addr_fill) + f_stb_pending};
+      {not rst_i} |-> {wb_pending = tsf_in_addr_fill + f_stb_pending};
 
    -- Every address in the address FIFO either has its data waiting in the data
    -- buffer, or is still outstanding on the bus.
    f_inv_fill : assert always
       {not rst_i} |->
-      {to_integer(tsf_in_addr_fill) = to_integer(tsb_in_data_fill) + f_wb_outstanding};
+      {tsf_in_addr_fill = tsb_in_data_fill + f_wb_outstanding};
 
    -- Slot allocation bounds the outstanding request count.
    f_inv_bound : assert always
@@ -464,15 +479,15 @@ vunit i_fetch(fetch(synthesis))
    -- implications rather than an equality, because GHDL's PSL boolean layer
    -- parses a relational expression as a complete boolean and rejects a
    -- second "=" joining two parenthesised comparisons.
-   f_inv_fifo_valid_set : assert always {rst_i = '0' and tsf_in_addr_fill /= "00"}
+   f_inv_fifo_valid_set : assert always {rst_i = '0' and tsf_in_addr_fill /= 0}
                                     |-> {tsf_out_addr_valid = '1'};
 
-   f_inv_fifo_valid_clr : assert always {rst_i = '0' and tsf_in_addr_fill = "00"}
+   f_inv_fifo_valid_clr : assert always {rst_i = '0' and tsf_in_addr_fill = 0}
                                     |-> {tsf_out_addr_valid = '0'};
 
    -- The head of the address FIFO is the oldest address in flight.
    f_inv_fifo_head : assert always {rst_i = '0' and tsf_out_addr_valid = '1'}
-                               |-> {tsf_out_addr_data = f_wb_addr - to_integer(tsf_in_addr_fill)};
+                               |-> {tsf_out_addr_data = f_wb_addr - tsf_in_addr_fill};
 
    -- pipe_concat passes the FIFO head straight through to the DECODE output.
    -- This holds structurally if pipe_concat is combinational; if it is a
@@ -487,13 +502,13 @@ vunit i_fetch(fetch(synthesis))
    -- f_inv_dc_addr, this is exactly what f_dc_assert_addr claims, so this is
    -- the load-bearing invariant of the group.
    f_inv_last_addr : assert always {rst_i = '0' and f_dc_last_addr_valid = '1'}
-                               |-> {f_dc_last_addr = f_wb_addr - to_integer(tsf_in_addr_fill) - 1};
+                               |-> {f_dc_last_addr = f_wb_addr - tsf_in_addr_fill - 1};
 
    -- Before the first delivery after a redirect, the oldest address in flight
    -- is the new PC itself.  This is the corresponding strengthening for
    -- f_dc_new_pc_addr, which is non-inductive for the same reason.
    f_inv_new_pc : assert always {rst_i = '0' and f_dc_new_pc_valid = '1'}
-                            |-> {f_dc_new_pc = f_wb_addr - to_integer(tsf_in_addr_fill)};
+                            |-> {f_dc_new_pc = f_wb_addr - tsf_in_addr_fill};
 
 
    ----------------------------------------------

@@ -14,8 +14,18 @@ vunit i_pipe_concat(pipe_concat(synthesis))
 
    f_data: assert always {m_valid_o and m_ready_i} |-> {m_data_o = s1_data_i & s0_data_i};
 
-   -- Output must be stable until accepted
-   f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o)};
+   -- Output must be stable until accepted or reset.
+   --
+   -- "abort rst_i" is required, for the same reason it is required on
+   -- one_stage_buffer/two_stage_buffer's own f_output_stable: pipe_concat is
+   -- combinational, so m_valid_o is whatever its producers drive, and those
+   -- producers gate their m_valid_o with "and not rst_i". Reset therefore
+   -- clears m_valid_o within the SAME cycle it is sampled as the next state.
+   -- That is intended reset behaviour, not a stability violation. It is
+   -- unobservable when this file is checked standalone (the input assumptions
+   -- below prevent it), but shows up as soon as pipe_concat is instantiated
+   -- inside fetch, where rst_i is driven by "rst_i or dc_valid_i".
+   f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {stable(m_valid_o) and stable(m_data_o)} abort rst_i;
 
 
    -----------------------------
@@ -25,9 +35,14 @@ vunit i_pipe_concat(pipe_concat(synthesis))
    -- Require reset at startup.
    f_reset : assume {rst_i};
 
-   -- Input must be stable until accepted
-   f_input0_stable : assume always {s0_valid_i and not s0_ready_o and not rst_i} |=> {stable(s0_valid_i) and stable(s0_data_i)};
-   f_input1_stable : assume always {s1_valid_i and not s1_ready_o and not rst_i} |=> {stable(s1_valid_i) and stable(s1_data_i)};
+   -- Input must be stable until accepted or reset.
+   --
+   -- The same "abort rst_i" escape as f_output_stable above, and it matters
+   -- twice over: fetch.sby turns these assumptions into assertions on the
+   -- enclosing design (chformal -assume2assert), and there the producers are
+   -- real buffers whose m_valid_o really does drop combinationally on reset.
+   f_input0_stable : assume always {s0_valid_i and not s0_ready_o and not rst_i} |=> {stable(s0_valid_i) and stable(s0_data_i)} abort rst_i;
+   f_input1_stable : assume always {s1_valid_i and not s1_ready_o and not rst_i} |=> {stable(s1_valid_i) and stable(s1_data_i)} abort rst_i;
 
 
    --------------------------------------------

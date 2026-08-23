@@ -58,10 +58,12 @@ that trailing error means nothing on its own. Per-program success addresses, and
 ### Formal verification
 
 `make formal` runs `make -C formal`, which uses SymbiYosys (`sby`) with the GHDL plugin to
-bounded-model-check the module(s) listed in the `DUTS` variable at the top of
-[formal/Makefile](formal/Makefile). **Only one DUT is typically uncommented at a time** — check
-that file before running to see what's active, and comment/uncomment lines there to change scope.
-To run/inspect a single module directly:
+check the modules listed in the `DUTS` variable at the top of
+[formal/Makefile](formal/Makefile). All twelve DUTs are currently enabled and **the whole suite
+passes** (35 tasks); if you want to narrow scope while iterating, comment lines out there — but
+put them back. Note the Makefile's `all` target depends only on the `%_bmc/PASS` markers, so a
+module whose `.sby` has no `bmc` task (e.g. `sequencer`, which has `cover`+`prove`) is re-run
+every time. To run/inspect a single module directly:
 
 ```
 cd formal

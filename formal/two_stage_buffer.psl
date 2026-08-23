@@ -107,8 +107,17 @@ vunit i_two_stage_buffer(two_stage_buffer(synthesis))
    -- Require reset at startup.
    f_reset : assume {rst_i};
 
-   -- Assume input is stable
-   f_input_stable : assume always {s_valid_i and not s_ready_o} |=> {stable(s_valid_i) and stable(s_data_i)};
+   -- Assume input is stable until accepted or reset.
+   --
+   -- The reset escape is not cosmetic. fetch.sby turns this assumption into an
+   -- assertion on the enclosing design (chformal -assume2assert), and there
+   -- s_valid_i is "wb_cyc_o and wb_ack_i" -- a WISHBONE ack pulse, which is not
+   -- a held valid/ready handshake and is never re-driven if it is not taken.
+   -- The design copes by guaranteeing the buffer is always ready to accept
+   -- (fetch.psl's f_data_ready), so the trigger below can only ever fire while
+   -- reset or a pipeline flush is holding s_ready_o low -- at which point the
+   -- response belongs to a stream being discarded anyway.
+   f_input_stable : assume always {s_valid_i and not s_ready_o and not rst_i} |=> {stable(s_valid_i) and stable(s_data_i)} abort rst_i;
 
 
    --------------------------------------------
