@@ -405,6 +405,17 @@ stack while `res_reg` still points at `R15`.
 
 Finally, `r14` contains the current value of the Status Register.
 
+**Not every element is latched.** DECODE registers `microcodes`, `addr`, `inst`,
+`immediate`, `src_addr`, `src_mode`, `src_imm`, `dst_addr`, `dst_mode`,
+`dst_imm` and `res_reg` in its output process, but `src_val`, `dst_val` and
+`r14` are *concurrent* assignments straight from the register file read ports.
+They therefore keep moving while DECODE is stalled, and that is deliberate: it
+is how a stalled instruction picks up a register or Status Register write issued
+by the older instruction still in WRITE, and how the second micro-op of
+`ADD @R0++, @R0++` sees the `R0` update made by the first. The consumer only
+ever samples them at the moment it accepts a beat, so their movement in between
+is harmless. Freezing them would silently reintroduce stale-operand hazards.
+
 The remaining elements `alu_*` are only used from PREPARE to WRITE. They contain
 all the values needed by the ALU.
 
@@ -534,6 +545,15 @@ The assertions fall into three groups:
   check that the payload and valid of each internal stage interface hold stable
   while stalled. Both carry an explicit `not fetch_valid_o` escape clause,
   because a pipeline flush (see above) legitimately drops valid mid-transfer.
+  `f_dec2prep_valid_stable` enumerates the eleven *latched* elements of
+  `t_stage` rather than asserting `stable()` over the whole record, because
+  `src_val`, `dst_val` and `r14` are live pass-throughs (see
+  [Internal interfaces](#Internal-interfaces) above). `f_dec2prep_live_src` /
+  `_dst` / `_r14` assert the complementary fact — that those three really are
+  pure pass-throughs — so that registering one by mistake is caught too.
+  `c_dec2prep_stalled` and `c_dec2prep_stalled_sr` cover the stall condition,
+  and the stall-with-SR-write case in particular, to show the stability
+  assertion is not vacuous.
 * **Output interfaces.** `f_fetch_double` checks that we never accept a single
   word when we need two; `f_mem_src_ready_stable` / `f_mem_dst_ready_stable`
   check the ready signals towards the Memory module; `f_r14_bit0` checks the
@@ -552,7 +572,13 @@ restarts and holds correctly. The `LAST`-in-the-top-chunk contract described
 under [DECODE](#DECODE) is an *assume* there, not an assert - it is a
 requirement on the microcode ROM, not a property of the Sequencer.
 
-**Status.** `cpu_main.sby` defines a `cover` and a `bmc` task. `cover` passes.
-`bmc` currently **fails** at depth 4 on `f_dec2prep_valid_stable`; this is a
-known open item rather than a regression. K-induction (`prove`) is not attempted
-for `cpu_main`.
+**Status.** `cpu_main.sby` defines a `cover` and a `bmc` task, both at depth 20.
+Both pass. (They also pass at depth 30, which takes about 40 seconds; depth 20
+runs in under ten.) K-induction (`prove`) is not attempted for `cpu_main`.
+
+`bmc` used to fail at depth 4 on `f_dec2prep_valid_stable`. That was a defect in
+the property, not in the RTL: it asserted `stable()` over the entire `t_stage`
+record, including the three live pass-through elements, so BMC found a trace
+where `reg_r14_i` changed on the cycle after `reg_r14_we_o` was asserted while
+DECODE was stalled — legitimate bypass behaviour. The property now enumerates
+the latched elements only.

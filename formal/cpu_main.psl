@@ -13,8 +13,39 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- INTERNAL ASSERTIONS
    --------------------------------------------
 
+   -- Payload stability on the DECODE -> PREPARE interface.
+   --
+   -- NOTE: this deliberately does NOT cover dec2prep_stage.src_val, .dst_val
+   -- and .r14. Those three are combinational pass-throughs of the register file
+   -- read ports (see the concurrent assignments in decode.vhd), not part of the
+   -- latched payload, and they are *required* to move while DECODE is stalled:
+   -- that is how a stalled instruction picks up a register or Status Register
+   -- write issued by the older instruction still in WRITE, and how the second
+   -- micro-op of e.g. ADD @R0++, @R0++ sees the R0 update made by the first.
+   -- Asserting stable() over the whole record instead fails BMC at depth 4,
+   -- with reg_r14_i changing on the cycle after reg_r14_we_o was asserted.
+   -- The five alu_* fields are not driven by DECODE at all.
    f_dec2prep_valid_stable : assert always {dec2prep_valid and not dec2prep_ready and not rst_i and not fetch_valid_o} |=>
-      {stable(dec2prep_valid) and stable(dec2prep_stage)};
+      {stable(dec2prep_valid) and
+       stable(dec2prep_stage.microcodes) and
+       stable(dec2prep_stage.addr) and
+       stable(dec2prep_stage.inst) and
+       stable(dec2prep_stage.immediate) and
+       stable(dec2prep_stage.src_addr) and
+       stable(dec2prep_stage.src_mode) and
+       stable(dec2prep_stage.src_imm) and
+       stable(dec2prep_stage.dst_addr) and
+       stable(dec2prep_stage.dst_mode) and
+       stable(dec2prep_stage.dst_imm) and
+       stable(dec2prep_stage.res_reg)};
+
+   -- The three live fields really are pure pass-throughs. These hold in every
+   -- cycle, stalled or not, and would catch someone registering them by
+   -- mistake -- which would silently reintroduce the stale-operand hazards
+   -- described above.
+   f_dec2prep_live_src : assert always {dec2prep_stage.src_val = reg_src_val_i};
+   f_dec2prep_live_dst : assert always {dec2prep_stage.dst_val = reg_dst_val_i};
+   f_dec2prep_live_r14 : assert always {dec2prep_stage.r14     = reg_r14_i};
 
 --   f_dec2prep_ready_stable : assert always {dec2prep_ready and not dec2prep_valid and not rst_i} |=>
 --      {stable(dec2prep_ready)};
@@ -147,6 +178,15 @@ vunit i_cpu_main(cpu_main(synthesis))
    --------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    --------------------------------------------
+
+   -- Non-vacuity: the stall condition that f_dec2prep_valid_stable predicates
+   -- on must actually be reachable, otherwise that assertion proves nothing.
+   c_dec2prep_stalled : cover {dec2prep_valid = '1' and dec2prep_ready = '0' and rst_i = '0' and fetch_valid_o = '0'};
+
+   -- ... and the interesting case within it: a stall during which the Status
+   -- Register is being rewritten, i.e. exactly the scenario that made the
+   -- original whole-record stable() assertion fail.
+   c_dec2prep_stalled_sr : cover {dec2prep_valid = '1' and dec2prep_ready = '0' and rst_i = '0' and fetch_valid_o = '0' and reg_r14_we_o = '1'};
 
 
    ----------------------------------------------
