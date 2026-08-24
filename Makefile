@@ -33,22 +33,35 @@ SOURCES += src/cpu.vhd
 
 TEST_SOURCES += test/tdp_ram.vhd
 TEST_SOURCES += test/wb_tdp_mem.vhd
+TEST_SOURCES += test/test_monitor.vhd
 TEST_SOURCES += test/system.vhd
 
 TEST ?= prog
 REGISTER_BANK_WIDTH ?= 8
 
+# Every test program that "make test" runs.
+TESTS  = prog
+TESTS += prog_simple
+TESTS += prog_pipeline
+TESTS += prog_interleave
+TESTS += prog_flags
+TESTS += prog_r15
+TESTS += prog_hazard
+
 ASM = test/$(TEST).asm
 ROM = test/$(TEST).rom
 ASSEMBLER = $(HOME)/git/sy2002/QNICE-FPGA/assembler/asm
 
+# Log of every register and memory write, and the committed reference copy of it
+WRITES = test/$(TEST).writes
+GOLDEN = test/$(TEST).writes.golden
+
 TB  = tb_cpu
 TEST_SOURCES += test/$(TB).vhd
-WAVE          = test/$(TB).ghw
+WAVE          = test/$(TB)_$(TEST).ghw
 SAVE          = test/$(TB).gtkw
 
 TOP = system
-STOP_TIME = 850us
 
 
 ################################################
@@ -59,7 +72,10 @@ STOP_TIME = 850us
 help:
 	@echo
 	@echo "Possible targets:"
-	@echo "  make sim        : Run simulation"
+	@echo "  make sim        : Run simulation and open the waveform viewer"
+	@echo "  make test       : Run all test programs headless, for CI"
+	@echo "  make check      : Run one test program headless"
+	@echo "  make golden     : Regenerate the test/*.writes.golden reference files"
 	@echo "  make system.bit : Run synthesis using Vivado"
 	@echo "  make synth      : Run synthesis using yosys"
 	@echo "  make formal     : Run formal verification"
@@ -75,14 +91,61 @@ help:
 ## Simulation
 ################################################
 
+# The simulation ends itself: test/test_monitor.vhd reads the status word that
+# the test program writes just before its final HALT and exits 0 on pass,
+# 1 on fail, so every target below can simply be believed. See test/README.md.
+GHDL_RUN = ghdl -r --std=08 -frelaxed $(TB) \
+	   -gG_ROM=$(ROM) \
+	   -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) \
+	   -gG_WRITES_FILE=$(WRITES)
+
+.PHONY: build
+build: $(SOURCES) $(TEST_SOURCES)
+	ghdl -i --std=08 $(SOURCES) $(TEST_SOURCES)
+	ghdl -m --std=08 -frelaxed $(TB)
+
+# Run one test program, with waveform tracing, and open the waveform viewer.
 .PHONY: sim
 sim: $(WAVE)
 	gtkwave $(WAVE) $(SAVE)
 
 $(WAVE): $(SOURCES) $(TEST_SOURCES) $(ROM)
-	ghdl -i --std=08 $(SOURCES) $(TEST_SOURCES)
-	ghdl -m --std=08 -frelaxed $(TB)
-	ghdl -r --std=08 -frelaxed $(TB) --wave=$(WAVE) --stop-time=$(STOP_TIME) -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH)
+	$(MAKE) build
+	$(GHDL_RUN) --wave=$(WAVE)
+
+# Run one test program headless, without waveform tracing.
+.PHONY: run
+run: build $(ROM)
+	$(GHDL_RUN)
+
+# Run one test program and additionally compare the log of every register and
+# memory write against its committed reference copy. This catches regressions
+# that the program's own self-checks do not, so it is what CI should run.
+.PHONY: check
+check: run
+	diff -u $(GOLDEN) $(WRITES)
+
+# Run every test program. Unlike a plain "make -k", this reports the failures
+# together at the end, and still fails the build as a whole.
+.PHONY: test
+test:
+	@failed=""; \
+	for t in $(TESTS); do \
+	   echo "=== $$t ==="; \
+	   $(MAKE) --no-print-directory check TEST=$$t || failed="$$failed $$t"; \
+	done; \
+	if [ -n "$$failed" ]; then echo "FAILED:$$failed"; exit 1; fi; \
+	echo "All $(words $(TESTS)) tests passed"
+
+# Regenerate the reference copies. Only ever do this deliberately, and read the
+# resulting "git diff" carefully -- these files are the regression check.
+.PHONY: golden
+golden:
+	@for t in $(TESTS); do \
+	   echo "=== $$t ==="; \
+	   $(MAKE) --no-print-directory run TEST=$$t || exit 1; \
+	   cp test/$$t.writes test/$$t.writes.golden; \
+	done
 
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
@@ -154,11 +217,12 @@ formal:
 
 .PHONY: clean
 clean:
-	rm -rf test/$(TEST).lis
-	rm -rf test/$(TEST).out
+	rm -rf test/*.lis
+	rm -rf test/*.out
+	rm -rf test/*.rom
+	rm -rf test/*.writes
 	rm -rf work-obj08.cf
-	rm -rf $(WAVE)
-	rm -rf $(ROM)
+	rm -rf test/$(TB)_*.ghw
 	rm -rf yosys.log
 	rm -rf hw/$(TOP).tcl
 	rm -rf post_synth.dcp

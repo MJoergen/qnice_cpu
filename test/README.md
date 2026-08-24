@@ -1,47 +1,84 @@
 # Test programs and how to tell whether they passed
 
 This directory holds the testbench (`tb_cpu.vhd`), the memory models it needs
-(`tdp_ram.vhd`, `wb_tdp_mem.vhd`, `system.vhd`), and the QNICE assembly programs
-run against the CPU.
+(`tdp_ram.vhd`, `wb_tdp_mem.vhd`, `system.vhd`), the test-result monitor
+(`test_monitor.vhd`), and the QNICE assembly programs run against the CPU.
 
 ```
+make test                      # run every test program headless; this is the CI entry point
+make check TEST=prog_r15       # run just one of them, same checks
+make run   TEST=prog_r15       # run it without the writes-log comparison
 make sim                       # assemble test/prog.asm, simulate, open gtkwave
 make sim TEST=prog_interleave  # run test/prog_interleave.asm instead
-make test/tb_cpu.ghw           # same, but without launching gtkwave afterwards
 ```
+
+Every one of these exits 0 if and only if the test passed, so they can be run
+unattended.
 
 The `.asm` files are assembled by the external QNICE assembler at
 `$HOME/git/sy2002/QNICE-FPGA/assembler/asm`, which must be checked out
 separately. It emits a `.rom` (loaded by the testbench), a `.out`, and a `.lis`
 listing that maps every instruction to its address.
 
-## Pass criterion: check the HALT address
+## Pass criterion: the program reports its own verdict
 
-**A simulation that stops at `HALT` has not necessarily passed.** Reaching
-`HALT` is the only way any of these programs ever terminates, and most of them
-contain many `HALT` instructions scattered throughout — the self-checking test
-suite in `prog.asm` branches to a nearby `HALT` on *every* failed sub-test.
+**Reaching a `HALT` does not mean a test passed.** Reaching `HALT` is the only
+way any of these programs ever terminates, and most of them contain many `HALT`
+instructions scattered throughout — the self-checking test suite in `prog.asm`
+branches to a nearby `HALT` on *every* failed sub-test.
 
-The pass criterion is therefore **the address of the `HALT` that was reached**,
-which the disassembler prints as the last instruction line of the run:
+So the verdict is not inferred from where the program stopped; the program
+states it. Just before its final `HALT`, each program writes a **status word**
+to the reserved address `0x1FFF`:
+
+```asm
+EXIT            MOVE    OK, R8
+                MOVE    0x1FFF, R0      ; Test status word
+                MOVE    0x0000, @R0     ; 0 = pass
+                HALT
+```
+
+`test_monitor.vhd` snoops the data Wishbone bus for that write and ends the
+simulation with an exit code:
+
+| What the monitor saw                              | Result                          |
+| ------------------------------------------------- | ------------------------------- |
+| status word `0x0000`                              | `TEST PASSED`, exit code 0      |
+| status word anything else                         | `TEST FAILED: status code 0x…`, exit code 1 |
+| `HALT` reached, no status word ever written       | `TEST FAILED: HALT reached without a test status write`, exit code 1 |
+| no `HALT` at all within `G_TIMEOUT` (2 ms)        | `TEST FAILED: no HALT within …`, exit code 1 (watchdog in `tb_cpu.vhd`) |
+
+The third row is what makes the convention cheap: **every failure `HALT` is a
+failure automatically**, with nothing written on the failure paths at all. So a
+new test program only needs the two instructions above at its success exit, and
+is treated as failing until it reaches them. Giving individual failure paths
+their own status codes (`MOVE 0x0007, @R0` before the `HALT`) is optional, and
+only sharpens the diagnostic.
+
+When a test does fail, the address of the last disassembled `HALT` still tells
+you *which* one was reached:
 
 ```
-src/cpu_constants.vhd:238:13:@837960ns:(report note): 1692 (E000) HALT
+src/cpu_constants.vhd:238:13:@143550ns:(report note): 1696 (E000) HALT
                                                       ^^^^
 ```
 
-| Program                | Success address | Notes                                                                       |
-| ---------------------- | --------------- | --------------------------------------------------------------------------- |
-| `prog.asm`             | `0x1692`        | The `HALT` after the `EXIT` label at `0x1690`. Every other `HALT` is a failed sub-test, reachable only via an `E_*` error label. |
-| `prog_simple.asm`      | `0x0027`        | Reached by returning from the `ASUB L_3` at the end. The three earlier `HALT`s are branched over. |
-| `prog_pipeline.asm`    | `0x0015`        | The first `HALT` after `L_START`. The twelve `HALT`s at `0x0004`-`0x000F` are padding that must be jumped over. |
-| `prog_interleave.asm`  | `0x001E`        | The only `HALT` in the program, so here reaching `HALT` at all is sufficient. |
-| `prog_flags.asm`       | `0x0085`        | The `HALT` after the `EXIT` label at `0x0083`. Each of the eight sub-tests has its own `E_T*` failure `HALT`. |
-| `prog_r15.asm`         | `0x001E`        | The `HALT` after the `EXIT` label at `0x001C`. Each of the four sub-tests has its own `E_T*` failure `HALT`. |
-| `prog_hazard.asm`      | `0x0076`        | The `HALT` after the `EXIT` label at `0x0074`. Each of the eleven sub-tests has its own `E_H*` failure `HALT`. |
+Look that address up in the program's generated `.lis` file. Because the
+addresses shift whenever a program is edited, they are deliberately no longer
+recorded here.
 
-If you add a program, find its success address in the generated `.lis` file and
-add a row here.
+Two details of the mechanism are worth knowing:
+
+* `0x1FFF` is the top word of the 8 kW memory, and no test program uses it. It
+  is an ordinary RAM location, not a decoded I/O register — the monitor watches
+  the bus, so the write itself is harmless.
+* A `HALT` now stops the CPU. `src/cpu.vhd` gates the Icache-to-DECODE
+  handshake off as soon as a `HALT` is handed to DECODE (`p_halt_fetched`), so
+  the `HALT` is the last instruction that ever enters the pipeline and the CPU
+  idles instead of executing whatever data follows it in memory. Gating on the
+  `HALT` *retiring* instead would be too late — one or two later instructions
+  are already in the pipeline by then. Outstanding memory writes still drain,
+  which is why the monitor waits `G_DRAIN_CYCLES` before deciding.
 
 ## What each program covers
 
@@ -104,47 +141,30 @@ register, and read while a multi-micro-op instruction is in flight; a
 post-increment pointer reused immediately; and the stack pointer written and
 then used as a pre-decrement pointer.
 
-## The simulation always reports a failure
-
-The `disassemble` procedure in `src/cpu_constants.vhd` ends the run with
-
-```vhdl
-report "HALT" severity failure;
-```
-
-so GHDL exits non-zero and `make` prints `Error 1` on **every** run, passing or
-failing:
-
-```
-src/cpu_constants.vhd:258:10:@837960ns:(report failure): HALT
-ghdl:error: report failed
-make: *** [Makefile:87: test/tb_cpu.ghw] Error 1
-```
-
-That trailing error is expected and says nothing about the result. Read the
-`HALT` address on the line above it instead.
-
-For `prog.asm` there is one further signal: the instruction just before the
-successful `HALT` is `MOVE OK, R8`, which loads `R8` with a pointer to the
-string `"OK\n"`.
-
-## `writes.txt` as a golden-output check
+## The golden writes-log comparison
 
 `src/cpu.vhd` instantiates `src/debug.vhd` (inside a `pragma synthesis_off`
-block), which logs every register write and every Wishbone memory write to
-`test/writes.txt`. The copy committed to git is the output of a passing
-`TEST=prog` run, so after
+block), which logs every register write and every Wishbone memory write to the
+file named by the `G_WRITES_FILE` generic. `make` points that at
+`test/<program>.writes`, and the committed `test/<program>.writes.golden` next
+to it is the output of a passing run.
+
+`make check` (and therefore `make test`) diffs the two, so a run has to produce
+the exact same sequence of writes, in the same order, as well as reporting a
+pass. That catches regressions the program's own self-checks do not — a write
+that lands at the right value but in the wrong order, or an extra write nobody
+asserts on.
+
+When a change to the CPU or to a test program is *meant* to change the writes,
+regenerate the reference copies with
 
 ```
-make test/tb_cpu.ghw
-git diff --quiet test/writes.txt && echo PASS
+make golden
 ```
 
-an empty diff is a much stronger regression check than the `HALT` address alone
-— it confirms the CPU produced the exact same sequence of writes, in the same
-order.
+and read the resulting `git diff` carefully — these files are the regression
+check, so a diff that is not fully understood is a bug report, not noise.
 
-Note that the file is rewritten by *every* simulation run, so running any
-`TEST=` other than the default `prog` will leave a large spurious diff in your
-working tree. Re-run `make test/tb_cpu.ghw` with the default program to restore
-it.
+For `prog.asm` there is one further human-readable signal: the instruction just
+before the successful exit sequence is `MOVE OK, R8`, which loads `R8` with a
+pointer to the string `"OK\n"`.

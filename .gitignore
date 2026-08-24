@@ -1,0 +1,24 @@
+# GHDL / simulation
+work-obj08.cf
+test/*.ghw
+test/*.rom
+test/*.lis
+test/*.out
+# Log of every register and memory write; the committed reference copies are
+# test/*.writes.golden, see test/README.md
+test/*.writes
+
+# Yosys
+yosys.log
+system.edif
+
+# Vivado
+hw/system.tcl
+post_synth.dcp
+post_route.dcp
+timing_summary.rpt
+system.bit
+vivado*
+usage_statistics_webtalk*
+tight_setup_hold_pins.txt
+.Xil/

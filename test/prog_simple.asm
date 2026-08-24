@@ -35,6 +35,8 @@ L_1   RBRA L_2, 1
 L_2   MOVE L_4, R13     ; Initialize stack pointer
       ADD  R7, R8
       ASUB L_3, 1
+      MOVE 0x1FFF, R0   ; Test status word (see test/README.md)
+      MOVE 0x0000, @R0  ; 0 = pass
       HALT
 
 L_3   MOVE    @R13++, R15

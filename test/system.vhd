@@ -4,7 +4,10 @@ use ieee.std_logic_1164.all;
 entity system is
    generic (
       G_REGISTER_BANK_WIDTH : integer;
-      G_ROM : string
+      G_ROM : string;
+      -- Simulation only: file to log every register and memory write to.
+      -- An empty string (the default) disables the logging entirely.
+      G_WRITES_FILE : string := ""
    );
    port (
       clk_i  : in  std_logic;
@@ -30,13 +33,16 @@ architecture synthesis of system is
    signal wbd_ack     : std_logic;
    signal wbd_data_rd : std_logic_vector(15 downto 0);
 
+   signal halt        : std_logic;
+
 begin
 
    led_o <= wbd_addr;
 
    i_cpu : entity work.cpu
       generic map (
-         G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH
+         G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
+         G_WRITES_FILE         => G_WRITES_FILE
       )
       port map (
          clk_i       => clk_i,
@@ -54,7 +60,8 @@ begin
          wbd_we_o    => wbd_we,
          wbd_dat_o   => wbd_data_wr,
          wbd_ack_i   => wbd_ack,
-         wbd_data_i  => wbd_data_rd
+         wbd_data_i  => wbd_data_rd,
+         halt_o      => halt
       ); -- i_cpu
 
    i_tdp_mem : entity work.wb_tdp_mem
@@ -84,6 +91,19 @@ begin
          wb_b_ack_o   => wbd_ack,
          wb_b_data_o  => wbd_data_rd
       ); -- i_tdp_mem
+
+
+-- pragma synthesis_off
+   i_test_monitor : entity work.test_monitor
+      port map (
+         clk_i      => clk_i,
+         rst_i      => not rstn_i,
+         halt_i     => halt,
+         mem_we_i   => wbd_stb and wbd_we and not wbd_stall,
+         mem_addr_i => wbd_addr,
+         mem_data_i => wbd_data_wr
+      ); -- i_test_monitor
+-- pragma synthesis_on
 
 end architecture synthesis;
 

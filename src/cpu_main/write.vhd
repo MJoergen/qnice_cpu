@@ -30,7 +30,10 @@ entity write is
       fetch_valid_o   : out std_logic;
       fetch_addr_o    : out std_logic_vector(15 downto 0);
 
-      inst_done_o     : out std_logic
+      inst_done_o     : out std_logic;
+
+      -- Asserted for one clock cycle when a HALT instruction retires.
+      halt_o          : out std_logic                        -- combinatorial
    );
 end entity write;
 
@@ -190,6 +193,19 @@ begin
    ------------------------------------------------------------
 
    inst_done_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcodes(C_LAST);
+
+
+   ------------------------------------------------------------
+   -- Halt
+   ------------------------------------------------------------
+
+   -- HALT has no architectural side effects of its own; all it does is tell the
+   -- outside world that the program has run to completion. cpu.vhd latches this
+   -- pulse and stops feeding the pipeline, and the testbench uses it as the
+   -- end-of-test event.
+   halt_o <= inst_done_o when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
+                              prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_HALT
+             else '0';
 
 end architecture synthesis;
 

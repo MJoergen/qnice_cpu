@@ -1,0 +1,14 @@
+Write value 0x1234 to register 0
+Write value 0x2345 to register 1
+Write value 0x3456 to register 2
+Write value 0x000A to register F
+Write value 0x000B to register 0
+Write value 0x0010 to register F
+Write value 0x0014 to register F
+Write value 0x0F94 to register 4
+Write value 0x0015 to register 5
+Write value 0x0F94 to register 6
+Write value 0x001C to register F
+Write value 0x0023 to register 8
+Write value 0x1FFF to register 0
+Write value 0x0000 to memory 0x1FFF

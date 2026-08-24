@@ -1,9 +1,15 @@
 library ieee;
 use ieee.std_logic_1164.all;
+use ieee.numeric_std_unsigned.all;
+
+use work.cpu_constants.all;
 
 entity cpu is
    generic (
-      G_REGISTER_BANK_WIDTH : integer
+      G_REGISTER_BANK_WIDTH : integer;
+      -- Simulation only: file to log every register and memory write to.
+      -- An empty string (the default) disables the logging entirely.
+      G_WRITES_FILE         : string := ""
    );
    port (
       clk_i       : in  std_logic;
@@ -25,7 +31,10 @@ entity cpu is
       wbd_we_o    : out std_logic;
       wbd_dat_o   : out std_logic_vector(15 downto 0);
       wbd_ack_i   : in  std_logic;
-      wbd_data_i  : in  std_logic_vector(15 downto 0)
+      wbd_data_i  : in  std_logic_vector(15 downto 0);
+
+      -- Asserted from the moment a HALT instruction retires until the next reset
+      halt_o      : out std_logic
    );
 end entity cpu;
 
@@ -37,6 +46,11 @@ architecture synthesis of cpu is
    signal fetch2icache_addr            : std_logic_vector(15 downto 0);
    signal fetch2icache_data            : std_logic_vector(15 downto 0);
 
+   -- Halt
+   signal halt                         : std_logic;
+   signal halt_d                       : std_logic := '0';
+   signal halt_fetched                 : std_logic := '0';
+
    -- ICACHE to DECODE
    signal icache_rst                   : std_logic;
    signal icache2decode_valid          : std_logic;
@@ -45,6 +59,11 @@ architecture synthesis of cpu is
    signal icache2decode_addr           : std_logic_vector(15 downto 0);
    signal icache2decode_data           : std_logic_vector(31 downto 0);
    signal icache2decode_double_consume : std_logic;
+
+   -- Same three signals, gated off once a HALT has been fetched (p_halt_fetched)
+   signal icache2decode_valid_gated          : std_logic;
+   signal icache2decode_ready_gated          : std_logic;
+   signal icache2decode_double_consume_gated : std_logic;
 
    -- EXECUTE to FETCH
    signal exe2fetch_valid              : std_logic;
@@ -124,12 +143,48 @@ begin
          s_addr_i   => fetch2icache_addr,
          s_data_i   => fetch2icache_data,
          m_valid_o  => icache2decode_valid,
-         m_ready_i  => icache2decode_ready,
+         m_ready_i  => icache2decode_ready_gated,
          m_double_o => icache2decode_double_valid,
          m_addr_o   => icache2decode_addr,
          m_data_o   => icache2decode_data,
-         m_double_i => icache2decode_double_consume
+         m_double_i => icache2decode_double_consume_gated
       ); -- i_icache
+
+
+   -- HALT stops the pipeline. The gate is placed here, on the handshake that
+   -- hands instructions to DECODE, rather than on the HALT retiring three
+   -- stages later: by then the next one or two instructions have already been
+   -- accepted, and would retire after the HALT, executing whatever data happens
+   -- to follow it in memory. Gating here means the HALT is the last instruction
+   -- that ever enters the pipeline, so it is also the last one to retire.
+   --
+   -- Both directions of the handshake are gated by the same signal, so the
+   -- Icache and DECODE always agree on whether a beat was accepted. Only a
+   -- reset restarts execution.
+   icache2decode_valid_gated          <= icache2decode_valid          and not halt_fetched;
+   icache2decode_ready_gated          <= icache2decode_ready          and not halt_fetched;
+   icache2decode_double_consume_gated <= icache2decode_double_consume and not halt_fetched;
+
+   p_halt_fetched : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if icache2decode_valid_gated = '1' and icache2decode_ready_gated = '1' and
+            icache2decode_data(R_OPCODE) = C_OPCODE_CTRL and
+            icache2decode_data(R_CTRL_CMD) = C_CTRL_HALT then
+            halt_fetched <= '1';
+         end if;
+
+         -- A HALT that DECODE has accepted is not necessarily a HALT that will
+         -- execute: an older branch still in the pipeline flushes DECODE and
+         -- PREPARE when it retires (see the reset of i_decode and i_prepare in
+         -- cpu_main.vhd), discarding it. prog_pipeline.asm does exactly this --
+         -- it branches over twelve HALTs used as padding. Without this clear the
+         -- CPU would gate itself off forever on a HALT that never ran.
+         if exe2fetch_valid = '1' or rst_i = '1' then
+            halt_fetched <= '0';
+         end if;
+      end if;
+   end process p_halt_fetched;
 
 
    ------------------------------------------------------------
@@ -140,7 +195,7 @@ begin
       port map (
          clk_i            => clk_i,
          rst_i            => rst_i,
-         fetch_valid_i    => icache2decode_valid,
+         fetch_valid_i    => icache2decode_valid_gated,
          fetch_ready_o    => icache2decode_ready,
          fetch_double_i   => icache2decode_double_valid,
          fetch_addr_i     => icache2decode_addr,
@@ -169,8 +224,30 @@ begin
          reg_r14_o        => exe2reg_r14,
          reg_we_o         => exe2reg_we,
          reg_addr_o       => exe2reg_addr,
-         reg_val_o        => exe2reg_val
+         reg_val_o        => exe2reg_val,
+         halt_o           => halt
       ); -- i_cpu_main
+
+
+   ------------------------------------------------------------
+   -- Halt
+   ------------------------------------------------------------
+
+   -- halt_o is the level "this CPU has executed a HALT", as opposed to the
+   -- single-cycle pulse cpu_main reports when the HALT retires.
+   p_halt : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if halt = '1' then
+            halt_d <= '1';
+         end if;
+         if rst_i = '1' then
+            halt_d <= '0';
+         end if;
+      end if;
+   end process p_halt;
+
+   halt_o <= halt or halt_d;
 
 
    ------------------------------------------------------------
@@ -231,7 +308,7 @@ begin
 -- pragma synthesis_off
    i_debug : entity work.debug
       generic map (
-         G_FILE_NAME => "test/writes.txt"
+         G_FILE_NAME => G_WRITES_FILE
       )
       port map (
          clk_i      => clk_i,

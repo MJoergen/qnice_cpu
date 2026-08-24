@@ -20,6 +20,8 @@ L_START
       MOVE 0x1234, R8
       MOVE 0x2345, R9
 
+      MOVE 0x1FFF, R0   ; Test status word (see test/README.md)
+      MOVE 0x0000, @R0  ; 0 = pass
       HALT
       HALT
       HALT

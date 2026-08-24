@@ -338,6 +338,29 @@ port: `fetch_valid_o` is asserted whenever WRITE writes to register 15, and
 `fetch_addr_o` is that write value. The same `fetch_valid_o` also flushes the
 pipeline, see [Pipeline flush](#Pipeline-flush) below.
 
+### Halt
+```
+halt_o : out std_logic;
+```
+This output is asserted for one clock cycle when a `HALT` instruction retires,
+i.e. it is `inst_done_o` qualified by the instruction being `CTRL HALT`. `HALT`
+has no architectural effect inside `cpu_main`; all this does is tell the outside
+world that the program has run to completion.
+
+Acting on it is [cpu.vhd](../cpu.vhd)'s job, and it does so at the *other* end
+of the pipeline: `p_halt_fetched` there watches the Icache-to-DECODE handshake
+and gates it off as soon as a `HALT` is handed to DECODE, so that the `HALT` is
+the last instruction to enter the pipeline. Gating on `halt_o` itself would be
+too late — the next one or two instructions have already been accepted by then,
+and would retire after the `HALT`, executing whatever data follows it in memory.
+That gate is cleared again by a pipeline flush, because a `HALT` that DECODE has
+accepted is not necessarily a `HALT` that will execute: an older branch retiring
+discards it. `test/prog_pipeline.asm` branches over twelve `HALT`s used as
+padding and depends on this.
+
+`halt_o` is also the end-of-test event for `test/test_monitor.vhd`, see
+[test/README.md](../../test/README.md).
+
 ### Debug
 ```
 inst_done_o : out std_logic;
@@ -536,8 +559,8 @@ this stage wrote to the Register module, feeding a priority mux in front of
 
 That was removed as dead code. A probe on it never fired once in 8286 accepted
 beats of `test/prog.asm`, and removing it left every test program passing with
-`test/writes.txt` byte-identical. The reason is structural, and worth
-understanding before anyone adds it back:
+the golden writes logs (`test/*.writes.golden`) byte-identical. The reason is
+structural, and worth understanding before anyone adds it back:
 
 * `registers.vhd` forwards **both** Status Register write ports combinationally
   onto `sr_val_o` (see

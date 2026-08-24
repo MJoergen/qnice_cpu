@@ -21,6 +21,10 @@ to the code: [src/fetch/README.md](src/fetch/README.md), [src/registers/README.m
 All from the repo root unless noted.
 
 ```
+make test                             # run every test program headless; the CI entry point
+make check TEST=prog_r15              # run one test program headless (sim + golden writes diff)
+make run   TEST=prog_r15              # same, without the golden writes diff
+make golden                           # regenerate every test/*.writes.golden reference file
 make sim                              # assemble test/prog.asm, run GHDL simulation, open gtkwave
 make sim TEST=prog_interleave         # run a different test program (test/<name>.asm)
 make sim REGISTER_BANK_WIDTH=8        # override register bank address width (default 8)
@@ -35,12 +39,22 @@ Test programs live in `test/*.asm` and are assembled with the external QNICE ass
 the top-level `Makefile`).
 
 **Reaching `HALT` does not mean the test passed.** Most test programs contain many `HALT`
-instructions — in the self-checking `prog.asm` every failed sub-test branches to its own `HALT` —
-so a run is judged by *which address* it halted at, printed on the last disassembler line
-(`... : 1692 (E000) HALT`). Also, `disassemble` ends every run with `report "HALT" severity
-failure`, so GHDL exits non-zero and `make` prints `Error 1` whether the test passed or failed;
-that trailing error means nothing on its own. Per-program success addresses, and the stronger
-`test/writes.txt` golden-output check, are in [test/README.md](test/README.md).
+instructions — in the self-checking `prog.asm` every failed sub-test branches to its own `HALT`.
+So the verdict is not inferred from where the program stopped: each program writes a **status
+word** to the reserved address `0x1FFF` (0 = pass) just before its final `HALT`, and
+`test/test_monitor.vhd` snoops the data Wishbone bus for it and ends the simulation via
+`std.env.finish(0)` / `stop(1)`. A `HALT` reached with no status write — which is every failure
+`HALT`, at no cost to the failure paths — fails the run, as does never reaching a `HALT` (the
+`G_TIMEOUT` watchdog in `tb_cpu.vhd`). `make check` / `make test` additionally diff the run's
+register/memory write log against the committed `test/<name>.writes.golden`. Every one of these
+targets exits 0 if and only if the test passed. See [test/README.md](test/README.md); if a golden
+diff is *expected*, regenerate with `make golden` and read the `git diff` carefully.
+
+Retiring a `HALT` now stops the CPU. `p_halt_fetched` in `src/cpu.vhd` gates the
+Icache-to-DECODE handshake off as soon as a `HALT` is handed to DECODE (gating on the `halt_o`
+retire pulse from WRITE would be one or two instructions too late), and clears that gate on a
+pipeline flush, since a branch retiring can discard an already-accepted `HALT` —
+`test/prog_pipeline.asm` branches over twelve `HALT`s used as padding and depends on this.
 
 ### Formal verification
 
@@ -211,8 +225,9 @@ with the specific remaining obstacle documented in a comment right above it in `
 - `src/sub/` — reusable elastic-pipeline building blocks, see
   [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-src-sub) above.
 - `src/cpu.vhd` — top-level entity tying FETCH, Icache, Registers, Memory, and `cpu_main` together.
-- `test/` — testbench (`tb_cpu.vhd`), memory models, and `.asm` test programs. See
-  [test/README.md](test/README.md) for how to tell a passing run from a failing one.
+- `test/` — testbench (`tb_cpu.vhd`), memory models, the pass/fail monitor (`test_monitor.vhd`),
+  and `.asm` test programs. See [test/README.md](test/README.md) for how to tell a passing run
+  from a failing one.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).
 - `formal/` — one `.psl`/`.sby`/`.gtkw` triplet per formally-verified module.
 - `doc/` — architecture overview and block diagram source (`cpu.drawio`/`cpu.png`).

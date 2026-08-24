@@ -55,6 +55,9 @@ entity cpu_main is
       fetch_valid_o   : out std_logic;
       fetch_addr_o    : out std_logic_vector(15 downto 0);
 
+      -- WRITE: Halt
+      halt_o          : out std_logic;
+
       -- Debug
       inst_done_o     : out std_logic
    );
@@ -146,7 +149,8 @@ begin
          reg_val_o       => reg_val_o,
          fetch_valid_o   => fetch_valid_o,
          fetch_addr_o    => fetch_addr_o,
-         inst_done_o     => inst_done_o
+         inst_done_o     => inst_done_o,
+         halt_o          => halt_o
       ); -- i_write
 
 end architecture synthesis;

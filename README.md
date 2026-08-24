@@ -34,7 +34,10 @@ architecture and the design.
 
 ## Makefile
 The current makefile supports the following targets:
+* `make test`       : Run all test programs headless; this is the CI entry point
+* `make check`      : Run a single test program headless
 * `make sim`        : Run simulation, then open the waveform in gtkwave
+* `make golden`     : Regenerate the `test/*.writes.golden` reference files
 * `make system.bit` : Run synthesis using Vivado
 * `make synth`      : Run synthesis using yosys
 * `make formal`     : Run formal verification
@@ -45,15 +48,19 @@ By default these assemble and run [`test/prog.asm`](test/prog.asm); pass
 
 ### Reading a simulation result
 
-Two things will mislead you on a first run:
+`make test` exits 0 if and only if every test passed, so it can be run
+unattended. The thing that could otherwise mislead you is that **reaching
+`HALT` does not mean the test passed** — most of the test programs contain many
+`HALT` instructions, and the self-checking `prog.asm` branches to one on every
+failed sub-test.
 
-* **Every run ends in an error.** The disassembler terminates the simulation
-  with `report "HALT" severity failure`, so GHDL exits non-zero and `make`
-  prints `Error 1` whether the test passed or failed.
-* **Reaching `HALT` does not mean the test passed.** Most of the test programs
-  contain many `HALT` instructions, and the self-checking `prog.asm` branches to
-  one on every failed sub-test. A run is judged by *which address* it halted at.
+So the verdict is not inferred from where the program stopped. Each program
+states it, by writing a status word to the reserved address `0x1FFF` just before
+its final `HALT`; `test/test_monitor.vhd` reads that off the bus and ends the
+simulation with the matching exit code. A `HALT` reached without such a write —
+which is every failure `HALT` — fails the run, as does never reaching a `HALT`
+at all. On top of that, `make test` compares the log of every register and
+memory write against a committed reference copy.
 
-[`test/README.md`](test/README.md) lists the success address for each program,
-and describes the stronger golden-output check against `test/writes.txt`.
+[`test/README.md`](test/README.md) describes both checks in full.
 

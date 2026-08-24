@@ -254,9 +254,6 @@ package body cpu_constants is
                reg_str(inst(R_DST_REG), inst(R_DST_MODE), operand);
       end if;
 
-      if to_integer(inst(R_OPCODE)) = C_OPCODE_CTRL and to_integer(inst(R_CTRL_CMD)) = C_CTRL_HALT then
-         report "HALT" severity failure;
-      end if;
    end procedure disassemble;
 
 end cpu_constants;
