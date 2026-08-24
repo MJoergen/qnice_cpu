@@ -38,7 +38,8 @@ Test programs live in `test/*.asm` and are assembled with the external QNICE ass
 `$HOME/git/sy2002/QNICE-FPGA/assembler/asm` (must be checked out separately). That default lives in
 the top-level `Makefile` as `ASSEMBLER ?=`, so it can be overridden — `make test ASSEMBLER=<path>`
 is what [.github/workflows/test.yml](.github/workflows/test.yml) does. That workflow runs
-`make test` on every push to `main` and every pull request; it builds only `qasm`/`qasm2rom` from
+`make test` on every push to `main` and every pull request (formal verification runs separately,
+see below); it builds only `qasm`/`qasm2rom` from
 the upstream project rather than the whole QNICE toolchain, and asserts up front that the
 installed GHDL really does map `std.env.finish(0)`/`stop(1)` onto process exit codes, since the
 whole pass/fail signal rests on that.
@@ -65,9 +66,10 @@ pipeline flush, since a branch retiring can discard an already-accepted `HALT` �
 
 `make formal` runs `make -C formal`, which uses SymbiYosys (`sby`) with the GHDL plugin to
 check the modules listed in the `DUTS` variable at the top of
-[formal/Makefile](formal/Makefile). CI runs it too, as a second job in
-[.github/workflows/test.yml](.github/workflows/test.yml), taking the whole toolchain from a pinned
-OSS CAD Suite release and using `make -C formal -k` so one failing DUT does not hide the rest. All twelve DUTs are currently enabled and **the whole suite
+[formal/Makefile](formal/Makefile). CI runs it too, in its own workflow
+[.github/workflows/formal.yml](.github/workflows/formal.yml), taking the whole toolchain from a
+pinned OSS CAD Suite release and using `make -C formal -k` so one failing DUT does not hide the
+rest. All twelve DUTs are currently enabled and **the whole suite
 passes** (35 tasks); if you want to narrow scope while iterating, comment lines out there — but
 put them back. The Makefile tracks each job with a `<dut>.stamp` file whose prerequisites are read
 from that job's own `[files]` section, so `make` re-runs exactly the jobs whose `.sby`, `.psl` or

@@ -1,6 +1,7 @@
 # A pipelined implementation of the QNICE CPU
 
 [![test](https://github.com/MJoergen/qnice_cpu/actions/workflows/test.yml/badge.svg)](https://github.com/MJoergen/qnice_cpu/actions/workflows/test.yml)
+[![formal](https://github.com/MJoergen/qnice_cpu/actions/workflows/formal.yml/badge.svg)](https://github.com/MJoergen/qnice_cpu/actions/workflows/formal.yml)
 
 The reason for this implementation is to increase the performance of the QNICE
 CPU, and to use techniques from formal verification to prove its correctness.
@@ -66,12 +67,12 @@ memory write against a committed reference copy.
 
 [`test/README.md`](test/README.md) describes both checks in full.
 
-CI runs both `make test` and `make formal` on every push to `main` and every
-pull request, as two independent jobs — see
-[`.github/workflows/test.yml`](.github/workflows/test.yml). The simulation job
-builds the QNICE assembler from the upstream project (only `qasm` and
-`qasm2rom` are needed, not the whole toolchain) and points the Makefile at it
-with `ASSEMBLER=<path>`; the formal job takes SymbiYosys, Yosys with the GHDL
-plugin, GHDL and the SMT solvers from a pinned
+CI runs `make test` and `make formal` on every push to `main` and every pull
+request, as two independent workflows so that each gets its own badge above:
+[`test.yml`](.github/workflows/test.yml) builds the QNICE assembler from the
+upstream project (only `qasm` and `qasm2rom` are needed, not the whole
+toolchain) and points the Makefile at it with `ASSEMBLER=<path>`;
+[`formal.yml`](.github/workflows/formal.yml) takes SymbiYosys, Yosys with the
+GHDL plugin, GHDL and the SMT solvers from a pinned
 [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release.
 
