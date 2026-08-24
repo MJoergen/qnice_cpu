@@ -65,7 +65,9 @@ pipeline flush, since a branch retiring can discard an already-accepted `HALT` â
 
 `make formal` runs `make -C formal`, which uses SymbiYosys (`sby`) with the GHDL plugin to
 check the modules listed in the `DUTS` variable at the top of
-[formal/Makefile](formal/Makefile). All twelve DUTs are currently enabled and **the whole suite
+[formal/Makefile](formal/Makefile). CI runs it too, as a second job in
+[.github/workflows/test.yml](.github/workflows/test.yml), taking the whole toolchain from a pinned
+OSS CAD Suite release and using `make -C formal -k` so one failing DUT does not hide the rest. All twelve DUTs are currently enabled and **the whole suite
 passes** (35 tasks); if you want to narrow scope while iterating, comment lines out there â€” but
 put them back. The Makefile tracks each job with a `<dut>.stamp` file whose prerequisites are read
 from that job's own `[files]` section, so `make` re-runs exactly the jobs whose `.sby`, `.psl` or

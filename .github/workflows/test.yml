@@ -93,3 +93,51 @@ jobs:
           name: writes-logs
           path: test/*.writes
           if-no-files-found: ignore
+
+  formal:
+    name: Formal verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out the CPU
+        uses: actions/checkout@v4
+
+      # SymbiYosys, Yosys with the GHDL plugin, GHDL itself and the SMT solvers
+      # all come out of this one tarball, which is how YosysHQ ships them.
+      # The date is pinned rather than tracking "latest", so that an upstream
+      # nightly cannot turn this job red on its own; bump it deliberately.
+      - name: Install the OSS CAD Suite
+        env:
+          OSS_CAD_SUITE_DATE: "2026-08-24"
+        run: |
+          d="$OSS_CAD_SUITE_DATE"
+          curl -sSL -o oss-cad-suite.tgz \
+            "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/$d/oss-cad-suite-linux-x64-${d//-/}.tgz"
+          tar xzf oss-cad-suite.tgz
+          rm oss-cad-suite.tgz
+          echo "$PWD/oss-cad-suite/bin" >> "$GITHUB_PATH"
+
+      - name: Show tool versions
+        run: |
+          yosys --version
+          ghdl --version | head -1
+          sby --version
+
+      # -k rather than the "make formal" wrapper: without it make stops at the
+      # first failing DUT and hides the state of the remaining eleven. make
+      # still exits non-zero if any of them failed.
+      - name: Run formal verification
+        run: make -C formal -k
+
+      # A failed property leaves a counterexample trace behind; without it the
+      # only thing in the log is which property failed at which depth.
+      - name: Upload counterexample traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: formal-traces
+          path: |
+            formal/*/logfile.txt
+            formal/*/engine_*/*.vcd
+          if-no-files-found: ignore

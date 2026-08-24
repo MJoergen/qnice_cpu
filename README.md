@@ -66,9 +66,12 @@ memory write against a committed reference copy.
 
 [`test/README.md`](test/README.md) describes both checks in full.
 
-`make test` is what CI runs, on every push to `main` and every pull request —
-see [`.github/workflows/test.yml`](.github/workflows/test.yml). The workflow
+CI runs both `make test` and `make formal` on every push to `main` and every
+pull request, as two independent jobs — see
+[`.github/workflows/test.yml`](.github/workflows/test.yml). The simulation job
 builds the QNICE assembler from the upstream project (only `qasm` and
 `qasm2rom` are needed, not the whole toolchain) and points the Makefile at it
-with `ASSEMBLER=<path>`.
+with `ASSEMBLER=<path>`; the formal job takes SymbiYosys, Yosys with the GHDL
+plugin, GHDL and the SMT solvers from a pinned
+[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release.
 
