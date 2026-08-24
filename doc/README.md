@@ -171,7 +171,7 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `af3e84a-dirty`.
+Measured with Vivado 2022.2 on commit `8f921c8`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -246,7 +246,30 @@ Two things to know before trying to optimise it further:
   very first hop: `alu_src_val` bit 0 has a fanout of about 75 — it feeds the
   adder, both barrel shifters' shift-amount decode, the comparators and every
   bitwise operation — and that one net costs roughly 1.4 ns, a sixth of the
-  whole budget. Reducing that fanout is the obvious next lever.
+  whole budget.
+
+  Reducing that fanout is the obvious next lever, and both easy ways of doing
+  it have been tried and do not work:
+
+  * A `MAX_FANOUT` attribute on `wr_stage_o` in
+    [prepare.vhd](../src/cpu_main/prepare.vhd) does work — it is worth
+    **+0.057 ns**, at a cost of 45 flip-flops and 14 LUTs. But it cannot be
+    kept. In the architecture, `ghdl -a` accepts it only under `-frelaxed`,
+    which the simulation flow passes and the formal flow does not: an attribute
+    specification for a port must sit in the same immediate scope as the port.
+    Moved into the entity, where the LRM wants it, GHDL's *synthesis* front end
+    crashes with an internal assertion (`synth-vhdl_decls.adb:298`) — a GHDL
+    bug, not a VHDL error — which breaks `make formal` outright.
+  * `synth_design -fanout_limit 24` avoids VHDL entirely, but has no effect
+    whatsoever: identical slack, identical LUT and flip-flop counts, and the
+    fanout still 75. Vivado's global fanout limit does not replicate registers.
+
+  What is left is replicating the register by hand: a second copy of
+  `alu_src_val` in the stage record, carried through to the shifters, held
+  against merging with `DONT_TOUCH`. That is a new record field threaded
+  through three modules and into a formally verified one, for something the
+  attribute experiment bounds at about 0.06 ns. Worth knowing the price before
+  starting.
 * **Unrelated logic elsewhere can move this number.** Because the path is
   placement-sensitive, logic that is nowhere near it can still perturb it. A
   single flip-flop added next to the Icache, for the HALT gate, once cost
