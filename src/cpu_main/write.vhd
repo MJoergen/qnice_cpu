@@ -57,8 +57,8 @@ begin
    -- one-cycle-delayed copy of everything written to the Register module, and a
    -- priority mux in front of prep_stage_i.r14). It was removed as dead code: a
    -- probe on it never fired once in 8286 accepted beats of test/prog.asm, and
-   -- removing it left every test program passing with test/writes.txt
-   -- byte-identical.
+   -- removing it left every test program passing with the golden writes logs
+   -- (test/*.writes.golden) byte-identical.
    --
    -- The reason is structural. registers.vhd forwards BOTH Status Register
    -- write ports combinationally onto sr_val_o; DECODE passes reg_r14_i through

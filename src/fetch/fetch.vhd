@@ -8,11 +8,11 @@ use ieee.numeric_std_unsigned.all;
 -- 1. Sending read requests to WISHBONE (with possible backpressure)
 -- 2. Receiving read responses from WISHBONE
 -- 3. Sending instructions to DECODE stage (with possible backpressure)
--- 4. Receiving a new PC from DECODE
+-- 4. Receiving a new PC from the WRITE stage
 --
 -- THEORY OF OPERATION
 -- The unit speculatively fetches a linear sequence of instructions starting at
--- the address most recently supplied by the DECODE stage.  Each WISHBONE read
+-- the address most recently supplied by the WRITE stage.  Each WISHBONE read
 -- request reserves one "slot".  A slot is allocated when the request is issued
 -- (STB asserted) and released when the corresponding instruction word is
 -- handed over to the DECODE stage.  At most C_MAX_PENDING slots may be in use
@@ -29,7 +29,7 @@ use ieee.numeric_std_unsigned.all;
 --    backpressure and takes effect immediately: the current WISHBONE
 --    transaction is aborted, both internal FIFOs are cleared, and fetching
 --    restarts at dc_addr_i.
--- b) The DECODE stage MUST supply a new PC (dc_valid_i) before any fetched
+-- b) The WRITE stage MUST supply a new PC (dc_valid_i) before any fetched
 --    instruction is meaningful.  wb_addr_o is reset to zero, so without a new
 --    PC the unit will start fetching from address 0.
 -- c) The attached WISHBONE slave MUST NOT assert ACK after CYC has been
@@ -57,13 +57,15 @@ entity fetch is
       wb_ack_i   : in  std_logic;
       wb_data_i  : in  std_logic_vector(15 downto 0);
 
-      -- Send instruction to DECODE
+      -- Send instruction to DECODE (i.e. to the Icache)
       dc_valid_o : out std_logic := '0';
       dc_ready_i : in  std_logic;
       dc_addr_o  : out std_logic_vector(15 downto 0);
       dc_data_o  : out std_logic_vector(15 downto 0);
 
-      -- Receive a new PC from DECODE
+      -- Receive a new PC from WRITE.  Every write to R15 is a branch, and
+      -- WRITE forwards it here; the dc_ prefix on these two ports is historical
+      -- and does NOT mean they come from DECODE.
       dc_valid_i : in  std_logic;
       dc_addr_i  : in  std_logic_vector(15 downto 0)
    );
@@ -170,7 +172,7 @@ begin
             cyc_v := '0';
          end if;
 
-         -- 6. Abort: a new PC from DECODE cancels everything in flight.
+         -- 6. Abort: a new PC from WRITE cancels everything in flight.
          --    Deasserting CYC for at least one cycle terminates the current
          --    WISHBONE cycle; see interface contract (c) above.  This is
          --    applied last so that it overrides any request issued in step 4.

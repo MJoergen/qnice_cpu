@@ -44,7 +44,7 @@ dc_ready_i : in  std_logic;
 dc_addr_o  : out std_logic_vector(15 downto 0);
 dc_data_o  : out std_logic_vector(15 downto 0);
 
--- Receive a new PC from DECODE
+-- Receive a new PC from WRITE (the dc_ prefix here is historical)
 dc_valid_i : in  std_logic;
 dc_addr_i  : in  std_logic_vector(15 downto 0)
 ```
@@ -68,7 +68,7 @@ The interface contracts (also stated in the file header) are:
 * `dc_valid_i` is an unconditional, single-cycle flush with no back-pressure:
   the current WISHBONE transaction is aborted, both internal FIFOs are cleared,
   and fetching restarts at `dc_addr_i`.
-* DECODE **must** supply a PC before any fetched instruction is meaningful —
+* WRITE **must** supply a PC before any fetched instruction is meaningful —
   `wb_addr_o` resets to zero, so without one the unit fetches from address 0.
 * The WISHBONE slave **must not** assert `ACK` after `CYC` has been deasserted.
   Deasserting `CYC` cancels all outstanding requests; a slave that acked a
@@ -203,7 +203,7 @@ responsibility.
 ### Reset and flush escapes
 
 `fetch` resets its address FIFO, data buffer and `pipe_concat` with
-`rst_i or dc_valid_i`, so a PC redirect from DECODE flushes them mid-stream.
+`rst_i or dc_valid_i`, so a PC redirect from WRITE flushes them mid-stream.
 Combined with the fact that `one_stage_buffer`/`two_stage_buffer` gate
 `m_valid_o` and `s_ready_o` combinationally with `and not rst_i`, this means a
 valid or ready signal can legitimately drop *within the cycle* the flush is

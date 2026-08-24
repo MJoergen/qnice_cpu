@@ -82,7 +82,7 @@ Two details of the mechanism are worth knowing:
 
 ## What each program covers
 
-`prog.asm` is the broad self-checking instruction suite; the other three are
+`prog.asm` is the broad self-checking instruction suite; the other six are
 narrow. `prog_simple.asm` walks the addressing modes of `MOVE`/`ADD`/`CMP` and
 the branch instructions. `prog_pipeline.asm` and `prog_interleave.asm` exist to
 exercise pipeline behaviour rather than instruction semantics — respectively a
