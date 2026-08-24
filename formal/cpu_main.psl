@@ -146,6 +146,118 @@ vunit i_cpu_main(cpu_main(synthesis))
                                     f_reg_write = '1'};
 
 
+   ------------------------------------------------------------------
+   -- ADDC <REG>,<REG>: the Status Register path, in both directions
+   ------------------------------------------------------------------
+   --
+   -- MOVE exercises the operand and write-back datapath but says nothing about
+   -- R14, because MOVE neither reads a flag nor depends on one. ADDC is the
+   -- smallest instruction that closes the loop in both directions:
+   --
+   --   R14 -> ALU : the carry-in comes from the Status Register, so a stale or
+   --                mis-selected SR changes the RESULT, not just the flags.
+   --   ALU -> R14 : all four of V, N, Z and C are written back, and the bits
+   --                the instruction does not touch must be preserved.
+   --
+   -- Checking the sum is what makes the first direction observable: if the
+   -- design took the wrong carry-in, reg_val_o is wrong by one.
+
+   signal c_dst_val : std_logic_vector(15 downto 0);
+   attribute anyconst of c_dst_val : signal is true;
+
+   signal f_addc_reg_reg : std_logic;
+   signal f_addc_in_write : std_logic;
+
+   f_addc_reg_reg <= '1' when fetch_data_i(15 downto 12) = work.cpu_constants.C_OPCODE_ADDC and
+                              fetch_data_i(11 downto 8) = c_src_reg and
+                              fetch_data_i(7 downto 6) = work.cpu_constants.C_MODE_REG and
+                              fetch_data_i(5 downto 2) = c_dst_reg and
+                              fetch_data_i(1 downto 0) = work.cpu_constants.C_MODE_REG else '0';
+
+   f_addc_in_write <= '1' when prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_ADDC and
+                               prep2wr_stage.inst(11 downto 8) = c_src_reg and
+                               prep2wr_stage.inst(7 downto 6) = work.cpu_constants.C_MODE_REG and
+                               prep2wr_stage.inst(5 downto 2) = c_dst_reg and
+                               prep2wr_stage.inst(1 downto 0) = work.cpu_constants.C_MODE_REG else '0';
+
+   -- Reference model, written independently of the ALU: dst + src + C on 17
+   -- bits, so bit 16 is the carry out. f_addc_sr_in is the Status Register this
+   -- particular instruction captured; f_prep2wr_sr_fresh below is what ties
+   -- that to the architectural SR.
+   signal f_addc_sr_in  : std_logic_vector(15 downto 0);
+   signal f_addc_sum    : std_logic_vector(16 downto 0);
+   signal f_addc_zero   : std_logic;
+   signal f_addc_ovf    : std_logic;
+   signal f_addc_sr_out : std_logic_vector(15 downto 0);
+
+   f_addc_sr_in <= prep2wr_stage.alu_flags;
+
+   f_addc_sum <= ("0" & c_dst_val) + ("0" & c_src_val) + 1
+                 when f_addc_sr_in(work.cpu_constants.C_SR_C) = '1' else
+                 ("0" & c_dst_val) + ("0" & c_src_val);
+
+   f_addc_zero <= '1' when f_addc_sum(15 downto 0) = X"0000" else '0';
+
+   -- Same definition as alu_flags.vhd, restated rather than referenced: adding
+   -- two operands of equal sign must not change the sign.
+   f_addc_ovf <= (not c_src_val(15) and not c_dst_val(15) and     f_addc_sum(15)) or
+                 (    c_src_val(15) and     c_dst_val(15) and not f_addc_sum(15));
+
+   p_addc_sr_out : process (all)
+   begin
+      f_addc_sr_out <= f_addc_sr_in or X"0001";
+      f_addc_sr_out(work.cpu_constants.C_SR_V) <= f_addc_ovf;
+      f_addc_sr_out(work.cpu_constants.C_SR_N) <= f_addc_sum(15);
+      f_addc_sr_out(work.cpu_constants.C_SR_Z) <= f_addc_zero;
+      f_addc_sr_out(work.cpu_constants.C_SR_C) <= f_addc_sum(16);
+   end process p_addc_sr_out;
+
+   -- (1) On accepting an ADDC <REG>,<REG>, both operand reads must be issued
+   -- in that same cycle -- same claim as f_mov_r_r_read.
+   f_addc_r_r_read : assert always {fetch_valid_i = '1' and fetch_ready_o = '1' and
+                                    f_addc_reg_reg = '1' and
+                                    c_src_reg /= 15 and c_dst_reg /= 15} |-> {f_reg_read = '1'};
+
+   -- (2) On completion in WRITE, the destination register gets dst + src + C
+   -- and the Status Register gets exactly the flags that result implies, with
+   -- every other SR bit carried over untouched.
+   --
+   -- c_dst_reg /= 14 because an instruction targeting R14 writes the Status
+   -- Register through the ordinary register port as well, which is a different
+   -- path and deserves its own property.
+   f_addc_r_r_write : assert always {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and
+                                     f_addc_in_write = '1' and
+                                     c_src_reg /= 15 and c_dst_reg /= 15 and c_dst_reg /= 14} |->
+                                    {mem_req_valid_o = '0' and
+                                     reg_we_o = '1' and
+                                     reg_addr_o = c_dst_reg and
+                                     reg_val_o = f_addc_sum(15 downto 0) and
+                                     reg_r14_we_o = '1' and
+                                     reg_r14_o = f_addc_sr_out};
+
+   -- (3) The Status Register an instruction carries into WRITE must be the one
+   -- that was live at the register-file interface in the cycle PREPARE latched
+   -- it -- this is the R14 -> ALU half of the pipelining claim, and it is what
+   -- stops (2) from being a restatement of the implementation.
+   --
+   -- The antecedent is "PREPARE's output register was free to be updated",
+   -- i.e. empty or being consumed; only then does a new beat appear. When it
+   -- was stalled it keeps an older beat, and no claim is made.
+   signal f_r14_prev : std_logic_vector(15 downto 0);
+
+   p_r14_prev : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         f_r14_prev <= reg_r14_i;
+      end if;
+   end process p_r14_prev;
+
+   f_prep2wr_sr_fresh : assert always {rst_i = '0' and
+                                       (prep2wr_valid = '0' or prep2wr_ready = '1')} |=>
+                                      {rst_i = '1' or prep2wr_valid = '0' or
+                                       prep2wr_stage.alu_flags = f_r14_prev};
+
+
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
@@ -170,7 +282,21 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- over-constraint: traces in which a write changes c_src_reg are excluded
    -- from EVERY property in this file, not just those two.
 
+   assume always {reg_rd_en_o = '1' and reg_dst_reg_o=c_dst_reg} |=> {reg_dst_val_i = c_dst_val};
+
    assume always {reg_r14_we_o = '0'} |=> {stable(reg_r14_i)};
+
+   -- Model the register file's Status Register forwarding. registers.vhd drives
+   -- sr_val_o combinationally from the SR write port (see the mux at the end of
+   -- that file), so a write is visible on reg_r14_i in the SAME cycle -- which
+   -- is exactly the forwarding that lets one instruction consume the flags the
+   -- instruction ahead of it produced. Without this the SR input is left free
+   -- after every write, and f_prep2wr_sr_fresh could not hold.
+   --
+   -- The guard mirrors that mux's priority: a write through the ORDINARY
+   -- register port to R14 overrides the dedicated SR port.
+   assume always {reg_r14_we_o = '1' and not (reg_we_o = '1' and reg_addr_o = 14)} |->
+                 {reg_r14_i = (reg_r14_o or X"0001")};
 
    signal f_mem_src_request    : std_logic;
    signal f_mem_src_response   : std_logic;
@@ -226,6 +352,19 @@ vunit i_cpu_main(cpu_main(synthesis))
    c_mov_write    : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_mov_in_write = '1' and c_src_reg /= 15};
    c_mov_write_pc : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_mov_in_write = '1' and c_src_reg /= 15 and c_dst_reg = 15};
    c_mov_write_gp : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_mov_in_write = '1' and c_src_reg /= 15 and c_dst_reg /= 15};
+
+   -- Non-vacuity of the ADDC properties, and specifically of the two carry-in
+   -- polarities: an ADDC completing with C=0 and with C=1 must both be
+   -- reachable, or property (2) only ever checks one of the two sums.
+   c_addc_read    : cover {fetch_valid_i = '1' and fetch_ready_o = '1' and f_addc_reg_reg = '1' and c_src_reg /= 15 and c_dst_reg /= 15};
+   c_addc_write   : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_addc_in_write = '1' and c_src_reg /= 15 and c_dst_reg /= 15 and c_dst_reg /= 14};
+   c_addc_carry_0 : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_addc_in_write = '1' and c_src_reg /= 15 and c_dst_reg /= 15 and c_dst_reg /= 14 and f_addc_sr_in(work.cpu_constants.C_SR_C) = '0'};
+   c_addc_carry_1 : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_addc_in_write = '1' and c_src_reg /= 15 and c_dst_reg /= 15 and c_dst_reg /= 14 and f_addc_sr_in(work.cpu_constants.C_SR_C) = '1'};
+
+   -- The scenario this whole section exists for: an ADDC completing in the very
+   -- cycle after another instruction wrote the Status Register, i.e. the
+   -- forwarded-flags case that test/prog_flags.asm exercises in simulation.
+   c_addc_sr_forwarded : cover {reg_r14_we_o = '1'; prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_addc_in_write = '1' and c_src_reg /= 15 and c_dst_reg /= 15 and c_dst_reg /= 14};
 
    -- Non-vacuity: the stall condition that f_dec2prep_valid_stable predicates
    -- on must actually be reachable, otherwise that assertion proves nothing.
