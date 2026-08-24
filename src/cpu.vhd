@@ -165,10 +165,17 @@ begin
    icache2decode_ready_gated          <= icache2decode_ready          and not halt_fetched;
    icache2decode_double_consume_gated <= icache2decode_double_consume and not halt_fetched;
 
+   -- NOTE: the set condition deliberately uses the UNGATED valid and ready,
+   -- even though the handshake it is detecting is the gated one. The two agree
+   -- whenever halt_fetched is still '0', which is the only case that matters,
+   -- and once it is '1' the ungated condition can do no more than set an
+   -- already-set flag. Using the gated signals instead would put halt_fetched
+   -- in its own D-input cone (halt_fetched -> gate -> set condition), costing a
+   -- level of logic and tying this register's placement to the gating LUTs.
    p_halt_fetched : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if icache2decode_valid_gated = '1' and icache2decode_ready_gated = '1' and
+         if icache2decode_valid = '1' and icache2decode_ready = '1' and
             icache2decode_data(R_OPCODE) = C_OPCODE_CTRL and
             icache2decode_data(R_CTRL_CMD) = C_CTRL_HALT then
             halt_fetched <= '1';

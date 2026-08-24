@@ -29,6 +29,7 @@ make sim                              # assemble test/prog.asm, run GHDL simulat
 make sim TEST=prog_interleave         # run a different test program (test/<name>.asm)
 make sim REGISTER_BANK_WIDTH=8        # override register bank address width (default 8)
 make system.bit                       # Vivado synthesis + bitstream (needs Vivado at $XILINX_DIR)
+make utilization                      # refresh the measured numbers in doc/README.md (needs Vivado)
 make synth                            # Yosys synthesis (ghdl -a, then yosys -m ghdl synth_xilinx)
 make formal                           # run all formal verification (delegates to formal/Makefile)
 make clean                            # remove all generated files, including formal/ outputs
@@ -223,6 +224,23 @@ self-correcting shadow register that mirrors the type-tracking FIFO's internal t
 directly — confirmed by testing external names). One property, `f_wb_master_request` (≤2
 outstanding Wishbone requests), remains open under induction — true up to the checked BMC depth,
 with the specific remaining obstacle documented in a comment right above it in `memory.psl`.
+
+### Utilization numbers
+
+The "Utilization" section of [doc/README.md](doc/README.md) is generated, not hand-maintained:
+`make utilization` runs two Vivado passes and `hw/update_utilization.py` rewrites the numbers.
+Two passes are needed because the two tables measure different things on purpose — device totals
+come from the shipping `-flatten_hierarchy rebuilt` build after place-and-route (reused from
+`make system.bit`, since place-and-route is the expensive part), while the per-module table needs a
+synthesis-only `-flatten_hierarchy none` pass, because "rebuilt" lets synthesis move logic across
+module boundaries and reports the ALU inside PREPARE.
+
+The script rewrites **numbers only** — the surrounding analysis is a hand-written design argument.
+Every substitution is anchored on an exact pattern and a missing anchor is a hard error, so
+rewording one of those sentences breaks `make utilization` loudly rather than silently leaving a
+stale figure behind. **This cannot run in CI**: Vivado is a 38 GB licensed install and
+GitHub-hosted runners cannot host it, so the numbers are refreshed deliberately, on a machine that
+has Vivado.
 
 ### Directory layout
 

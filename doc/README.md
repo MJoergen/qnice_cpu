@@ -171,7 +171,14 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `58b57db`.
+Measured with Vivado 2022.2 on commit `18cb998-dirty`.
+
+Refresh with `make utilization` (needs Vivado). That re-runs both passes below
+and rewrites every number on this page — the provenance line above, both tables,
+the timing figure, and the figures quoted in the prose. The prose itself is
+hand-written and is left alone; the script fails rather than continue if a
+sentence it fills in has been reworded, so a stale number cannot slip through
+unnoticed.
 
 ### Device totals
 
@@ -181,12 +188,12 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  899 |     63400 | 1.42 |
-| Slice Registers |  579 |    126800 | 0.46 |
-| Slices          |  297 |     15850 | 1.87 |
+| Slice LUTs      |  878 |     63400 | 1.38 |
+| Slice Registers |  580 |    126800 | 0.46 |
+| Slices          |  289 |     15850 | 1.82 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.228 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.272 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
@@ -211,10 +218,11 @@ written:
 | WRITE           |  395 |   0 |
 | Registers       |  166 | 142 |
 | Memory          |   54 |  74 |
-| **CPU total**   |  824 | 577 |
+| Glue            |    7 |   1 |
+| **CPU total**   |  829 | 578 |
 
-The module rows sum to 822 LUTs; the remaining 2 are glue at the `cpu_main` level,
-which belong to no sub-module.
+The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
+belonging to no sub-module.
 
 Two things stand out:
 
@@ -230,7 +238,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (824 vs 899 LUTs). That is expected:
+The two tables do not add up to each other (829 vs 878 LUTs). That is expected:
 the first is measured after place-and-route, where physical optimisation
 replicates logic to meet timing, while the second stops after synthesis. Slices
 are not listed per module because slices are shared between modules and are not

@@ -17,6 +17,9 @@ hw/system.tcl
 post_synth.dcp
 post_route.dcp
 timing_summary.rpt
+utilization_placed.rpt
+utilization_hier.rpt
+hw/system_hier.tcl
 system.bit
 vivado*
 usage_statistics_webtalk*

@@ -79,6 +79,7 @@ help:
 	@echo "  make check      : Run one test program headless"
 	@echo "  make golden     : Regenerate the test/*.writes.golden reference files"
 	@echo "  make system.bit : Run synthesis using Vivado"
+	@echo "  make utilization: Refresh the utilization numbers in doc/README.md (needs Vivado)"
 	@echo "  make synth      : Run synthesis using yosys"
 	@echo "  make formal     : Run formal verification"
 	@echo "  make clean      : Remove all generated files"
@@ -189,8 +190,51 @@ hw/$(TOP).tcl: Makefile
 	echo "phys_opt_design -directive AggressiveExplore" >> $@
 	echo "write_checkpoint -force post_route.dcp" >> $@
 	echo "report_timing_summary -file timing_summary.rpt" >> $@
+	echo "report_utilization -file utilization_placed.rpt" >> $@
 	echo "if {[get_property SLACK [get_timing_paths]] < 0} { error {TIMING VIOLATED -- see timing_summary.rpt} }" >> $@
 	echo "write_bitstream -force $(TOP).bit" >> $@
+	echo "exit" >> $@
+
+
+################################################
+## Utilization report
+################################################
+
+# "make utilization" refreshes the numbers in doc/README.md. It does NOT touch
+# the prose around them -- the analysis of where the logic sits is hand-written.
+#
+# Two Vivado passes are needed, because the two tables in that document measure
+# different things on purpose:
+#
+#  * Device totals come from the shipping build, after place-and-route, which
+#    uses -flatten_hierarchy rebuilt. That is reused from $(TOP).bit rather than
+#    re-run, since place-and-route is the expensive part.
+#  * The per-module table comes from a synthesis-only pass with
+#    -flatten_hierarchy none, because "rebuilt" lets synthesis move logic across
+#    module boundaries -- which is worth real slack, but makes a per-module
+#    breakdown meaningless (the ALU gets reported inside PREPARE, and i_write
+#    shows 16 LUTs).
+.PHONY: utilization
+utilization: utilization_placed.rpt utilization_hier.rpt
+	python3 hw/update_utilization.py \
+	   --placed utilization_placed.rpt \
+	   --hier utilization_hier.rpt \
+	   --timing timing_summary.rpt \
+	   --doc doc/README.md
+
+# Written by the same Vivado run that produces the bitstream.
+utilization_placed.rpt timing_summary.rpt: $(TOP).bit
+
+utilization_hier.rpt: hw/$(TOP)_hier.tcl $(SOURCES) $(TEST_SOURCES) hw/$(TOP).xdc $(ROM)
+	bash -c "source $(XILINX_DIR)/settings64.sh ; vivado -mode tcl -source $<"
+
+hw/$(TOP)_hier.tcl: Makefile
+	echo "# This is a tcl command script for the Vivado tool chain" > $@
+	echo "# Synthesis only, with the hierarchy preserved -- see 'make utilization'." >> $@
+	echo "read_vhdl -vhdl2008 { $(SOURCES) $(TEST_SOURCES) }" >> $@
+	echo "read_xdc hw/$(TOP).xdc" >> $@
+	echo "synth_design -top $(TOP) -part xc7a100tcsg324-1 -flatten_hierarchy none -generic G_ROM=$(ROM) -generic G_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH)" >> $@
+	echo "report_utilization -hierarchical -hierarchical_depth 6 -file utilization_hier.rpt" >> $@
 	echo "exit" >> $@
 
 
@@ -230,6 +274,9 @@ clean:
 	rm -rf post_synth.dcp
 	rm -rf post_route.dcp
 	rm -rf timing_summary.rpt
+	rm -rf utilization_placed.rpt
+	rm -rf utilization_hier.rpt
+	rm -rf hw/$(TOP)_hier.tcl
 	rm -rf $(TOP).bit
 	rm -rf vivado*
 	rm -rf usage_statistics_webtalk*
