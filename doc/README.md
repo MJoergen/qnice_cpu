@@ -171,7 +171,7 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `18cb998-dirty`.
+Measured with Vivado 2022.2 on commit `80bd23a`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
