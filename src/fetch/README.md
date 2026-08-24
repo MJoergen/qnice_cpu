@@ -1,60 +1,186 @@
-# FETCH module
+# FETCH stage
 
-## Interfaces
-The top-level interface of the FETCH module is as follows:
+The FETCH stage is built from two entities, both instantiated directly in
+[src/cpu.vhd](../cpu.vhd):
+
+* `fetch.vhd` — a one-word-at-a-time WISHBONE instruction fetcher.
+* `icache.vhd` — a two-word instruction buffer that presents DECODE with an
+  instruction and its possible immediate operand in the same cycle.
+
+They used to be wrapped in a `fetch_cache.vhd`. That wrapper is gone; `cpu.vhd`
+now wires the two together itself, which is why the redirect/flush signal is
+visible at the top level (see [Flush](#flush) below).
+
 ```
--- From EXECUTE stage
-s_valid_i   : in  std_logic;
-s_addr_i    : in  std_logic_vector(15 downto 0);
-
--- Instruction Memory
-wbi_cyc_o   : out std_logic;
-wbi_stb_o   : out std_logic;
-wbi_stall_i : in  std_logic;
-wbi_addr_o  : out std_logic_vector(15 downto 0);
-wbi_ack_i   : in  std_logic;
-wbi_data_i  : in  std_logic_vector(15 downto 0);
-
--- To DECODE stage
-m_valid_o   : out std_logic;
-m_ready_i   : in  std_logic;
-m_double_o  : out std_logic;
-m_addr_o    : out std_logic_vector(15 downto 0);
-m_data_o    : out std_logic_vector(31 downto 0);
-m_double_i  : in  std_logic
+              wbi_*            fetch2icache_*         icache2decode_*
+   WISHBONE <------->  fetch  ---------------->  icache  ------------> DECODE
+   (instr)                ^   valid/ready/       ^   valid/ready/
+                          |   addr/data          |   addr/data(32)/
+                          |                      |   double_o/double_i
+                          |                      |
+                          +--- exe2fetch_valid --+   (new PC / flush)
+                               exe2fetch_addr
 ```
 
-Here `m_valid_o` and `m_ready_i` are the usual handshaking signals, `m_addr_o`
-is the address of the current instruction, and `m_data_o` contains one or two
-words of data, as indicated by the signal `m_double_o`. In either case `data(15
-downto 0)` is the instruction, and `data(31 downto 16)` is the immediate
-operand if present.
+## fetch.vhd
 
-In conjunction with the `m_ready_i` signal, the signal `m_double_i` indicates
-whether one or two words are consumed in this clock cycle. Therefore, this
-signal must depend combinatorially on the input signals.
+```
+clk_i      : in  std_logic;
+rst_i      : in  std_logic;
 
-## Implementation
-The FETCH module consists of a simpler one-word-at-a-time file fetch.vhd and a
-simple instruction cache icache.vhd.
+-- Send read request to WISHBONE
+wb_cyc_o   : out std_logic;
+wb_stb_o   : out std_logic;
+wb_stall_i : in  std_logic;
+wb_addr_o  : out std_logic_vector(15 downto 0);
+
+-- Receive read response from WISHBONE
+wb_ack_i   : in  std_logic;
+wb_data_i  : in  std_logic_vector(15 downto 0);
+
+-- Send instruction to DECODE (i.e. to icache)
+dc_valid_o : out std_logic;
+dc_ready_i : in  std_logic;
+dc_addr_o  : out std_logic_vector(15 downto 0);
+dc_data_o  : out std_logic_vector(15 downto 0);
+
+-- Receive a new PC from DECODE
+dc_valid_i : in  std_logic;
+dc_addr_i  : in  std_logic_vector(15 downto 0)
+```
+
+It speculatively fetches a linear sequence of instruction words starting at the
+address most recently supplied on `dc_valid_i`/`dc_addr_i`. Each WISHBONE read
+request reserves one *slot*: allocated when the request is issued (`STB`
+asserted), released when the corresponding word is handed to `icache`. At most
+`C_MAX_PENDING = 2` slots may be in use, which bounds the occupancy of both
+internal FIFOs and is what guarantees neither can overflow. The bus runs in
+pipelined mode — `STB` is one cycle per request (held while `STALL`), `CYC` is
+held until every accepted request is acknowledged.
+
+Internally it is three of the [elastic-pipeline primitives](../sub):
+`two_stage_fifo` holds the issued addresses, `two_stage_buffer` catches the
+returning data, and `pipe_concat` joins the two streams into
+`dc_addr_o`/`dc_data_o`. All three are reset with `rst_i or dc_valid_i`.
+
+The interface contracts (also stated in the file header) are:
+
+* `dc_valid_i` is an unconditional, single-cycle flush with no back-pressure:
+  the current WISHBONE transaction is aborted, both internal FIFOs are cleared,
+  and fetching restarts at `dc_addr_i`.
+* DECODE **must** supply a PC before any fetched instruction is meaningful —
+  `wb_addr_o` resets to zero, so without one the unit fetches from address 0.
+* The WISHBONE slave **must not** assert `ACK` after `CYC` has been deasserted.
+  Deasserting `CYC` cancels all outstanding requests; a slave that acked a
+  cancelled request would pair stale data with the address of a new request,
+  i.e. silent instruction corruption.
+
+## icache.vhd
+
+```
+generic (G_ADDR_SIZE, G_DATA_SIZE : integer);   -- both 16 in cpu.vhd
+
+clk_i      : in  std_logic;
+rst_i      : in  std_logic;   -- reset AND pipeline flush
+
+-- From fetch
+s_valid_i  : in  std_logic;
+s_ready_o  : out std_logic;
+s_addr_i   : in  std_logic_vector(G_ADDR_SIZE - 1 downto 0);
+s_data_i   : in  std_logic_vector(G_DATA_SIZE - 1 downto 0);
+
+-- To DECODE
+m_valid_o  : out std_logic;
+m_ready_i  : in  std_logic;
+m_double_o : out std_logic;
+m_addr_o   : out std_logic_vector(G_ADDR_SIZE - 1 downto 0);
+m_data_o   : out std_logic_vector(2 * G_DATA_SIZE - 1 downto 0);
+m_double_i : in  std_logic
+```
+
+`m_valid_o`/`m_ready_i` are the usual handshaking signals, `m_addr_o` is the
+address of the current instruction, and `m_data_o` contains one or two words, as
+indicated by `m_double_o`. In either case `data(15 downto 0)` is the
+instruction and `data(31 downto 16)` is the immediate operand if present.
+
+DECODE cannot know whether the second word is an operand until it has decoded
+the first, so it reports back — combinatorially, in the same cycle as the
+handshake — how many words it consumed: `m_double_i = '0'` for one word,
+`'1'` for two. Therefore `m_double_i` must depend combinatorially on the output
+signals. `m_double_i = '1'` is only legal when `m_valid_o = '1'` and
+`m_double_o = '1'`; consuming two words when only one is offered is a protocol
+violation.
+
+Buffer occupancy (`count`) is derived combinatorially from `m_valid_o`/
+`m_double_o` rather than kept in a separate register, so it cannot disagree with
+what is being offered. Internally, slot 0 is the low half of each vector (older
+word) and slot 1 the high half (newer word); the upper half of `m_addr` is never
+driven off-chip, but is retained so the slot-1-to-slot-0 shift is a uniform
+vector operation and so the formal properties can check the two buffered
+addresses really are consecutive.
+
+The words arriving on the input port must be **consecutive in address** — the
+"second word is the immediate operand" reading is only meaningful for a gapless,
+increasing stream. `fetch` guarantees this between redirects.
+
+## Flush
+
+`icache`'s `rst_i` is not merely a startup reset; it is also the pipeline flush,
+and `cpu.vhd` drives it as
+
+```vhdl
+icache_rst <= rst_i or exe2fetch_valid;
+```
+
+with `exe2fetch_valid` being the same redirect that reaches `fetch.dc_valid_i`
+and that resets `fetch`'s own internal FIFOs. This is mandatory, not a
+convenience: when `fetch` is redirected it discards its buffers, so any words
+still held in `icache` belong to the abandoned instruction stream and must be
+discarded in the **same** clock cycle. Omitting it delivers one or two stale
+instructions to DECODE after every taken branch.
+
+Consequently `icache` is written for an `rst_i` that pulses during normal
+operation:
+
+* `m_valid_o` is gated combinatorially by `rst_i`, so the flush takes effect in
+  the same cycle and DECODE never observes a stale word.
+* `s_ready_o` is likewise gated, so no input handshake completes during a flush
+  cycle — otherwise the module would signal acceptance of a word it is about to
+  discard. That is safe with respect to `fetch`, which is discarding it too.
+* `m_double` is cleared alongside `m_valid`, so `m_double_o` can never be left
+  asserted while `m_valid_o` is low.
 
 ## Formal verification
 
-`formal/fetch.sby` verifies `fetch.vhd`, and all three tasks — `bmc`, `cover`
-and `prove` (k-induction) — pass. `icache.vhd` has its own job.
+Both entities have their own job, and both are in `DUTS` in
+[formal/Makefile](../../formal/Makefile).
 
-Unlike `memory.sby`, this job also loads the `.psl` of every sub-block it
-instantiates and then runs
+### icache.sby
+
+`bmc`, `cover` and `prove` (k-induction), depth 10, elaborated with the small
+generics `G_ADDR_SIZE=4`, `G_DATA_SIZE=8`. Self-contained — `icache.vhd` has no
+sub-instances. [formal/icache.psl](../../formal/icache.psl) pins down the
+combinational `count`, that buffered addresses are consecutive, output stability
+under back-pressure for both the single- and double-word cases, the
+same-cycle/next-cycle reset behaviour, and a full transition table of the
+occupancy for every (`s_valid_i`, `m_ready_i`, `m_double_i`) combination. The
+environment assumptions are the interface contracts above: input stability,
+consecutive input addresses, and `m_double_i` only when two words are offered.
+
+### fetch.sby
+
+`bmc`, `cover` and `prove` all pass. Unlike `memory.sby`, this job also loads
+the `.psl` of every sub-block it instantiates and then runs
 
 ```
 chformal -assume2assert fetch/* %M
 ```
 
-which converts each sub-block's *assumptions about its inputs* into
-*assertions on `fetch`*. So the job proves not only that `fetch` behaves, but
-that it drives `two_stage_fifo`, `two_stage_buffer` and `pipe_concat` legally.
-That is worth keeping in mind when editing the sub-block `.psl` files: an
-assumption written there becomes an obligation here.
+which converts each sub-block's *assumptions about its inputs* into *assertions
+on `fetch`*. So the job proves not only that `fetch` behaves, but that it drives
+`two_stage_fifo`, `two_stage_buffer` and `pipe_concat` legally. That is worth
+keeping in mind when editing the sub-block `.psl` files: an assumption written
+there becomes an obligation here.
 
 One cover statement is explicitly removed for this job:
 
@@ -67,6 +193,12 @@ is the address FIFO (filled when a request is *issued*) and `s0` is the data
 buffer (filled when the response *arrives*), so the address is always present
 first and that ordering is unreachable by construction. It stays covered by
 `pipe_concat.sby` standalone, where both orderings are reachable.
+
+Note that the two jobs verify the two entities separately; nothing currently
+proves the *composition* — in particular that `cpu.vhd` really does drive
+`icache_rst` with the same redirect `fetch` sees. That wiring is the one thing
+that used to be internal to `fetch_cache.vhd` and is now the top level's
+responsibility.
 
 ### Reset and flush escapes
 
@@ -88,6 +220,9 @@ or an explicit `dc_valid_i` term:
   design copes by guaranteeing the buffer is always ready (`f_data_ready`), so
   the trigger can only fire while reset or a flush holds `s_ready_o` low.
 
+The same reasoning is why `icache.psl`'s stability properties carry an
+`rst_i = '0'` term: its `rst_i` is the flush.
+
 Omitting one of these is the trap described in the top-level `CLAUDE.md`, and
 BMC finds it immediately.
 
@@ -100,4 +235,3 @@ comparing it against `"10"`/`"00"`. Because a job that fails to elaborate looks
 much like any other red result, the four property bugs above sat behind it
 undetected. Worth re-running `make formal` after changing any port type shared
 across modules.
-
