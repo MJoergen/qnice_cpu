@@ -235,6 +235,13 @@ come from the shipping `-flatten_hierarchy rebuilt` build after place-and-route 
 synthesis-only `-flatten_hierarchy none` pass, because "rebuilt" lets synthesis move logic across
 module boundaries and reports the ALU inside PREPARE.
 
+It also fills in the "The critical path" note there. That path has been the same in every build
+measured: register-to-register inside PREPARE, between two fields of `wr_stage_o`, through the ALU
+operand muxing. It is **routing-dominated** (about two thirds interconnect), which has a practical
+consequence — logic nowhere near it can still move the slack by perturbing placement. A single
+flip-flop added next to the Icache for the HALT gate once cost 0.284 ns, the whole margin, without
+appearing on the path; re-measure after an unrelated edit rather than assuming it cannot matter.
+
 The script rewrites **numbers only** — the surrounding analysis is a hand-written design argument.
 Every substitution is anchored on an exact pattern and a missing anchor is a hard error, so
 rewording one of those sentences breaks `make utilization` loudly rather than silently leaving a

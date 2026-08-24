@@ -171,7 +171,7 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `80bd23a`.
+Measured with Vivado 2022.2 on commit `ea01a85`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -196,6 +196,36 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 Timing at the 8.50 ns constraint: **WNS +0.272 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
+
+### The critical path
+
+<!-- generated: critical path -->
+The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][0]` to
+`i_prepare/wr_stage_o_reg[r14][3]`: 11 logic levels, with 64% of the delay in
+routing rather than logic.
+<!-- end -->
+
+It has been in the same place in every build measured for this section: both
+endpoints are fields of PREPARE's `wr_stage_o` register, and the logic between
+them is the ALU operand muxing that feeds it. Only *which* field moves between
+builds — `alu_dst_val` to `alu_dst_val`, then `alu_dst_val` to `alu_src_val`,
+now `alu_src_val` to `r14`. Those are the same mux seen from different corners,
+not three different problems.
+
+Two consequences worth knowing before trying to optimise it:
+
+* **It is routing-dominated, not logic-depth-dominated.** Roughly two thirds of
+  the delay is interconnect. Removing a level of logic from the operand mux
+  would therefore buy less than the level count suggests; the lever is
+  placement and congestion. This is also why the `-directive` choices in the
+  `Makefile` are load-bearing rather than decoration.
+* **Unrelated logic elsewhere can move this number.** Because the path is
+  placement-sensitive, logic that is nowhere near it can still perturb it. A
+  single flip-flop added next to the Icache, for the HALT gate, once cost
+  0.284 ns here — the entire margin — without appearing on the path at all;
+  see the commit that introduced `make utilization`. Treat a slack change after
+  an unrelated edit as plausible rather than surprising, and re-measure rather
+  than reasoning about it.
 
 ### Where the logic is
 

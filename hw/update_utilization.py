@@ -120,6 +120,40 @@ def parse_timing(path):
     return float(m.group(1)), int(m.group(3))
 
 
+def parse_critical_path(path):
+    """Return (source, destination, logic levels, % of delay spent routing).
+
+    Taken from the first "Slack (...)" block of the timing summary, which is the
+    worst setup path. Endpoint names have their pin suffix and the i_cpu/
+    i_cpu_main/ prefix trimmed, since the surrounding prose already says which
+    stage they are in.
+    """
+    text = open(path).read()
+    start = text.find("Slack (")
+    if start < 0:
+        raise AnchorError("no timing path detail in %s" % path)
+    block = text[start:start + 4000]
+
+    def grab(pattern, what):
+        m = re.search(pattern, block, re.M)
+        if not m:
+            raise AnchorError("no %s in the worst path of %s" % (what, path))
+        return m.group(1)
+
+    def trim(name):
+        name = re.sub(r"/[A-Z]+$", "", name)
+        for prefix in ("i_cpu/i_cpu_main/", "i_cpu/"):
+            if name.startswith(prefix):
+                return name[len(prefix):]
+        return name
+
+    src = trim(grab(r"^\s*Source:\s+(\S+)\s*$", "source"))
+    dst = trim(grab(r"^\s*Destination:\s+(\S+)\s*$", "destination"))
+    levels = int(grab(r"^\s*Logic Levels:\s+(\d+)", "logic level count"))
+    route = float(grab(r"route \S+ \(([\d.]+)%\)", "routing percentage"))
+    return src, dst, levels, route
+
+
 def parse_tool_version(path):
     m = re.search(r"Tool Version : Vivado v\.(\S+)", open(path).read())
     if not m:
@@ -142,6 +176,20 @@ def replace_once(text, pattern, repl, what):
     return new
 
 
+def wrap_sentence(text, width=79):
+    """Wrap to the line length the rest of doc/README.md uses."""
+    lines, cur = [], ""
+    for word in text.split(" "):
+        if cur and len(cur) + 1 + len(word) > width:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = word if not cur else cur + " " + word
+    if cur:
+        lines.append(cur)
+    return lines
+
+
 def render_row(cells, widths, aligns):
     out = []
     for cell, width, align in zip(cells, widths, aligns):
@@ -160,13 +208,19 @@ def main():
     hier = parse_hierarchy(args.hier)
     totals = parse_device_totals(args.placed)
     wns, failing = parse_timing(args.timing)
+    crit = parse_critical_path(args.timing)
     version = parse_tool_version(args.placed)
     commit = subprocess.check_output(
         ["git", "rev-parse", "--short", "HEAD"]).decode().strip()
-    # A measurement taken from a modified tree does not describe HEAD, and
+    # A measurement taken from modified sources does not describe HEAD, and
     # recording a bare hash for it would be a lie -- exactly the kind of quietly
     # wrong provenance this script exists to avoid. Mark it instead.
-    if subprocess.call(["git", "diff", "--quiet", "HEAD"]) != 0:
+    #
+    # Only what actually feeds the build counts: the VHDL, the constraints, and
+    # the Makefile that generates the tcl. Editing this script or the prose in
+    # doc/README.md cannot change a number, so it must not flag the result.
+    build_inputs = ["src", "test", "hw/system.xdc", "Makefile"]
+    if subprocess.call(["git", "diff", "--quiet", "HEAD", "--"] + build_inputs) != 0:
         commit += "-dirty"
 
     def h(path):
@@ -269,6 +323,21 @@ def main():
             % (pct, alu["luts"], write["luts"], m.group(1),
                alu_data["luts"], alu_flags["luts"])),
         "WRITE-dominates sentence")
+
+    # This block is delimited by markers rather than anchored on its own
+    # wording, because its length varies with the instance names and so the line
+    # wrapping cannot be predicted the way the fixed sentences above can.
+    src, dst, levels, route = crit
+    doc = replace_once(
+        doc,
+        r"<!-- generated: critical path -->\n.*?\n<!-- end -->",
+        "<!-- generated: critical path -->\n"
+        + "\n".join(wrap_sentence(
+            "The worst setup path runs from `%s` to `%s`: %d logic levels, "
+            "with %d%% of the delay in routing rather than logic."
+            % (src, dst, levels, round(route))))
+        + "\n<!-- end -->",
+        "critical path block")
 
     doc = replace_once(
         doc,
