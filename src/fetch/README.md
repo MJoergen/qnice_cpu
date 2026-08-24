@@ -18,8 +18,8 @@ visible at the top level (see [Flush](#flush) below).
                           |   addr/data          |   addr/data(32)/
                           |                      |   double_o/double_i
                           |                      |
-                          +--- exe2fetch_valid --+   (new PC / flush)
-                               exe2fetch_addr
+                          +---- wr2fetch_valid --+   (new PC / flush)
+                                wr2fetch_addr
 ```
 
 ## fetch.vhd
@@ -129,10 +129,10 @@ increasing stream. `fetch` guarantees this between redirects.
 and `cpu.vhd` drives it as
 
 ```vhdl
-icache_rst <= rst_i or exe2fetch_valid;
+icache_rst <= rst_i or wr2fetch_valid;
 ```
 
-with `exe2fetch_valid` being the same redirect that reaches `fetch.dc_valid_i`
+with `wr2fetch_valid` being the same redirect that reaches `fetch.dc_valid_i`
 and that resets `fetch`'s own internal FIFOs. This is mandatory, not a
 convenience: when `fetch` is redirected it discards its buffers, so any words
 still held in `icache` belong to the abandoned instruction stream and must be

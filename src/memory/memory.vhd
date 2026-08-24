@@ -37,7 +37,7 @@ use work.cpu_constants.C_MEM_WRITE;
 -- At most two outstanding mreq's are allowed.
 -- Hence at most two outstanding Wishbone requests are required to be supported.
 --
--- EXECUTE (the requester) must follow the usual valid/ready producer contract:
+-- WRITE (the requester) must follow the usual valid/ready producer contract:
 -- once mreq_valid_i='1' and mreq_ready_o='0', mreq_valid_i/mreq_op_i/
 -- mreq_addr_i/mreq_data_i must all remain stable until mreq_ready_o='1' is
 -- observed. This is assumed, not checked, by this module (see f_mreq_stable
@@ -49,14 +49,14 @@ entity memory is
       clk_i        : in  std_logic;
       rst_i        : in  std_logic;
 
-      -- From EXECUTE
+      -- From WRITE
       mreq_valid_i : in  std_logic;
       mreq_ready_o : out std_logic;
       mreq_op_i    : in  std_logic_vector(2 downto 0);
       mreq_addr_i  : in  std_logic_vector(15 downto 0);
       mreq_data_i  : in  std_logic_vector(15 downto 0);
 
-      -- To EXECUTE
+      -- To PREPARE
       msrc_valid_o : out std_logic;
       msrc_ready_i : in  std_logic;
       msrc_data_o  : out std_logic_vector(15 downto 0);
@@ -123,7 +123,7 @@ begin
    -- becomes ready. This looks like it violates that buffer's own "s_valid_i
    -- must stay stable until accepted" contract (formally confirmed reachable
    -- by BMC), but it is NOT a functional bug:
-   -- * mreq_ready_o = mreq_ready and mreq_accept, so EXECUTE is never told
+   -- * mreq_ready_o = mreq_ready and mreq_accept, so WRITE is never told
    --   "accepted" while mreq_accept='0' -- it keeps holding mreq_valid_i and
    --   the payload stable per its own contract (see header), so no data is
    --   ever lost, just possibly delayed by one extra cycle.

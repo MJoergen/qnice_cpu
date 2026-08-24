@@ -192,8 +192,8 @@ Subtleties worth knowing before reusing or modifying any of these:
 
 ### Memory module (`src/memory/memory.vhd`)
 
-Multiplexes one request channel (from EXECUTE) and two read-response channels (SRC/DST, back to
-EXECUTE) onto a single Wishbone Master interface. Full design writeup, including the back-pressure
+Multiplexes one request channel (from WRITE) and two read-response channels (SRC/DST, back to
+PREPARE) onto a single Wishbone Master interface. Full design writeup, including the back-pressure
 argument and the formal property list, is in [src/memory/README.md](src/memory/README.md); the
 key thing worth knowing up front:
 

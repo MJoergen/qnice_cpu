@@ -1,7 +1,7 @@
 # REGISTERS module
 
 This module contains all the registers in the CPU. It has two read ports
-connected to the DECODE stage, and a single write port connected to the EXECUTE
+connected to the DECODE stage, and a single write port connected to the WRITE
 stage.
 
 The only register that is treated in a special way is the processor Status
@@ -31,7 +31,7 @@ dst_reg_i   : in  std_logic_vector(3 downto 0);
 dst_val_o   : out std_logic_vector(15 downto 0);
 sr_val_o    : out std_logic_vector(15 downto 0);
 
--- Write interface, connected to EXECUTE stage
+-- Write interface, connected to WRITE stage
 wr_sr_en_i  : in  std_logic;
 wr_sr_val_i : in  std_logic_vector(15 downto 0);
 wr_en_i     : in  std_logic;

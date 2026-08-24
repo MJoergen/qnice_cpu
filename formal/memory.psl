@@ -121,12 +121,12 @@ vunit i_memory(memory(synthesis))
    -- WISHBONE SLAVE: Respond within at most 3 clock cycles. This is an artifical constraint.
    f_wb_slave_ack_delay_max : assume always {f_wb_ack_delay <= 3};
 
-   -- EXECUTE: Restrict valid inputs to one-hot encoding
-   f_exe_op : assume always {mreq_valid_i} |-> {mreq_op_i = "001" or mreq_op_i = "010" or mreq_op_i = "100"};
+   -- WRITE: Restrict valid inputs to one-hot encoding
+   f_mreq_op : assume always {mreq_valid_i} |-> {mreq_op_i = "001" or mreq_op_i = "010" or mreq_op_i = "100"};
 
-   -- EXECUTE producer contract: while a request is offered but not yet
+   -- WRITE producer contract: while a request is offered but not yet
    -- accepted (mreq_ready_o low), valid must stay asserted and the payload
-   -- must remain stable. This mirrors how the real EXECUTE stage behaves and
+   -- must remain stable. This mirrors how the real WRITE stage behaves and
    -- is what the combinational Wishbone request path relies on.
    f_mreq_stable : assume always {mreq_valid_i and not mreq_ready_o and not rst_i} |=>
          {rst_i = '1' or (stable(mreq_valid_i) and stable(mreq_op_i) and stable(mreq_addr_i) and stable(mreq_data_i))};
@@ -252,7 +252,7 @@ vunit i_memory(memory(synthesis))
 
    -- The goal: total outstanding SRC (resp. DST) work -- entries still unacked
    -- in the FIFO, plus responses already delivered but not yet consumed by
-   -- EXECUTE -- never exceeds 2. This is what f_tsb_src_in_overflow /
+   -- WRITE -- never exceeds 2. This is what f_tsb_src_in_overflow /
    -- f_tsb_dst_in_overflow actually rely on.
    f_dst_total_max : assert always {rst_i = '1' or f_dst_fifo_count + tsb_dst_fill <= 2};
    f_src_total_max : assert always {rst_i = '1' or f_src_fifo_count + tsb_src_fill <= 2};

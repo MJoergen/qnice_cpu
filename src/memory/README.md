@@ -3,14 +3,14 @@
 ## Interfaces
 The top-level interface of the MEMORY module is as follows:
 ```
--- From execute
+-- From WRITE
 mreq_valid_i : in  std_logic;
 mreq_ready_o : out std_logic;
 mreq_op_i    : in  std_logic_vector(2 downto 0);
 mreq_addr_i  : in  std_logic_vector(15 downto 0);
 mreq_data_i  : in  std_logic_vector(15 downto 0);
 
--- To execute
+-- To PREPARE
 msrc_valid_o : out std_logic;
 msrc_ready_i : in  std_logic;
 msrc_data_o  : out std_logic_vector(15 downto 0);
@@ -33,8 +33,8 @@ wb_data_i    : in  std_logic_vector(15 downto 0)
 
 ## Implementation
 
-This module multiplexes one request channel (from EXECUTE/WRITE) and two readback channels
-(SRC/DST, back to EXECUTE/WRITE) onto a single Wishbone Master interface, using three
+This module multiplexes one request channel (from the WRITE stage) and two readback channels
+(SRC/DST, back to the PREPARE stage) onto a single Wishbone Master interface, using three
 [`src/sub/`](../sub) elastic-pipeline primitives:
 
 * **`i_two_stage_fifo_mem`** (depth 2) tracks the one-hot op-type (`mreq_op_i`: READ_SRC / READ_DST
@@ -44,7 +44,7 @@ This module multiplexes one request channel (from EXECUTE/WRITE) and two readbac
 * **`i_one_stage_buffer_wb`** stages the actual Wishbone request — `we`, `dat`, and `addr` packed
   into a single 33-bit word — until the slave accepts it (`wb_stall_i='0'`).
 * **`i_two_stage_buffer_src`** / **`i_two_stage_buffer_dst`** (depth 2 each) buffer SRC/DST read
-  responses back to EXECUTE, fed by `wb_data_i` whenever `wb_ack_i` arrives and the FIFO head
+  responses back to PREPARE, fed by `wb_data_i` whenever `wb_ack_i` arrives and the FIFO head
   identifies the completed request as a SRC/DST read respectively.
 
 Since the depth-2 FIFO is the only thing gating new request acceptance for outstanding-request
@@ -55,14 +55,14 @@ overflowing; see `f_tsb_src_in_overflow` / `f_tsb_dst_in_overflow` / `f_tsf_req_
 `formal/memory.psl`.
 
 **Back-pressure (`mreq_accept`)**: a new request is accepted except when a previously-completed
-SRC or DST response is presented but not yet consumed by EXECUTE (`m*_valid_o='1'` and
+SRC or DST response is presented but not yet consumed by PREPARE (`m*_valid_o='1'` and
 `m*_ready_i='0'`) — this is what bounds outstanding responses to what the depth-2 buffers can hold.
 `mreq_ready_o` is the AND of this accept condition and the WB-request buffer's own readiness
 (`mreq_ready`); `mreq_valid` (fed into `i_one_stage_buffer_wb`) is gated by the same accept
 condition. A consequence worth knowing before touching this logic: `mreq_valid` can legitimately
-drop for a cycle even while EXECUTE holds `mreq_valid_i` asserted throughout (see the long comment
+drop for a cycle even while WRITE holds `mreq_valid_i` asserted throughout (see the long comment
 at `mreq_valid <= mreq_valid_i and mreq_accept;` in `memory.vhd`) — formally confirmed reachable,
-but proven harmless, because `mreq_ready_o` never lies to EXECUTE and the buffer's `s_data_i` is
+but proven harmless, because `mreq_ready_o` never lies to WRITE and the buffer's `s_data_i` is
 wired directly to the (separately-guaranteed-stable) `mreq_op_i`/`mreq_addr_i`/`mreq_data_i`.
 
 **`wb_cyc_o`** stays asserted as long as either the request buffer holds an unconsumed request
@@ -84,8 +84,8 @@ components, not stubs):
 * **Assumptions about the environment** (the proof is only as strong as these): the Wishbone slave
   acks in issue order with at least one cycle of latency and never acks with nothing outstanding
   (`f_wb_slave_ack_idle`), and stalls/response delays are bounded to 3 cycles as an artificial but
-  reasonable modeling limit (`f_wb_slave_stall_delay_max`, `f_wb_slave_ack_delay_max`); EXECUTE only
-  ever presents a one-hot `mreq_op_i` (`f_exe_op`) and holds a pending request's valid/op/addr/data
+  reasonable modeling limit (`f_wb_slave_stall_delay_max`, `f_wb_slave_ack_delay_max`); WRITE only
+  ever presents a one-hot `mreq_op_i` (`f_mreq_op`) and holds a pending request's valid/op/addr/data
   stable until accepted (`f_mreq_stable`) — this last one is also documented directly in
   `memory.vhd`'s header, since it's a real contract the RTL leans on.
 * **Cover statements** demonstrate reachability of interleaved SRC/DST bursts
