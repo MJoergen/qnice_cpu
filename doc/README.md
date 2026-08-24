@@ -3,8 +3,8 @@
 ## Architecture
 This implementation is essentially a four-stage pipeline consisting of:
 
-* FETCH: Fetches from the instruction memory and presents up to two words at a
-  time to the DECODE stage.
+* FETCH: Fetches from the instruction memory and presents up to two words
+  (instruction plus immediate operadnd) at a time to the DECODE stage.
 * DECODE: Translates the instruction into a list of up to three
   micro-operations, and reads the operand registers.
 * PREPARE: Sequences that list into one micro-operation per clock cycle, and
@@ -40,7 +40,7 @@ stage is entirely combinatorial, the ALU included; the only registers it drives
 are the outputs of the other blocks.
 
 In the above we see a Harvard architecture, where we have a separate
-instruction and data interface. This main reason for this choice is to simplify
+instruction and data interface. The main reason for this choice is to simplify
 the implementation. It does also provide a nice side effect of increasing the
 available memory bandwidth, because we can read from instruction and data
 memory simultaneously, see below section on [Interleaving](#Interleaving).
@@ -65,7 +65,7 @@ There are two sources of back-pressure in the design:
   applies back-pressure to the FETCH stage.
 * The Memory module will generate back-pressure while waiting for the result
   read from the memory bus. This is part of the Wishbone protocol and allows
-  for an I/O device to take several clock cycles to respond.
+  for an I/O device to take more than one clock cycle to respond.
 
 
 ## Detailed design description

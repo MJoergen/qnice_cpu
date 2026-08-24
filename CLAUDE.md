@@ -210,7 +210,7 @@ with the specific remaining obstacle documented in a comment right above it in `
 - `src/cpu_main/` — DECODE, PREPARE, WRITE, and the `sub/` microcode ROM, sequencer, ALU.
 - `src/sub/` — reusable elastic-pipeline building blocks, see
   [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-src-sub) above.
-- `src/cpu.vhd` — top-level entity tying FETCH, Registers, Memory, and `cpu_main` together.
+- `src/cpu.vhd` — top-level entity tying FETCH, Icache, Registers, Memory, and `cpu_main` together.
 - `test/` — testbench (`tb_cpu.vhd`), memory models, and `.asm` test programs. See
   [test/README.md](test/README.md) for how to tell a passing run from a failing one.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).

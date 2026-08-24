@@ -50,9 +50,9 @@ entity dp_ram is
       clk_i     : in    std_logic;
       rst_i     : in    std_logic;                                   -- unused (see header)
       -- Write interface (synchronous, rising edge)
+      wr_en_i   : in    std_logic;
       wr_addr_i : in    std_logic_vector(G_ADDR_SIZE-1 downto 0);
       wr_data_i : in    std_logic_vector(G_DATA_SIZE-1 downto 0);
-      wr_en_i   : in    std_logic;
       -- Read interface (registered, 1-cycle latency, gated by rd_en_i)
       rd_en_i   : in    std_logic;
       rd_addr_i : in    std_logic_vector(G_ADDR_SIZE-1 downto 0);
@@ -100,6 +100,17 @@ begin
       -- cycle (a minor dynamic-power cost) so the output stage sees a settled
       -- value. Sees memory as of this cycle - i.e. excluding a write issued in
       -- the same cycle - which is what yields read-first ordering.
+      --
+      -- This trick of having a falling_edge register followed by a rising_edge
+      -- register is purely an internal optimization to improve timing. To the
+      -- user of this module, the timing semantics is just the ordinary
+      -- one-cycle delay at rising clock edge.  The falling_edge register is
+      -- absorbed into the Block RAM (as an address register). Without this
+      -- falling_edge register, i.e. with *only* the rising_edge register, there
+      -- would still be a approximately 2 ns Clock-to-Data delay, due to the
+      -- Block RAM. With the falling_edge register first followed by the
+      -- rising_edge register, the overall Clock-to-Data delay on the output is
+      -- close to 0 ns. This allows a longer data-path on the read data.
       p_read_falling : process (clk_i)
       begin
          if falling_edge(clk_i) then
