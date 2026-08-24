@@ -4,7 +4,7 @@
 This implementation is essentially a four-stage pipeline consisting of:
 
 * FETCH: Fetches from the instruction memory and presents up to two words
-  (instruction plus immediate operadnd) at a time to the DECODE stage.
+  (instruction plus immediate operand) at a time to the DECODE stage.
 * DECODE: Translates the instruction into a list of up to three
   micro-operations, and reads the operand registers.
 * PREPARE: Sequences that list into one micro-operation per clock cycle, and
@@ -164,8 +164,8 @@ I have a few ideas for cycle optimizations at the moment:
 ## TODO
 * Formal verification: the suite in `formal/` currently passes in full (twelve
   modules, thirty-five tasks). What is still missing is a `prove` (k-induction)
-  task for `cpu_main`; and closing the
-  last open property of `memory`'s inductive proof.
+  task for `cpu_main`, and closing the last open property of `memory`'s
+  inductive proof.
 * Add interrupts.
 
 
