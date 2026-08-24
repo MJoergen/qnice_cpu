@@ -57,12 +57,3 @@ Two things will mislead you on a first run:
 [`test/README.md`](test/README.md) lists the success address for each program,
 and describes the stronger golden-output check against `test/writes.txt`.
 
-### Instruction fetch throughput
-
-`G_PAUSE_SIZE` in [`src/fetch/fetch_cache.vhd`](src/fetch/fetch_cache.vhd) can
-throttle the instruction stream. It is set to `0` — no pauses. It was held at
-`-8` for a long time to work around pipeline bugs, which drained the pipeline
-between instructions so that no data hazard could arise; setting it negative
-again is a quick way to check whether a failure belongs to that class. See
-[Instruction stream throttle](src/fetch/README.md#Instruction-stream-throttle).
-

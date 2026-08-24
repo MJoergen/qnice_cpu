@@ -67,10 +67,6 @@ There are two sources of back-pressure in the design:
   read from the memory bus. This is part of the Wishbone protocol and allows
   for an I/O device to take several clock cycles to respond.
 
-Both are exercised at full instruction fetch throughput; the `axi_pause`
-throttle that used to suppress them is now set to zero, see
-[Instruction stream throttle](../src/fetch/README.md#Instruction-stream-throttle).
-
 
 ## Detailed design description
 For more detailed information about the design look here:
@@ -175,8 +171,7 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `58b57db`, after the switch to
-`G_PAUSE_SIZE => 0`.
+Measured with Vivado 2022.2 on commit `58b57db`.
 
 ### Device totals
 

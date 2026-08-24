@@ -3,7 +3,7 @@
 # 'make system.bit' runs Vivado synthesis and bitfile generation
 # 'make synth' runs Yosys synthesis
 
-XILINX_DIR = /opt/Xilinx/Vivado/2021.2
+XILINX_DIR = /opt/Xilinx/Vivado/2022.2
 
 SOURCES += src/sub/dp_ram.vhd
 SOURCES += src/sub/one_stage_buffer.vhd
@@ -13,10 +13,8 @@ SOURCES += src/sub/two_stage_buffer.vhd
 SOURCES += src/sub/two_stage_fifo.vhd
 
 SOURCES += src/cpu_constants.vhd
-SOURCES += src/fetch/axi_pause.vhd
 SOURCES += src/fetch/fetch.vhd
 SOURCES += src/fetch/icache.vhd
-SOURCES += src/fetch/fetch_cache.vhd
 SOURCES += src/registers/registers.vhd
 SOURCES += src/memory/memory.vhd
 SOURCES += src/debug.vhd

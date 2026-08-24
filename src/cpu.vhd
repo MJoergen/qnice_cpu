@@ -31,47 +31,54 @@ end entity cpu;
 
 architecture synthesis of cpu is
 
-   -- FETCH to DECODE/EXECUTE
-   signal fetch2decode_valid          : std_logic;
-   signal fetch2decode_ready          : std_logic;
-   signal fetch2decode_double_valid   : std_logic;
-   signal fetch2decode_addr           : std_logic_vector(15 downto 0);
-   signal fetch2decode_data           : std_logic_vector(31 downto 0);
-   signal fetch2decode_double_consume : std_logic;
+   -- FETCH to ICACHE
+   signal fetch2icache_valid           : std_logic;
+   signal fetch2icache_ready           : std_logic;
+   signal fetch2icache_addr            : std_logic_vector(15 downto 0);
+   signal fetch2icache_data            : std_logic_vector(15 downto 0);
+
+   -- ICACHE to DECODE
+   signal icache_rst                   : std_logic;
+   signal icache2decode_valid          : std_logic;
+   signal icache2decode_ready          : std_logic;
+   signal icache2decode_double_valid   : std_logic;
+   signal icache2decode_addr           : std_logic_vector(15 downto 0);
+   signal icache2decode_data           : std_logic_vector(31 downto 0);
+   signal icache2decode_double_consume : std_logic;
 
    -- EXECUTE to FETCH
-   signal exe2fetch_valid             : std_logic;
-   signal exe2fetch_addr              : std_logic_vector(15 downto 0);
+   signal exe2fetch_valid              : std_logic;
+   signal exe2fetch_addr               : std_logic_vector(15 downto 0);
 
-   -- DECODE/EXECUTE read from register file
-   signal decode2reg_rd_en            : std_logic;
-   signal decode2reg_src_reg          : std_logic_vector(3 downto 0);
-   signal decode2reg_src_val          : std_logic_vector(15 downto 0);
-   signal decode2reg_dst_reg          : std_logic_vector(3 downto 0);
-   signal decode2reg_dst_val          : std_logic_vector(15 downto 0);
-   signal reg2decode_r14              : std_logic_vector(15 downto 0);
+   -- DECODE read from register file
+   signal decode2reg_rd_en             : std_logic;
+   signal decode2reg_src_reg           : std_logic_vector(3 downto 0);
+   signal decode2reg_src_val           : std_logic_vector(15 downto 0);
+   signal decode2reg_dst_reg           : std_logic_vector(3 downto 0);
+   signal decode2reg_dst_val           : std_logic_vector(15 downto 0);
+   signal reg2decode_r14               : std_logic_vector(15 downto 0);
 
    -- DECODE/EXECUTE write to register file
-   signal exe2reg_r14_we              : std_logic;
-   signal exe2reg_r14                 : std_logic_vector(15 downto 0);
-   signal exe2reg_we                  : std_logic;
-   signal exe2reg_addr                : std_logic_vector(3 downto 0);
-   signal exe2reg_val                 : std_logic_vector(15 downto 0);
+   signal exe2reg_r14_we               : std_logic;
+   signal exe2reg_r14                  : std_logic_vector(15 downto 0);
+   signal exe2reg_we                   : std_logic;
+   signal exe2reg_addr                 : std_logic_vector(3 downto 0);
+   signal exe2reg_val                  : std_logic_vector(15 downto 0);
 
    -- DECODE/EXECUTE request to memory
-   signal exe2mem_req_valid           : std_logic;
-   signal exe2mem_req_ready           : std_logic;
-   signal exe2mem_req_op              : std_logic_vector(2 downto 0);
-   signal exe2mem_req_addr            : std_logic_vector(15 downto 0);
-   signal exe2mem_req_data            : std_logic_vector(15 downto 0);
+   signal exe2mem_req_valid            : std_logic;
+   signal exe2mem_req_ready            : std_logic;
+   signal exe2mem_req_op               : std_logic_vector(2 downto 0);
+   signal exe2mem_req_addr             : std_logic_vector(15 downto 0);
+   signal exe2mem_req_data             : std_logic_vector(15 downto 0);
 
    -- DECODE/EXECUTE response from memory
-   signal mem2exe_src_valid           : std_logic;
-   signal mem2exe_src_ready           : std_logic;
-   signal mem2exe_src_data            : std_logic_vector(15 downto 0);
-   signal mem2exe_dst_valid           : std_logic;
-   signal mem2exe_dst_ready           : std_logic;
-   signal mem2exe_dst_data            : std_logic_vector(15 downto 0);
+   signal mem2exe_src_valid            : std_logic;
+   signal mem2exe_src_ready            : std_logic;
+   signal mem2exe_src_data             : std_logic_vector(15 downto 0);
+   signal mem2exe_dst_valid            : std_logic;
+   signal mem2exe_dst_ready            : std_logic;
+   signal mem2exe_dst_data             : std_logic_vector(15 downto 0);
 
 begin
 
@@ -79,25 +86,50 @@ begin
    -- Instruction FETCH
    ------------------------------------------------------------
 
-   i_fetch_cache : entity work.fetch_cache
+   i_fetch : entity work.fetch
       port map (
-         clk_i       => clk_i,
-         rst_i       => rst_i,
-         s_valid_i   => exe2fetch_valid,
-         s_addr_i    => exe2fetch_addr,
-         wbi_cyc_o   => wbi_cyc_o,
-         wbi_stb_o   => wbi_stb_o,
-         wbi_stall_i => wbi_stall_i,
-         wbi_addr_o  => wbi_addr_o,
-         wbi_ack_i   => wbi_ack_i,
-         wbi_data_i  => wbi_data_i,
-         m_valid_o   => fetch2decode_valid,
-         m_ready_i   => fetch2decode_ready,
-         m_double_o  => fetch2decode_double_valid,
-         m_addr_o    => fetch2decode_addr,
-         m_data_o    => fetch2decode_data,
-         m_double_i  => fetch2decode_double_consume
-      ); -- i_fetch_cache
+         clk_i      => clk_i,
+         rst_i      => rst_i,
+         wb_cyc_o   => wbi_cyc_o,
+         wb_stb_o   => wbi_stb_o,
+         wb_stall_i => wbi_stall_i,
+         wb_addr_o  => wbi_addr_o,
+         wb_ack_i   => wbi_ack_i,
+         wb_data_i  => wbi_data_i,
+         dc_valid_o => fetch2icache_valid,
+         dc_ready_i => fetch2icache_ready,
+         dc_addr_o  => fetch2icache_addr,
+         dc_data_o  => fetch2icache_data,
+         dc_valid_i => exe2fetch_valid,
+         dc_addr_i  => exe2fetch_addr
+      ); -- i_fetch
+
+
+   ------------------------------------------------------------
+   -- Instruction ICACHE
+   ------------------------------------------------------------
+
+   icache_rst <= rst_i or exe2fetch_valid;
+
+   i_icache : entity work.icache
+      generic map (
+         G_ADDR_SIZE => 16,
+         G_DATA_SIZE => 16
+      )
+      port map (
+         clk_i      => clk_i,
+         rst_i      => icache_rst,
+         s_valid_i  => fetch2icache_valid,
+         s_ready_o  => fetch2icache_ready,
+         s_addr_i   => fetch2icache_addr,
+         s_data_i   => fetch2icache_data,
+         m_valid_o  => icache2decode_valid,
+         m_ready_i  => icache2decode_ready,
+         m_double_o => icache2decode_double_valid,
+         m_addr_o   => icache2decode_addr,
+         m_data_o   => icache2decode_data,
+         m_double_i => icache2decode_double_consume
+      ); -- i_icache
 
 
    ------------------------------------------------------------
@@ -108,12 +140,12 @@ begin
       port map (
          clk_i            => clk_i,
          rst_i            => rst_i,
-         fetch_valid_i    => fetch2decode_valid,
-         fetch_ready_o    => fetch2decode_ready,
-         fetch_double_i   => fetch2decode_double_valid,
-         fetch_addr_i     => fetch2decode_addr,
-         fetch_data_i     => fetch2decode_data,
-         fetch_double_o   => fetch2decode_double_consume,
+         fetch_valid_i    => icache2decode_valid,
+         fetch_ready_o    => icache2decode_ready,
+         fetch_double_i   => icache2decode_double_valid,
+         fetch_addr_i     => icache2decode_addr,
+         fetch_data_i     => icache2decode_data,
+         fetch_double_o   => icache2decode_double_consume,
          reg_rd_en_o      => decode2reg_rd_en,
          reg_src_reg_o    => decode2reg_src_reg,
          reg_src_val_i    => decode2reg_src_val,

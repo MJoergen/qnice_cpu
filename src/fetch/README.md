@@ -38,88 +38,10 @@ signal must depend combinatorially on the input signals.
 The FETCH module consists of a simpler one-word-at-a-time file fetch.vhd and a
 simple instruction cache icache.vhd.
 
-## Instruction stream throttle
-
-`fetch_cache.vhd` instantiates `axi_pause`, which can insert empty cycles into
-the instruction stream. **It is now set to `G_PAUSE_SIZE => 0`: no pauses, full
-fetch throughput**, and in that mode `axi_pause` reduces to a pure wire.
-
-It is not a performance knob — set it negative only to reproduce the old
-throttled behaviour while debugging. A negative value inserts an empty cycle
-*except* every Nth cycle, so the historical `-8` passed one word every eight
-clocks.
-
-### Why it was throttled, and what changed
-
-`-8` drained the pipeline between instructions, so two instructions were never
-in flight close enough together for a data hazard to arise and the bypass logic
-was never exercised. It made the design look hazard-free while masking real
-bugs.
-
-With the throttle at `0`, `test/prog.asm` used to fail at `0x04A8` — the
-fall-through `HALT` of the `ADDC` sub-test, reached when the *expected status*
-check fails while the expected result check one instruction earlier passes:
-
-```
-                MOVE    R2, R14                 ; Set carry input
-                ADDC    R0, R1
-                MOVE    R14, R9                 ; Copy status
-```
-
-`ADDC` writes the Status Register through the dedicated port of
-[registers.vhd](../registers/registers.vhd), and the following `MOVE R14, R9`
-reads `R14` as an *ordinary* register through `src_val_o`. The write-before-read
-forwarding on `src_val_o`/`dst_val_o` had terms for the ordinary write port but
-none for the dedicated SR port, so that read returned `reg_sr`, one clock cycle
-behind. Tellingly, `wr_sr_en_d`/`wr_sr_val_d` were already being registered in
-`p_wbr` and never read anywhere — the path had been intended and left unwired.
-
-That is fixed (see
-[registers/README.md](../registers/README.md#Write-Before-Read-on-the-dedicated-SR-port)),
-and pinned by `f_wbr_sr_src`/`f_wbr_sr_dst` in `formal/registers.psl`, which
-fail against the old register file. A second bug in the same area — `R15` read
-as an operand returning the stale register-file copy instead of the Program
-Counter — was found and fixed separately; see
-[cpu_main/README.md](../cpu_main/README.md#Reading-R15).
-
-### Evidence for removing it
-
-All seven test programs pass at `0`, with `test/writes.txt` byte-identical to
-the run at `-8` — the CPU produces the same sequence of register and memory
-writes, just faster:
-
-| Program                | halt   | at `-8`    | at `0`     | speedup |
-| ---------------------- | ------ | ---------- | ---------- | ------- |
-| `prog.asm`             | `0x1692` | 837960 ns | 143510 ns | 5.8x |
-| `prog_flags.asm`       | `0x0085` |  10200 ns |   1820 ns | 5.6x |
-| `prog_simple.asm`      | `0x0027` |   3160 ns |    990 ns | 3.2x |
-| `prog_pipeline.asm`    | `0x0015` |    920 ns |    320 ns | 2.9x |
-| `prog_interleave.asm`  | `0x001E` |   2600 ns |    610 ns | 4.3x |
-| `prog_r15.asm`         | `0x001E` |   2200 ns |    630 ns | 3.5x |
-| `prog_hazard.asm`      | `0x0076` |   8760 ns |   1850 ns | 4.7x |
-
-Two of those programs exist specifically for this: `prog_hazard.asm` covers
-read-after-write hazards between adjacent instructions (inert at `-8` by
-construction), and `prog_r15.asm` covers `R15` as an operand. Coverage of the
-bypass paths was also checked by mutation — breaking each forwarding term in
-`registers.vhd` and confirming the suite catches it at full throughput.
-
-**What this does not prove.** Mutation testing only probes the paths someone
-thought to break, and the suite is still small. If a hazard-related failure ever
-appears, reproducing it with a negative `G_PAUSE_SIZE` is a quick way to confirm
-that is the class of bug you are looking at.
-
-**Timing has not been re-checked.** The design now runs the pipeline at full
-occupancy for the first time, and recent fixes added logic to two paths that
-feed DECODE (the SR forwarding in `registers.vhd` and the PC substitution in
-`prepare.vhd`). Neither has been through a Vivado timing run.
-
 ## Formal verification
 
 `formal/fetch.sby` verifies `fetch.vhd`, and all three tasks — `bmc`, `cover`
-and `prove` (k-induction) — pass. `icache.vhd` has its own job; `fetch_cache.vhd`
-is not formally verified, and neither is the `axi_pause` throttle described
-above, so formal results are unaffected by it.
+and `prove` (k-induction) — pass. `icache.vhd` has its own job.
 
 Unlike `memory.sby`, this job also loads the `.psl` of every sub-block it
 instantiates and then runs

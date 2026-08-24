@@ -1,11 +1,5 @@
 ; Data-hazard tests: back-to-back dependent instructions.
 ;
-; These are deliberately inert at the default G_PAUSE_SIZE => -8, which drains
-; the pipeline between instructions so that no hazard can arise. They only mean
-; anything with the throttle at 0 -- which is exactly why they exist: they are
-; the evidence needed before removing it. See
-; src/fetch/README.md#Instruction-stream-throttle.
-;
 ; Every failed sub-test branches to its own HALT. Success falls through to EXIT.
 
                 .ORG 0x0000

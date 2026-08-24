@@ -12,16 +12,6 @@ It is not a drop-in replacement for the original QNICE-FPGA CPU.
 All VHDL in this repo is **VHDL-2008** (`ghdl --std=08`, `read_vhdl -vhdl2008` in the Vivado flow).
 Use 2008 constructs freely (e.g. `ieee.numeric_std_unsigned`, unconstrained record elements).
 
-`src/fetch/fetch_cache.vhd` instantiates `axi_pause` with `G_PAUSE_SIZE => 0` — no pauses, full
-instruction fetch throughput. It was held at `-8` for a long time as a workaround, throttling fetch
-to one word every eight cycles, which drained the pipeline between instructions so that data
-hazards never arose and the bypass logic in `cpu_main` was never exercised. Two bugs it was masking
-are fixed (SR write-before-read forwarding in `registers.vhd`; `R15` read as an operand returning
-the stale register-file copy), and the suite gained `test/prog_hazard.asm` and `test/prog_r15.asm`.
-All seven programs now pass at `0` with `test/writes.txt` byte-identical, 3-6x faster. Set it
-negative only to reproduce the old throttled behaviour while debugging — it is not a performance
-knob. See [src/fetch/README.md](src/fetch/README.md#Instruction-stream-throttle).
-
 Full architecture description: [doc/README.md](doc/README.md). Per-module design notes live next
 to the code: [src/fetch/README.md](src/fetch/README.md), [src/registers/README.md](src/registers/README.md),
 [src/memory/README.md](src/memory/README.md), [src/cpu_main/README.md](src/cpu_main/README.md).

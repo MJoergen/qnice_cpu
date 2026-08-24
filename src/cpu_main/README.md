@@ -508,10 +508,7 @@ module.  Additionally, it handles pre- and post-increment of the registers.
 ## Bypass
 
 > This logic is exercised by simulation: `test/prog_hazard.asm` drives
-> read-after-write hazards between adjacent instructions, and instruction fetch
-> now runs at full throughput (`G_PAUSE_SIZE => 0`). It used to be throttled,
-> which drained the pipeline and made every hazard unreachable — see
-> [fetch/README.md](../fetch/README.md#Instruction-stream-throttle).
+> read-after-write hazards between adjacent instructions.
 
 Whenever one has a pipelined architecture, where later stages write back to
 storage (i.e. register file) that is read in an earlier stage, we have a

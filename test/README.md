@@ -104,21 +104,6 @@ register, and read while a multi-micro-op instruction is in flight; a
 post-increment pointer reused immediately; and the stack pointer written and
 then used as a pre-decrement pointer.
 
-These were written as the evidence for removing the fetch throttle: they are
-inert when `G_PAUSE_SIZE` is negative, because the pipeline is drained between
-instructions and no hazard can arise.
-
-## Instruction fetch throughput
-
-These programs run at full instruction fetch throughput (`G_PAUSE_SIZE => 0` in
-`src/fetch/fetch_cache.vhd`), so the data-hazard and bypass paths are genuinely
-exercised. Fetch used to be throttled to one word every eight clock cycles as a
-workaround for pipeline bugs, which drained the pipeline between instructions
-and made every hazard unreachable no matter how a test was written. If a
-hazard-looking failure ever appears, setting `G_PAUSE_SIZE` negative again is a
-quick way to confirm that is the class of bug. See
-[src/fetch/README.md](../src/fetch/README.md#Instruction-stream-throttle).
-
 ## The simulation always reports a failure
 
 The `disassemble` procedure in `src/cpu_constants.vhd` ends the run with
