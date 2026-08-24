@@ -258,6 +258,122 @@ vunit i_cpu_main(cpu_main(synthesis))
                                        prep2wr_stage.alu_flags = f_r14_prev};
 
 
+   ------------------------------------------------------------------
+   -- MOVE with a memory operand: the addressing modes
+   ------------------------------------------------------------------
+   --
+   -- The properties above only ever use C_MODE_REG, so nothing yet says how an
+   -- address is formed, when the pointer register is updated, or that the value
+   -- read from memory is the one written back.
+   --
+   -- The addressing mode is an anyconst rather than three copies of each
+   -- property: @R, @R++ and @--R differ only in the address offset and the
+   -- pointer write-back, so proving it for an arbitrary mode covers all three
+   -- and keeps the expected-value arithmetic in one place.
+   --
+   -- R14 and R15 are excluded from both operands throughout. R15 as a pointer
+   -- would bring in the Program Counter substitution in PREPARE (src_val_pc /
+   -- dst_val_pc), and R14 as a destination is also written through the
+   -- dedicated Status Register port. Both deserve properties of their own.
+
+   signal c_src_mode : std_logic_vector(1 downto 0);
+   signal c_dst_mode : std_logic_vector(1 downto 0);
+   attribute anyconst of c_src_mode : signal is true;
+   attribute anyconst of c_dst_mode : signal is true;
+
+   signal c_mem_src_val : std_logic_vector(15 downto 0);
+   attribute anyconst of c_mem_src_val : signal is true;
+
+   -- A MOVE whose operand registers and addressing modes are the anyconst ones.
+   signal f_move_modes : std_logic;
+   f_move_modes <= '1' when prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_MOVE and
+                            prep2wr_stage.inst(11 downto 8) = c_src_reg and
+                            prep2wr_stage.inst(7 downto 6) = c_src_mode and
+                            prep2wr_stage.inst(5 downto 2) = c_dst_reg and
+                            prep2wr_stage.inst(1 downto 0) = c_dst_mode else '0';
+
+   -- Operands that keep the general-purpose paths in play, and only those.
+   signal f_gp_regs : std_logic;
+   f_gp_regs <= '1' when c_src_reg /= 14 and c_src_reg /= 15 and
+                         c_dst_reg /= 14 and c_dst_reg /= 15 else '0';
+
+   -- Expected address and expected pointer write-back, per mode.
+   signal f_src_mem_addr : std_logic_vector(15 downto 0);
+   signal f_dst_mem_addr : std_logic_vector(15 downto 0);
+   signal f_src_ptr_val  : std_logic_vector(15 downto 0);
+   signal f_dst_ptr_val  : std_logic_vector(15 downto 0);
+
+   f_src_mem_addr <= c_src_val - 1 when c_src_mode = work.cpu_constants.C_MODE_PRE else c_src_val;
+   f_dst_mem_addr <= c_dst_val - 1 when c_dst_mode = work.cpu_constants.C_MODE_PRE else c_dst_val;
+   f_src_ptr_val  <= c_src_val + 1 when c_src_mode = work.cpu_constants.C_MODE_POST else c_src_val - 1;
+   f_dst_ptr_val  <= c_dst_val + 1 when c_dst_mode = work.cpu_constants.C_MODE_POST else c_dst_val - 1;
+
+   -- (1) SOURCE ADDRESS. The micro-op carrying MEM_READ_SRC must present a read
+   -- request at the address the mode implies: the pointer register, or one below
+   -- it for a pre-decrement. This is a property of the request as formed from
+   -- the beat, so it does not wait for the request to be accepted.
+   f_mov_src_addr : assert always {prep2wr_valid = '1' and rst_i = '0' and
+                                   f_move_modes = '1' and f_gp_regs = '1' and
+                                   c_src_mode /= work.cpu_constants.C_MODE_REG and
+                                   prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'} |->
+                                  {mem_req_valid_o = '1' and
+                                   mem_req_op_o(work.cpu_constants.C_MEM_READ_SRC) = '1' and
+                                   mem_req_addr_o = f_src_mem_addr};
+
+   -- (2) DESTINATION ADDRESS AND DATA. For MOVE <REG>,@<REG> the whole
+   -- instruction is a single micro-op that writes memory, so this also pins the
+   -- data: what the source register held.
+   f_mov_dst_write : assert always {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and
+                                    f_move_modes = '1' and f_gp_regs = '1' and
+                                    c_src_mode = work.cpu_constants.C_MODE_REG and
+                                    c_dst_mode /= work.cpu_constants.C_MODE_REG} |->
+                                   {mem_req_valid_o = '1' and
+                                    mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '1' and
+                                    mem_req_addr_o = f_dst_mem_addr and
+                                    mem_req_data_o = c_src_val};
+
+   -- (3) POINTER WRITE-BACK. @R++ and @--R must leave the pointer register
+   -- updated; plain @R must not touch it. Checked on the micro-op that carries
+   -- the corresponding REG_MOD flag, which is the same one that issues the
+   -- access.
+   f_mov_src_ptr : assert always {prep2wr_valid = '1' and prep2wr_ready = '1' and rst_i = '0' and
+                                  f_move_modes = '1' and f_gp_regs = '1' and
+                                  prep2wr_stage.microcodes(work.cpu_constants.C_REG_MOD_SRC) = '1' and
+                                  (c_src_mode = work.cpu_constants.C_MODE_POST or
+                                   c_src_mode = work.cpu_constants.C_MODE_PRE)} |->
+                                 {reg_we_o = '1' and
+                                  reg_addr_o = c_src_reg and
+                                  reg_val_o = f_src_ptr_val};
+
+   f_mov_dst_ptr : assert always {prep2wr_valid = '1' and prep2wr_ready = '1' and rst_i = '0' and
+                                  f_move_modes = '1' and f_gp_regs = '1' and
+                                  prep2wr_stage.microcodes(work.cpu_constants.C_REG_MOD_DST) = '1' and
+                                  prep2wr_stage.microcodes(work.cpu_constants.C_REG_WRITE) = '0' and
+                                  (c_dst_mode = work.cpu_constants.C_MODE_POST or
+                                   c_dst_mode = work.cpu_constants.C_MODE_PRE)} |->
+                                 {reg_we_o = '1' and
+                                  reg_addr_o = c_dst_reg and
+                                  reg_val_o = f_dst_ptr_val};
+
+   -- A plain @R is not an update: no register write may be issued for it.
+   f_mov_mem_no_ptr : assert always {prep2wr_valid = '1' and prep2wr_ready = '1' and rst_i = '0' and
+                                     f_move_modes = '1' and f_gp_regs = '1' and
+                                     c_src_mode = work.cpu_constants.C_MODE_MEM and
+                                     c_dst_mode = work.cpu_constants.C_MODE_MEM and
+                                     prep2wr_stage.microcodes(work.cpu_constants.C_REG_WRITE) = '0'} |->
+                                    {reg_we_o = '0'};
+
+   -- (4) THE VALUE ACTUALLY MOVED. For MOVE @<REG>,<REG> the destination
+   -- register must end up holding what memory returned, not the pointer.
+   f_mov_mem_to_reg : assert always {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and
+                                     f_move_modes = '1' and f_gp_regs = '1' and
+                                     c_src_mode /= work.cpu_constants.C_MODE_REG and
+                                     c_dst_mode = work.cpu_constants.C_MODE_REG} |->
+                                    {reg_we_o = '1' and
+                                     reg_addr_o = c_dst_reg and
+                                     reg_val_o = c_mem_src_val};
+
+
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
@@ -270,6 +386,12 @@ vunit i_cpu_main(cpu_main(synthesis))
    assume always {fetch_valid_i and not fetch_ready_o} |=> {stable(fetch_valid_i) and stable(fetch_addr_i) and stable(fetch_data_i(15 downto 0))};
 
    assume always {mem_src_valid_i and not mem_src_ready_o} |=> {stable(mem_src_valid_i) and stable(mem_src_data_i)};
+
+   -- Model the memory as always returning c_mem_src_val on the source channel.
+   -- Same abstraction, and same over-constraint, as the register reads above:
+   -- it gives f_mov_mem_to_reg a concrete value to check against, at the price
+   -- of excluding traces where two source reads return different data.
+   assume always {mem_src_valid_i = '1'} |-> {mem_src_data_i = c_mem_src_val};
    assume always {mem_dst_valid_i and not mem_dst_ready_o} |=> {stable(mem_dst_valid_i) and stable(mem_dst_data_i)};
 
    assume always {reg_rd_en_o = '1' and reg_src_reg_o=c_src_reg} |=> {reg_src_val_i = c_src_val};
@@ -365,6 +487,16 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- cycle after another instruction wrote the Status Register, i.e. the
    -- forwarded-flags case that test/prog_flags.asm exercises in simulation.
    c_addc_sr_forwarded : cover {reg_r14_we_o = '1'; prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_addc_in_write = '1' and c_src_reg /= 15 and c_dst_reg /= 15 and c_dst_reg /= 14};
+
+   -- Non-vacuity of the addressing-mode properties. Each mode must be reachable
+   -- on each side, otherwise the anyconst mode silently collapses to one case.
+   c_mode_src_mem  : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_MEM  and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'};
+   c_mode_src_post : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_POST and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'};
+   c_mode_src_pre  : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_PRE  and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'};
+   c_mode_dst_mem  : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_REG and c_dst_mode = work.cpu_constants.C_MODE_MEM};
+   c_mode_dst_post : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_REG and c_dst_mode = work.cpu_constants.C_MODE_POST};
+   c_mode_dst_pre  : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_REG and c_dst_mode = work.cpu_constants.C_MODE_PRE};
+   c_mode_mem_to_reg : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode /= work.cpu_constants.C_MODE_REG and c_dst_mode = work.cpu_constants.C_MODE_REG};
 
    -- Non-vacuity: the stall condition that f_dec2prep_valid_stable predicates
    -- on must actually be reachable, otherwise that assertion proves nothing.
