@@ -35,8 +35,13 @@ make clean                            # remove all generated files, including fo
 ```
 
 Test programs live in `test/*.asm` and are assembled with the external QNICE assembler at
-`$HOME/git/sy2002/QNICE-FPGA/assembler/asm` (must be checked out separately; path is hardcoded in
-the top-level `Makefile`).
+`$HOME/git/sy2002/QNICE-FPGA/assembler/asm` (must be checked out separately). That default lives in
+the top-level `Makefile` as `ASSEMBLER ?=`, so it can be overridden — `make test ASSEMBLER=<path>`
+is what [.github/workflows/test.yml](.github/workflows/test.yml) does. That workflow runs
+`make test` on every push to `main` and every pull request; it builds only `qasm`/`qasm2rom` from
+the upstream project rather than the whole QNICE toolchain, and asserts up front that the
+installed GHDL really does map `std.env.finish(0)`/`stop(1)` onto process exit codes, since the
+whole pass/fail signal rests on that.
 
 **Reaching `HALT` does not mean the test passed.** Most test programs contain many `HALT`
 instructions — in the self-checking `prog.asm` every failed sub-test branches to its own `HALT`.

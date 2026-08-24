@@ -1,0 +1,95 @@
+name: test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Simulate all test programs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the CPU
+        uses: actions/checkout@v4
+
+      # The test programs are assembled by the assembler from the upstream
+      # QNICE-FPGA project, which is not vendored here.
+      - name: Check out QNICE-FPGA (for the assembler)
+        uses: actions/checkout@v4
+        with:
+          repository: sy2002/QNICE-FPGA
+          path: QNICE-FPGA
+
+      # tools/make-toolchain.sh builds the *whole* QNICE toolchain -- vasm,
+      # vbcc, an SDL2-based emulator -- none of which is needed here. The
+      # assembler/asm wrapper script only needs these two binaries next to it;
+      # the compile flags are lifted from make-toolchain.sh.
+      - name: Build the assembler
+        run: |
+          cd QNICE-FPGA/assembler
+          cc qasm.c     -o qasm     -O3 -Wno-unused-result
+          cc qasm2rom.c -o qasm2rom -O3 -Wno-unused-result -std=c99
+
+      - name: Install GHDL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ghdl
+          ghdl --version
+
+      # The entire pass/fail signal rests on GHDL mapping std.env.finish(0)
+      # and stop(1) onto the process exit code -- that is how
+      # test/test_monitor.vhd reports a verdict. Check it up front, so that an
+      # unexpected GHDL build fails loudly here rather than silently reporting
+      # every test as green.
+      - name: Check GHDL exit-code behaviour
+        run: |
+          mkdir -p /tmp/ghdl-check
+          cd /tmp/ghdl-check
+          cat > exit_code.vhd <<'EOF'
+          use std.env.all;
+          entity exit_code is
+             generic (G_FAIL : boolean := false);
+          end entity exit_code;
+          architecture simulation of exit_code is
+          begin
+             process
+             begin
+                if G_FAIL then stop(1); else finish(0); end if;
+                wait;
+             end process;
+          end architecture simulation;
+          EOF
+          ghdl -a --std=08 exit_code.vhd
+          ghdl -e --std=08 exit_code
+          rc=0; ghdl -r --std=08 exit_code -gG_FAIL=false || rc=$?
+          if [ "$rc" -ne 0 ]; then
+             echo "::error::std.env.finish(0) gave exit code $rc, expected 0"
+             exit 1
+          fi
+          rc=0; ghdl -r --std=08 exit_code -gG_FAIL=true || rc=$?
+          if [ "$rc" -eq 0 ]; then
+             echo "::error::std.env.stop(1) gave exit code 0, expected non-zero"
+             exit 1
+          fi
+
+      # Each test program ends by writing its own pass/fail verdict, which
+      # test/test_monitor.vhd turns into the simulation's exit code, and the
+      # log of every register and memory write is diffed against the committed
+      # test/*.writes.golden. So a green job here means the CPU behaved exactly
+      # as expected, not merely that the simulation ran. See test/README.md.
+      - name: Run the test suite
+        run: make test ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
+
+      # On a golden-file mismatch the diff is already in the job log, but the
+      # full logs make it much easier to see what moved.
+      - name: Upload the write logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: writes-logs
+          path: test/*.writes
+          if-no-files-found: ignore

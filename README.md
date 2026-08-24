@@ -1,5 +1,7 @@
 # A pipelined implementation of the QNICE CPU
 
+[![test](https://github.com/MJoergen/qnice_cpu/actions/workflows/test.yml/badge.svg)](https://github.com/MJoergen/qnice_cpu/actions/workflows/test.yml)
+
 The reason for this implementation is to increase the performance of the QNICE
 CPU, and to use techniques from formal verification to prove its correctness.
 
@@ -63,4 +65,10 @@ at all. On top of that, `make test` compares the log of every register and
 memory write against a committed reference copy.
 
 [`test/README.md`](test/README.md) describes both checks in full.
+
+`make test` is what CI runs, on every push to `main` and every pull request —
+see [`.github/workflows/test.yml`](.github/workflows/test.yml). The workflow
+builds the QNICE assembler from the upstream project (only `qasm` and
+`qasm2rom` are needed, not the whole toolchain) and points the Makefile at it
+with `ASSEMBLER=<path>`.
 

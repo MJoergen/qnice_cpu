@@ -50,7 +50,9 @@ TESTS += prog_hazard
 
 ASM = test/$(TEST).asm
 ROM = test/$(TEST).rom
-ASSEMBLER = $(HOME)/git/sy2002/QNICE-FPGA/assembler/asm
+# Override this if the QNICE-FPGA checkout lives somewhere else, e.g. in CI:
+#   make test ASSEMBLER=/path/to/QNICE-FPGA/assembler/asm
+ASSEMBLER ?= $(HOME)/git/sy2002/QNICE-FPGA/assembler/asm
 
 # Log of every register and memory write, and the committed reference copy of it
 WRITES = test/$(TEST).writes
