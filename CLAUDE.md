@@ -204,7 +204,7 @@ with the specific remaining obstacle documented in a comment right above it in `
 ### Directory layout
 
 - `src/cpu_constants.vhd` — shared constants/types used across modules.
-- `src/fetch/` — instruction fetch + `icache.vhd`/`fetch_cache.vhd`.
+- `src/fetch/` — instruction fetch + instruction cache.
 - `src/registers/` — register file (dual-port RAM based, write-before-read).
 - `src/memory/` — Wishbone-facing memory arbiter (source/destination operand buffers).
 - `src/cpu_main/` — DECODE, PREPARE, WRITE, and the `sub/` microcode ROM, sequencer, ALU.

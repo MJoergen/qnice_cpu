@@ -106,9 +106,7 @@ vunit i_registers(registers(synthesis))
    -- Write before read, through the DEDICATED SR port.
    -- Reading R14 as an ordinary register must see a value written via
    -- wr_sr_en_i/wr_sr_val_i, not the not-yet-updated reg_sr. Without the
-   -- wr_sr_* forwarding terms in src_val_o/dst_val_o this fails, which is the
-   -- bug that forced the instruction-stream throttle in fetch_cache.vhd
-   -- (see src/fetch/README.md#Instruction-stream-throttle).
+   -- wr_sr_* forwarding terms in src_val_o/dst_val_o this fails.
    -- The rst_i guards are required. p_sr gives reset top priority over both
    -- write ports, so an SR write coinciding with reset leaves reg_sr at X"0001"
    -- rather than the written value; src_val_o/dst_val_o are don't-care there,

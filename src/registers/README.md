@@ -95,11 +95,6 @@ Priority within a single cycle matches `p_sr` and `sr_val_o`: the ordinary port
 wins over the dedicated SR port, and a same-cycle write wins over the delayed
 copy of the previous cycle's write.
 
-This forwarding was missing until recently, and was the cause of the
-instruction-stream throttle in `fetch_cache.vhd` — see
-[fetch/README.md](../fetch/README.md#Instruction-stream-throttle) for that
-history.
-
 
 ## Implementation
 

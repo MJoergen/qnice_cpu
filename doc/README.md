@@ -163,8 +163,8 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## TODO
 * Formal verification: the suite in `formal/` currently passes in full (twelve
-  modules, thirty-five tasks). What is still missing is `fetch_cache.vhd`, which
-  has no job at all; a `prove` (k-induction) task for `cpu_main`; and closing the
+  modules, thirty-five tasks). What is still missing is a `prove` (k-induction)
+  task for `cpu_main`; and closing the
   last open property of `memory`'s inductive proof.
 * Add interrupts.
 
@@ -213,8 +213,8 @@ written:
 | Memory          |   54 |  74 |
 | **CPU total**   |  824 | 577 |
 
-The module rows sum to 822 LUTs; the remaining 2 are glue at the `cpu_main` and
-`fetch_cache` levels (1 LUT each), which belong to no sub-module.
+The module rows sum to 822 LUTs; the remaining 2 are glue at the `cpu_main` level,
+which belong to no sub-module.
 
 Two things stand out:
 
