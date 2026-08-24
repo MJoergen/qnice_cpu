@@ -171,7 +171,7 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `ea01a85`.
+Measured with Vivado 2022.2 on commit `af3e84a-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -188,12 +188,12 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  878 |     63400 | 1.38 |
+| Slice LUTs      |  870 |     63400 | 1.37 |
 | Slice Registers |  580 |    126800 | 0.46 |
-| Slices          |  289 |     15850 | 1.82 |
+| Slices          |  292 |     15850 | 1.84 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.272 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.344 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
@@ -201,24 +201,52 @@ comment above the tcl-generating rule in the top-level `Makefile`.
 
 <!-- generated: critical path -->
 The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][0]` to
-`i_prepare/wr_stage_o_reg[r14][3]`: 11 logic levels, with 64% of the delay in
-routing rather than logic.
+`i_prepare/wr_stage_o_reg[src_val][1]`: 7 logic levels, with 80% of the delay
+in routing rather than logic.
 <!-- end -->
 
-It has been in the same place in every build measured for this section: both
-endpoints are fields of PREPARE's `wr_stage_o` register, and the logic between
-them is the ALU operand muxing that feeds it. Only *which* field moves between
-builds — `alu_dst_val` to `alu_dst_val`, then `alu_dst_val` to `alu_src_val`,
-now `alu_src_val` to `r14`. Those are the same mux seen from different corners,
-not three different problems.
+**Read those instance names with care.** The shipping build uses
+`-flatten_hierarchy rebuilt`, which re-attributes logic across module
+boundaries, so every net on this path is reported under `i_prepare/` even though
+most of it is the ALU, which lives in WRITE. The full path listing in
+`timing_summary.rpt` gives it away: the second hop is `i_write/i_alu/addend[0]`.
 
-Two consequences worth knowing before trying to optimise it:
+What the path really is, in both builds where the full listing was examined, is
+the **Status Register loop**:
 
-* **It is routing-dominated, not logic-depth-dominated.** Roughly two thirds of
-  the delay is interconnect. Removing a level of logic from the operand mux
-  would therefore buy less than the level count suggests; the lever is
-  placement and congestion. This is also why the `-directive` choices in the
-  `Makefile` are load-bearing rather than decoration.
+```
+PREPARE's registered ALU operand
+   -> the ALU in WRITE
+   -> the flag logic, which produces the Status Register
+   -> the register file, which forwards an SR write combinationally
+   -> DECODE, which passes it through live and unregistered
+   -> latched again by PREPARE
+```
+
+That loop has to close in a single clock cycle — it is what lets an instruction
+consume flags produced by the instruction immediately before it, which
+[`test/prog_flags.asm`](../test/prog_flags.asm) exercises directly — and it is
+what sets this CPU's Fmax. Both endpoints are `wr_stage_o` fields in every build
+measured; which fields they are moves around, but it is one loop, not several
+unrelated paths.
+
+It was 11 levels deep, including the adder's 16-bit carry chain, until the ALU
+result mux was split in two; see the comment above `p_res_other` in
+[alu_data.vhd](../src/cpu_main/sub/alu_data.vhd). The Zero flag is a 16-bit
+reduction of the ALU result, so the entire 16-way result mux sat between the
+adder and the flags. Muxing everything except the addition first, in parallel
+with the adder, left the adder facing a single 2:1 select: 11 logic levels
+became 7, and WNS went from +0.272 ns to +0.344 ns.
+
+Two things to know before trying to optimise it further:
+
+* **It is now routing-bound, not logic-bound.** Only about a fifth of the delay
+  is logic; the rest is interconnect, so further reductions in logic depth will
+  buy much less than the level count suggests. The largest single item is the
+  very first hop: `alu_src_val` bit 0 has a fanout of about 75 — it feeds the
+  adder, both barrel shifters' shift-amount decode, the comparators and every
+  bitwise operation — and that one net costs roughly 1.4 ns, a sixth of the
+  whole budget. Reducing that fanout is the obvious next lever.
 * **Unrelated logic elsewhere can move this number.** Because the path is
   placement-sensitive, logic that is nowhere near it can still perturb it. A
   single flip-flop added next to the Icache, for the HALT gate, once cost
@@ -245,19 +273,19 @@ written:
 | CACHE (icache)  |   23 |  66 |
 | DECODE          |   53 |  74 |
 | PREPARE         |   79 | 131 |
-| WRITE           |  395 |   0 |
+| WRITE           |  396 |   0 |
 | Registers       |  166 | 142 |
 | Memory          |   54 |  74 |
 | Glue            |    7 |   1 |
-| **CPU total**   |  829 | 578 |
+| **CPU total**   |  830 | 578 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 48% of the CPU's LUTs**, and 246 of its 395 are the ALU
-  (`alu_data` 194, `alu_flags` 52). The two barrel shifters in `alu_data` are the
+* **WRITE dominates, at 48% of the CPU's LUTs**, and 247 of its 396 are the ALU
+  (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
   unconstrained integer made the synthesiser build a far wider shifter than
@@ -268,7 +296,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (829 vs 878 LUTs). That is expected:
+The two tables do not add up to each other (830 vs 870 LUTs). That is expected:
 the first is measured after place-and-route, where physical optimisation
 replicates logic to meet timing, while the second stops after synthesis. Slices
 are not listed per module because slices are shared between modules and are not
