@@ -50,6 +50,8 @@ architecture synthesis of write is
    signal next_pc     : std_logic_vector(15 downto 0);
    signal wr_r15      : std_logic;
    signal is_crb      : std_logic;
+   signal smc_delta   : std_logic_vector(15 downto 0);
+   signal smc_hit     : std_logic;
 
 
 begin
@@ -220,6 +222,80 @@ begin
    -- happens to cover R14 used as a POINTER as well, as long as the increment
    -- lands on the instruction's last micro-op.
 
+   ------------------------------------------------------------
+   -- Self-modifying code
+   ------------------------------------------------------------
+
+   -- Instruction and data memory are the same physical RAM, so a store can
+   -- land on an instruction that FETCH, the Icache, DECODE or PREPARE has
+   -- already read. Nothing downstream would ever notice: the stale copy is
+   -- decoded and executed exactly as if the store had not happened. The fix is
+   -- the same flush used for a taken branch -- discard everything already read
+   -- and re-fetch from the next address, by which time the write has reached
+   -- the RAM (it is a true dual-port memory, and the re-fetch cannot get back
+   -- to the bus in the same cycle).
+   --
+   -- Doing that on EVERY store is correct but far too expensive: it puts a
+   -- branch penalty on every "MOVE R0, @R1". Measured, it costs +8.5% of the
+   -- run time of test/prog.asm and +64% of test/prog_interleave.asm, the
+   -- store-heavy one. So the flush is restricted to stores that can actually
+   -- hit something already read.
+   --
+   -- Everything already read lies in [next_pc, next_pc + 8):
+   --
+   --    PREPARE and DECODE hold one instruction each, <= 2 words apiece, so
+   --    the word at the Icache output is at most next_pc + 4.
+   --    The Icache holds 2 words and FETCH at most C_MAX_PENDING = 2 more
+   --    (see src/fetch/README.md), so the highest address ever requested is
+   --    at most 4 beyond that.
+   --
+   -- The second half is not just an upper bound on paper: probing
+   -- wbi_addr_o - icache2decode_addr at every accepted handshake over the
+   -- whole of prog.asm gives a maximum of exactly 4.
+   --
+   -- A store that lands outside the window is safe for the opposite reason:
+   -- nothing has read that address yet, so the fetch that eventually reaches
+   -- it sees the new value. Only the boundary needs a margin. Both sides of it
+   -- are probed by test/prog_self_modifying.asm -- T1-T5 and T7 from inside,
+   -- T3 from outside.
+   --
+   -- The comparison subtracts two RAW stage registers, prep_stage_i.dst_val
+   -- and prep_stage_i.addr, rather than the values actually used for the store
+   -- and the re-fetch address. That matters a lot. Writing the exact form,
+   --
+   --    smc_delta <= mem_req_addr_o - next_pc;
+   --    smc_hit   <= '1' when smc_delta(15 downto 4) = X"000" else '0';
+   --
+   -- puts a four-way mux (mem_addr) and an adder (next_pc) in FRONT of the
+   -- subtract, and all of it lands on fetch_valid_o, which is the reset pin of
+   -- every flip-flop in DECODE and PREPARE. Measured: WNS -0.042 ns with 8
+   -- failing endpoints, i.e. it does not build. Subtracting the raw registers
+   -- starts the carry chain at a register output instead.
+   --
+   -- The price is that the difference is off by a small constant. The store
+   -- address is dst_val or dst_val-1 (pre-decrement), and the re-fetch address
+   -- is addr+1 or addr+2, so
+   --
+   --    mem_addr - next_pc  =  (dst_val - addr) - k,   k in {1,2,3}
+   --
+   -- and a store that really is within 8 of next_pc has dst_val - addr in
+   -- [1,11). Testing "< 32" covers that with room to spare, and being a power
+   -- of two it is an 11-bit zero-test rather than a magnitude comparison.
+   -- Over-approximating is free of correctness risk -- it can only cause a
+   -- flush that was not needed - which is also why R15 as a store pointer is
+   -- simply forced to hit rather than handled: dst_val is the register file's
+   -- stale R15 copy in that case, so the subtraction would be meaningless.
+
+   smc_delta <= prep_stage_i.dst_val - prep_stage_i.addr;
+   smc_hit   <= '1' when smc_delta(15 downto 5) = "00000000000" or
+                         prep_stage_i.dst_addr = to_stdlogicvector(C_REG_PC, 4) else
+                '0';
+
+
+   ------------------------------------------------------------
+   -- Register bank switch, continued
+   ------------------------------------------------------------
+
    is_crb <= '1' when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
                       (prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INCRB or
                        prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_DECRB) else
@@ -229,7 +305,8 @@ begin
    -- register-write terms collapse into one, and the whole expression fits a
    -- single 6-input LUT: reg_we_o, three address bits, inst_done_o, is_crb.
    fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1))) or
-                    (inst_done_o and is_crb);
+                    (inst_done_o and is_crb) or
+                    (inst_done_o and prep_stage_i.microcodes(C_MEM_WRITE) and smc_hit);
 
 
    ------------------------------------------------------------

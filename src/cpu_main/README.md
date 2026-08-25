@@ -628,6 +628,25 @@ of any flush. `test/prog_hazard.asm` covers all three cases in `H11`-`H13`.
 modifies `R14` on a micro-op that need not be the last one, and a carry out of
 bit 15 of such an increment is not detected. No test program does this.
 
+### Self-modifying code
+The third thing that flushes the pipeline is a store into the instruction stream.
+Instruction and data memory are the same physical RAM, so `MOVE R1, @R0` can land
+on an address that FETCH, the Icache, DECODE or PREPARE has already read — and
+the stale copy would then execute with nothing noticing.
+
+`smc_hit` in [write.vhd](write.vhd) detects this and joins `fetch_valid_o`. The
+subtlety is entirely in keeping it cheap: this net is the reset pin of every
+flip-flop in two stages, so the comparison subtracts two *raw* stage registers
+(`prep_stage_i.dst_val` and `prep_stage_i.addr`) and tests a power-of-two window,
+rather than comparing the exact store address against the exact re-fetch address.
+The exact form puts a four-way mux and an adder in front of the subtraction and
+does not meet timing; the numbers and the derivation of the constant are in the
+comment above `smc_delta`.
+
+See [Self-modifying code](../../doc/README.md#Self-modifying-code) for the
+architectural picture and [`test/prog_self_modifying.asm`](../../test/prog_self_modifying.asm)
+for the coverage.
+
 ## Formal verification
 `formal/cpu_main.psl` verifies the assembled DECODE + PREPARE + WRITE pipeline
 against a free (unconstrained) environment for FETCH, the Register module and

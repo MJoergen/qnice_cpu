@@ -150,9 +150,51 @@ faster than the sum of the two instructions taken separately, because the
 instruction and data memories are operating simultaneously.
 
 ## Self-modifying code
-TBD: What is possible, what is not possible. How big latency is required? Is it
-enough to issue a branch instruction? Show some examples where it doesn't work
-and where is does work.
+Instruction and data memory are two ports of the same physical RAM, so a program
+can store into its own instruction stream. Doing so is fully supported, with no
+latency requirement: an instruction may be rewritten by the store immediately
+before it.
+
+That did not use to be true, and the failure was silent. FETCH, the Icache,
+DECODE and PREPARE have all read ahead of the instruction retiring in WRITE, so
+a store landing on one of those addresses changed the RAM but not the copy about
+to execute — the *old* instruction ran, with nothing anywhere reporting a
+problem. Five instructions of padding, or a branch, was enough to hide it,
+which is the worst possible property for a bug to have.
+
+WRITE now treats such a store as a control transfer. When a store retires, it
+checks whether the address is close enough to the program counter to have been
+read already, and if so asserts the same `fetch_valid_o` that a taken branch
+uses: DECODE and PREPARE are reset, FETCH and the Icache discard their buffers,
+and execution restarts at the following instruction, which is re-fetched from
+the updated RAM. The write has landed by then — the memory is true dual-port,
+and the re-fetch cannot get back to the bus in the same cycle.
+
+Two things are worth knowing:
+
+* **The check is deliberately over-approximate.** It flushes on any store within
+  32 words after the current instruction, where the real read-ahead is at most 8
+  (2 words each for PREPARE and DECODE, 2 in the Icache and `C_MAX_PENDING` = 2
+  in FETCH; probing the fetch pointer against the Icache output over the whole
+  of `prog.asm` gives a maximum of 4 for the last two together). The slack is
+  what makes the comparison cheap enough to sit on the flush net at all — see
+  the comment above `smc_delta` in
+  [write.vhd](../src/cpu_main/write.vhd), where the exact version is recorded
+  along with the −0.042 ns it cost. Over-approximating is safe by construction:
+  a spurious flush costs cycles, never correctness.
+* **So a store near the PC costs a branch penalty**, whether or not it was aimed
+  at code. This is why the window is not simply "every store": flushing
+  unconditionally costs 8.5% of the run time of `prog.asm` and 64% of
+  `prog_interleave.asm`. With the window, `prog.asm` pays 0.07% and
+  `prog_interleave.asm` pays nothing.
+
+[`test/prog_self_modifying.asm`](../test/prog_self_modifying.asm) covers this
+from both sides. `T1` rewrites the opcode of the very next instruction, `T2` its
+immediate operand, `T4` the instruction two ahead, `T5` reaches the instruction
+through a pre-decrement pointer, and `T7` patches an instruction inside a loop
+so the hazard is hit on every iteration; each of those fails without the flush.
+`T3` stores *outside* the window and `T6` stores to data that merely sits near
+the PC — both pass either way, and are there to pin the two edges.
 
 
 ## Optimizations
@@ -171,7 +213,7 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `b987964-dirty`.
+Measured with Vivado 2022.2 on commit `65b7f57-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -188,21 +230,21 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  866 |     63400 | 1.37 |
+| Slice LUTs      |  873 |     63400 | 1.38 |
 | Slice Registers |  580 |    126800 | 0.46 |
-| Slices          |  302 |     15850 | 1.91 |
+| Slices          |  292 |     15850 | 1.84 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.246 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.260 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_dst_val][12]` to
-`i_prepare/wr_stage_o_reg[r14][3]`: 8 logic levels, with 82% of the delay in
-routing rather than logic.
+The worst setup path runs from `i_prepare/wr_stage_o_reg[r14][3]` to
+`i_icache/m_addr_reg[18]`: 9 logic levels, with 76% of the delay in routing
+rather than logic.
 <!-- end -->
 
 **Read those instance names with care.** The shipping build uses
@@ -307,18 +349,18 @@ written:
 | CACHE (icache)  |   40 |  66 |
 | DECODE          |   54 |  74 |
 | PREPARE         |   81 | 131 |
-| WRITE           |  442 |   0 |
+| WRITE           |  463 |   0 |
 | Registers       |  166 | 142 |
 | Memory          |   57 |  74 |
 | Glue            |    8 |   1 |
-| **CPU total**   |  902 | 578 |
+| **CPU total**   |  923 | 578 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 49% of the CPU's LUTs**, and 247 of its 442 are the ALU
+* **WRITE dominates, at 50% of the CPU's LUTs**, and 247 of its 463 are the ALU
   (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
@@ -330,7 +372,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (902 vs 866 LUTs). That is expected:
+The two tables do not add up to each other (923 vs 873 LUTs). That is expected:
 the first is measured after place-and-route, where physical optimisation
 replicates logic to meet timing, while the second stops after synthesis. Slices
 are not listed per module because slices are shared between modules and are not

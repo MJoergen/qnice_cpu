@@ -164,6 +164,20 @@ that `reg_sr`'s register process (`p_sr`) does, so a write coinciding with reset
 onto `sr_val_o` before `reg_sr` caught up next edge — fixed by making `rst_i` the first term in
 that mux (see [src/registers/README.md](src/registers/README.md#Formal-verification)).
 
+### Self-modifying code
+
+Instruction and data memory are the same physical RAM, so a store can land on an
+instruction that FETCH/Icache/DECODE/PREPARE has already read. `smc_hit` in
+`src/cpu_main/write.vhd` detects a store within 32 words after the current instruction
+and joins `fetch_valid_o`, flushing exactly as a taken branch does. Two constraints shape
+that code and are easy to undo by accident: the flush net is the reset pin of every
+flip-flop in DECODE and PREPARE, so the comparison must subtract **raw stage registers**
+(the exact `mem_req_addr_o - next_pc` form misses timing at −0.042 ns), and it must stay a
+*window* rather than "every store" (unconditional flushing costs +8.5% on `prog.asm`,
++64% on `prog_interleave.asm`). Over-approximating the window is always safe — a spurious
+flush costs cycles, not correctness. `test/prog_self_modifying.asm` covers both edges;
+see [doc/README.md](doc/README.md#Self-modifying-code).
+
 ### Elastic pipeline building blocks (`src/sub/`)
 
 Six small, reusable valid/ready ("AXI-style") primitives that the rest of the design (FETCH,

@@ -157,6 +157,31 @@ hazard above; that is what `H11`-`H13` are for. The exhaustive walk over all 256
 banks that follows it is left commented out, since it dominates the simulation
 time of the whole program.
 
+`prog_self_modifying.asm` covers stores into the program's own instruction
+stream. The hazard is that FETCH, the Icache, DECODE and PREPARE have all read
+ahead of the instruction retiring in WRITE, so without the flush described in
+[Self-modifying code](../src/cpu_main/README.md#Self-modifying-code) the *old*
+instruction executes and nothing reports a problem.
+
+* `T1`/`T2` — rewrite the opcode, and the immediate operand, of the very next
+  instruction.
+* `T4` — rewrite the instruction two ahead; the one in between must still run as
+  originally written.
+* `T5` — reach the instruction through a pre-decrement pointer, which is a
+  different path to the store address in WRITE (`dst_val-1`, not `dst_val`).
+* `T7` — patch an instruction inside a loop, so the hazard is hit on every one
+  of three iterations.
+
+Those five all fail without the RTL fix, checked by stashing it and running each
+sub-test on its own. The remaining two are the opposite by design, and pass
+either way:
+
+* `T3` — store *outside* the flush window, where correctness comes from nothing
+  having prefetched the address yet. This is the test that would notice if the
+  window were ever sized below the real read-ahead depth.
+* `T6` — store to data that merely happens to sit near the program counter. It
+  costs a needless flush, which must not change what executes.
+
 ## The golden writes-log comparison
 
 `src/cpu.vhd` instantiates `src/debug.vhd` (inside a `pragma synthesis_off`

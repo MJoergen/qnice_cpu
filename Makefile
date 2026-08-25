@@ -47,6 +47,7 @@ TESTS += prog_interleave
 TESTS += prog_flags
 TESTS += prog_r15
 TESTS += prog_hazard
+TESTS += prog_self_modifying
 
 ASM = test/$(TEST).asm
 ROM = test/$(TEST).rom
