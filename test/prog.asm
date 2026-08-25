@@ -1155,31 +1155,47 @@ E_RB_R14_08     HALT
 L_RB_R14_01     MOVE    0, R14                  ; Reset register bank
 
 
-;; ---------------------------------------------------------------------------
-;; Test register banking
+; ---------------------------------------------------------------------------
+; Test register banking
 ;
-;; First do a quick-and-dirty test to verify
-;; that R0-R7 are banked and R8-R15 are not.
-;L_BANK_00       MOVE    0, R14                  ; Reset register bank
-;                MOVE    L_STACK_TOP, R13        ; Reset stack pointer
-;
-;                MOVE    0x0123, R0              ; Stores values in R0 and R8
-;                MOVE    0x4567, R8
-;
-;                INCRB                           ; Change register bank
-;
-;                MOVE    0x89AB, R0              ; Store new value in (banked) R0
-;                CMP     0x4567, R8              ; Verify R8 is unchanged
-;                RBRA    E_BANK_01, !Z           ; Jump if error
-;                CMP     0x89AB, R0              ; Verify R0 new value
-;                RBRA    E_BANK_02, !Z           ; Jump if error
-;
-;                DECRB                           ; Revert register bank
-;
-;                CMP     0x4567, R8              ; Verify R8 is unchanged
-;                RBRA    E_BANK_03, !Z           ; Jump if error
-;                CMP     0x0123, R0              ; Verify unbanked R0 is unchanged
-;                RBRA    E_BANK_04, !Z           ; Jump if error
+; This checks that banking works at all. It does NOT check the pipeline
+; hazard around a bank switch -- every read below is two or more instructions
+; after its INCRB/DECRB, which is outside the window. H11-H13 in
+; test/prog_hazard.asm cover that case.
+
+; First do a quick-and-dirty test to verify
+; that R0-R7 are banked and R8-R15 are not.
+L_BANK_00       MOVE    0, R14                  ; Reset register bank
+                MOVE    L_STACK_TOP, R13        ; Reset stack pointer
+
+                MOVE    0x0123, R0              ; Stores values in R0 and R8
+                MOVE    0x4567, R8
+
+                INCRB                           ; Change register bank
+
+                MOVE    0x89AB, R0              ; Store new value in (banked) R0
+                CMP     0x4567, R8              ; Verify R8 is unchanged
+                RBRA    E_BANK_01, !Z           ; Jump if error
+                CMP     0x89AB, R0              ; Verify R0 new value
+                RBRA    E_BANK_02, !Z           ; Jump if error
+
+                DECRB                           ; Revert register bank
+
+                CMP     0x4567, R8              ; Verify R8 is unchanged
+                RBRA    E_BANK_03, !Z           ; Jump if error
+                CMP     0x0123, R0              ; Verify unbanked R0 is unchanged
+                RBRA    E_BANK_04, !Z           ; Jump if error
+
+                RBRA    L_BANK_10, 1            ; Skip the error HALTs
+
+E_BANK_01       HALT
+E_BANK_02       HALT
+E_BANK_03       HALT
+E_BANK_04       HALT
+
+;; The exhaustive walk over all 256 banks below is left commented out on
+;; purpose: it is thousands of instructions and dominates the simulation time
+;; of the whole program. Revisit when that is affordable.
 ;
 ;; Fill all register banks
 ;                MOVE    0, R9                   ; Current value to write
@@ -1242,10 +1258,6 @@ L_RB_R14_01     MOVE    0, R14                  ; Reset register bank
 ;
 ;                RBRA    L_BANK_10, 1
 ;
-;E_BANK_01       HALT
-;E_BANK_02       HALT
-;E_BANK_03       HALT
-;E_BANK_04       HALT
 ;E_BANK_05       HALT
 ;
 ;
@@ -1256,8 +1268,8 @@ L_RB_R14_01     MOVE    0, R14                  ; Reset register bank
 ;                ADD     R10, R9
 ;                ADD     1, R9
 ;                RET
-;
-;L_BANK_10
+
+L_BANK_10
 
 
 ; ---------------------------------------------------------------------------

@@ -47,6 +47,10 @@ architecture synthesis of write is
    signal mem_data    : std_logic_vector(15 downto 0);
    signal mem_valid   : std_logic;
 
+   signal next_pc     : std_logic_vector(15 downto 0);
+   signal wr_r15      : std_logic;
+   signal is_crb      : std_logic;
+
 
 begin
 
@@ -153,10 +157,79 @@ begin
 
    ------------------------------------------------------------
    -- Writes to R15 are forwarded back to the fetch stage as well.
+   -- So is a register bank switch, see below.
    ------------------------------------------------------------
 
-   fetch_valid_o <= and(reg_addr_o) and reg_we_o;
-   fetch_addr_o  <= reg_val_o;
+   wr_r15 <= and(reg_addr_o) and reg_we_o;
+
+   fetch_addr_o  <= reg_val_o when wr_r15 = '1' else
+                    next_pc;
+
+
+   ------------------------------------------------------------
+   -- Register bank switch
+   ------------------------------------------------------------
+
+   -- The upper eight bits of R14 select which of the 256 pages of R0-R7 the
+   -- register file presents (see src/registers/registers.vhd). Changing them
+   -- is a control transfer in disguise, and has to be treated as one.
+   --
+   -- DECODE issues a register read two stages ahead of WRITE, so by the time
+   -- INCRB's new bank reaches the register file, the read for the instruction
+   -- after it has ALREADY been issued -- against the old bank. Forwarding the
+   -- bank into the read address does not help: the address was applied to the
+   -- RAM a full cycle before the new bank existed. Measured on the instruction
+   -- pair "DECRB / MOVE R0, R9", the read goes out one cycle before the SR
+   -- write lands.
+   --
+   -- So a bank switch is flushed exactly the way a taken branch is: redirect
+   -- FETCH to the following instruction, which resets DECODE and PREPARE (see
+   -- the note at the top of cpu_main.vhd). The instruction that comes back has
+   -- its register read issued long after reg_sr has caught up. The cost is a
+   -- branch penalty on INCRB/DECRB, which is what the ISA uses to enter and
+   -- leave a subroutine -- rare, and cheaper than getting the wrong registers.
+   --
+   -- The trigger is deliberately SYNTACTIC -- "this instruction writes R14, or
+   -- it is INCRB/DECRB" -- and not a comparison of the new bank against the
+   -- old one. The obvious version,
+   --
+   --    r14_next    <= reg_val_o when reg_we_o = '1' and reg_addr_o = 14 else
+   --                   alu_res_flags;
+   --    bank_switch <= inst_done_o when r14_next(15 downto 8) /=
+   --                                    prep_stage_i.r14(15 downto 8) else '0';
+   --
+   -- is more precise -- it leaves "MOVE ST____C_, R14" free of a flush -- but
+   -- it costs the whole timing margin, and it is worth understanding why
+   -- before anyone reaches for it again. fetch_valid_o is not just a signal to
+   -- FETCH: cpu_main.vhd resets DECODE and PREPARE with "rst_i or
+   -- fetch_valid_o", so it drives the reset pin of every flip-flop in two
+   -- stages. Feeding it from reg_val_o puts the ALU result, an 8-bit
+   -- comparator and two more levels of logic in front of that high-fanout net.
+   -- Measured at commit b987964: WNS +0.344 ns -> +0.010 ns and +44 LUTs, with
+   -- the worst path landing on i_prepare/wr_stage_o_reg[alu_src_val]. The
+   -- syntactic version below gives +0.246 ns and 4 LUTs FEWER than baseline.
+   --
+   -- Everything below comes from stage REGISTERS instead -- prep_stage_i.inst
+   -- for the opcode, and reg_addr_o/reg_we_o, which p_reg builds out of
+   -- prep_stage_i.src_addr/dst_addr/res_reg and the microcodes. None of it
+   -- depends on the ALU, so the flush condition is ready early in the cycle.
+   --
+   -- The price is that any write to R14 flushes, even one that leaves the bank
+   -- alone. That covers "MOVE ST____C_, R14" and friends; they cost a branch
+   -- penalty now. Since reg_addr_o also carries pre/post-increment writes, it
+   -- happens to cover R14 used as a POINTER as well, as long as the increment
+   -- lands on the instruction's last micro-op.
+
+   is_crb <= '1' when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
+                      (prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INCRB or
+                       prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_DECRB) else
+             '0';
+
+   -- Note that R14 and R15 share reg_addr_o(3 downto 1) = "111", so the two
+   -- register-write terms collapse into one, and the whole expression fits a
+   -- single 6-input LUT: reg_we_o, three address bits, inst_done_o, is_crb.
+   fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1))) or
+                    (inst_done_o and is_crb);
 
 
    ------------------------------------------------------------
@@ -175,8 +248,11 @@ begin
                 prep_stage_i.src_val   when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' else
                 prep_stage_i.dst_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '0' and prep_stage_i.dst_mode = C_MODE_PRE else
                 prep_stage_i.dst_val;
-   mem_data  <= prep_stage_i.addr + 2 when (prep_stage_i.src_imm = '1' or prep_stage_i.dst_imm = '1') else
+   -- The address of the instruction following this one: the return address that
+   -- ASUB/RSUB pushes, and the address a bank switch re-fetches from.
+   next_pc   <= prep_stage_i.addr + 2 when (prep_stage_i.src_imm = '1' or prep_stage_i.dst_imm = '1') else
                 prep_stage_i.addr + 1;
+   mem_data  <= next_pc;
    mem_valid <= '1' when or(prep_stage_i.microcodes(2 downto 0)) /= '0' and prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP else
                 '0';
 
@@ -189,9 +265,11 @@ begin
 
 
    ------------------------------------------------------------
-   -- Debug
+   -- Instruction retired
    ------------------------------------------------------------
 
+   -- One pulse per instruction, on its LAST micro-op. Used by the debug log,
+   -- by halt_o, and by the bank-switch flush above.
    inst_done_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcodes(C_LAST);
 
 

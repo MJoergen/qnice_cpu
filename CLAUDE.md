@@ -117,6 +117,18 @@ stale slot directly was a real bug, fixed by that substitution;
 register write at the end of most instructions); `R13` (Stack Pointer) is an ordinary register,
 handled in DECODE.
 
+The upper eight bits of `R14` select which of the 256 pages of `R0`-`R7` the register file
+presents, and **changing them flushes the pipeline** — `bank_switch` in `src/cpu_main/write.vhd`
+joins `fetch_valid_o` and redirects FETCH to the next instruction. This is not an optimisation
+choice: DECODE issues a register read two stages ahead of WRITE, so the instruction after an
+`INCRB` has already read the old bank by the time the new one lands, and forwarding the bank into
+the read address cannot fix it (the address reaches the RAM a cycle before the new bank exists).
+The trigger is a comparison against the value actually landing in `R14`, not "writes `R14`", so
+`MOVE ST____C_, R14` to set up a carry-in costs nothing. `test/prog_hazard.asm` `H11`-`H13` pin
+this down; before the flush existed, `INCRB` / `ADD 0, R0` silently copied one bank's `R0` into
+the next bank's. See
+[src/cpu_main/README.md](src/cpu_main/README.md#Register-bank-switch).
+
 ### Microcode / instruction decomposition
 
 The core trick of this design: DECODE dynamically translates each CISC-like QNICE instruction into

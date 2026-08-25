@@ -76,6 +76,34 @@ This is during execution of the `SUB @R1++, @R1` instruction.  The first cycle
 shows a read from register 1, the second cycle shows a write to register 1, and
 cycles 3 and 4 both present the new value, despite no read request.
 
+### Bank switching
+`R0`-`R7` live in a `2**G_REGISTER_BANK_WIDTH` deep RAM, and the page is
+selected by the upper bits of `R14`:
+
+```vhdl
+lower_rd_addr_src <= reg_sr(G_REGISTER_BANK_WIDTH+7 downto 8) & src_reg_i(2 downto 0);
+```
+
+Note that this is the *registered* `reg_sr`, not the forwarded value that
+`sr_val_o` presents. Write-Before-Read therefore does **not** extend to the bank:
+a read issued in the same cycle as an `INCRB` still selects the old page.
+
+That is deliberate, and it is safe only because of an invariant maintained
+outside this module: any instruction that changes those upper bits flushes the
+pipeline when it retires, so the next register read is issued several cycles
+later, with `reg_sr` long since caught up. See
+[Register bank switch](../cpu_main/README.md#Register-bank-switch) in the
+`cpu_main` write-up for why forwarding the bank here would not have been enough
+on its own — the read address reaches the RAM a cycle before the new bank
+exists.
+
+The **write** address does not need forwarding either, for a different and
+self-contained reason: a lower-bank write requires `wr_reg_i(3) = '0'`, and the
+only ways the bank can change are `INCRB`/`DECRB`, which write no
+general-purpose register, and an ordinary write to `R14`, which has
+`wr_reg_i(3) = '1'` and so leaves `lower_wr_en` deasserted. Every other
+`wr_sr_en_i` write is a flag update, which preserves bits 15 downto 8.
+
 ### Write-Before-Read on the dedicated SR port
 
 `R14` can be written through two different ports: the ordinary write port

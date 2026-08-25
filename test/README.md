@@ -141,6 +141,22 @@ register, and read while a multi-micro-op instruction is in flight; a
 post-increment pointer reused immediately; and the stack pointer written and
 then used as a pre-decrement pointer.
 
+`H11`-`H13` cover the register bank instead of a single register. `H11` and
+`H12` switch banks — with `INCRB`/`DECRB` and with an ordinary write to `R14` —
+and then read `R0` from the very next instruction, as source and as destination.
+Both read the previous bank unless the bank switch flushes the pipeline, see
+[Register bank switch](../src/cpu_main/README.md#Register-bank-switch); `H12` is
+the case that silently copies one bank's value into another. `H13` is the
+converse: writing `R14` *without* changing the bank must not be treated as a
+switch, so that the common flag-setup idiom stays free of a flush.
+
+`prog.asm` also has a `L_BANK_00` section checking that banking works at all —
+`R0` is banked, `R8` is not, and a value survives a round trip. Its reads are
+two or more instructions after their `INCRB`/`DECRB`, so it does *not* cover the
+hazard above; that is what `H11`-`H13` are for. The exhaustive walk over all 256
+banks that follows it is left commented out, since it dominates the simulation
+time of the whole program.
+
 ## The golden writes-log comparison
 
 `src/cpu.vhd` instantiates `src/debug.vhd` (inside a `pragma synthesis_off`

@@ -130,11 +130,57 @@ H10             MOVE    D_STACK, R13
                 MOVE    R0, @--R13
                 MOVE    @R13++, R1
                 CMP     R1, 0x4321
-                ABRA    EXIT, Z
+                ABRA    H11, Z
 E_H10           HALT
 
 ; ---------------------------------------------------------------
-EXIT            MOVE    OK, R8
+; H11: register bank switched by INCRB, then R0 read by the VERY next
+;      instruction. The register read is issued two stages before the INCRB
+;      retires, so this reads the previous bank unless the bank switch
+;      flushes the pipeline (see "Register bank switch" in
+;      src/cpu_main/write.vhd).
+; ---------------------------------------------------------------
+H11             MOVE    0x0000, R14     ; bank 0
+                MOVE    0xAAAA, R0
+                INCRB                   ; bank 1
+                MOVE    0x5555, R0
+                DECRB                   ; bank 0
+                MOVE    R0, R9          ; no padding: must read bank 0
+                CMP     R9, 0xAAAA
+                ABRA    H12, Z
+E_H11           HALT
+
+; ---------------------------------------------------------------
+; H12: same, but R0 is read as the DESTINATION operand, which is the case
+;      that silently copies one bank's value into another.
+; ---------------------------------------------------------------
+H12             MOVE    0x0000, R14     ; bank 0
+                MOVE    0x1111, R0
+                MOVE    0x0100, R14     ; bank 1
+                MOVE    0x0000, R0
+                MOVE    0x0000, R14     ; bank 0
+                MOVE    0x0100, R14     ; bank 1, changed by an ORDINARY write
+                ADD     0x0000, R0      ; no padding: must read bank 1's 0x0000
+                CMP     R0, 0x0000
+                ABRA    H13, Z
+E_H12           HALT
+
+; ---------------------------------------------------------------
+; H13: writing R14 WITHOUT changing the bank must not be treated as a bank
+;      switch -- this is the common "set up a carry-in" idiom, and it has to
+;      stay free of a pipeline flush.
+; ---------------------------------------------------------------
+H13             MOVE    0x0000, R14     ; bank 0
+                MOVE    0xDDDD, R0
+                MOVE    0x0005, R14     ; flags only, same bank
+                MOVE    R0, R9
+                CMP     R9, 0xDDDD
+                ABRA    EXIT, Z
+E_H13           HALT
+
+; ---------------------------------------------------------------
+EXIT            MOVE    0x0000, R14     ; leave the register bank at 0
+                MOVE    OK, R8
                 MOVE    0x1FFF, R0      ; Test status word (see test/README.md)
                 MOVE    0x0000, @R0     ; 0 = pass
                 HALT
