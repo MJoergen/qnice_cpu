@@ -30,6 +30,7 @@ make sim TEST=prog_interleave         # run a different test program (test/<name
 make sim REGISTER_BANK_WIDTH=8        # override register bank address width (default 8)
 make system.bit                       # Vivado synthesis + bitstream (needs Vivado at $XILINX_DIR)
 make utilization                      # refresh the measured numbers in doc/README.md (needs Vivado)
+make timing                           # re-render src/cpu_main/timing.png from timing.tex (needs pdflatex)
 make synth                            # Yosys synthesis (ghdl -a, then yosys -m ghdl synth_xilinx)
 make formal                           # run all formal verification (delegates to formal/Makefile)
 make clean                            # remove all generated files, including formal/ outputs
@@ -287,7 +288,12 @@ has Vivado.
 - `src/cpu.vhd` — top-level entity tying FETCH, Icache, Registers, Memory, and `cpu_main` together.
 - `test/` — testbench (`tb_cpu.vhd`), memory models, the pass/fail monitor (`test_monitor.vhd`),
   and `.asm` test programs. See [test/README.md](test/README.md) for how to tell a passing run
-  from a failing one.
+  from a failing one. One of them, `test/prog_waveform.asm`, is not really a test: it
+  is the program the pipeline timing diagram in
+  [src/cpu_main/README.md](src/cpu_main/README.md#Waveforms) was read off, and it is in `TESTS`
+  only so that a change invalidating the diagram's quoted addresses and cycle counts fails the
+  writes-log diff. The diagram itself is hand-written in `src/cpu_main/timing.tex` and rendered
+  by `make timing`; nothing derives it from the simulation automatically.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).
 - `formal/` — one `.psl`/`.sby`/`.gtkw` triplet per formally-verified module.
 - `doc/` — architecture overview and block diagram source (`cpu.drawio`/`cpu.png`).

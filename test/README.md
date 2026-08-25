@@ -182,6 +182,19 @@ either way:
 * `T6` — store to data that merely happens to sit near the program counter. It
   costs a needless flush, which must not change what executes.
 
+`prog_waveform.asm` is different in kind from the rest: it exists to *generate*
+the pipeline timing diagram in
+[src/cpu_main/README.md](../src/cpu_main/README.md#Waveforms). It is a straight
+run of `ADD @R0++, @R0++` at address `0x0006` surrounded by `MOVE R1, R1`
+padding, and that README quotes concrete addresses, register values and cycle
+numbers read off a simulation of it. It is in `TESTS` so that a change which
+invalidates those numbers — by shifting an address, or by changing how many
+cycles the instruction takes — breaks the writes-log diff instead of silently
+leaving the diagram wrong. Its own self-check is thin on purpose: that `R0` ends
+up past both post-increments and that the sum `0x1234 + 0x2345 = 0x3579` landed
+in memory. When it does need to change, re-read the values from a fresh
+simulation and run `make timing`.
+
 ## The golden writes-log comparison
 
 `src/cpu.vhd` instantiates `src/debug.vhd` (inside a `pragma synthesis_off`

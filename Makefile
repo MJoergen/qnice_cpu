@@ -48,6 +48,7 @@ TESTS += prog_flags
 TESTS += prog_r15
 TESTS += prog_hazard
 TESTS += prog_self_modifying
+TESTS += prog_waveform
 
 ASM = test/$(TEST).asm
 ROM = test/$(TEST).rom
@@ -82,6 +83,7 @@ help:
 	@echo "  make system.bit : Run synthesis using Vivado"
 	@echo "  make utilization: Refresh the utilization numbers in doc/README.md (needs Vivado)"
 	@echo "  make synth      : Run synthesis using yosys"
+	@echo "  make timing     : Re-render src/cpu_main/timing.png (needs pdflatex)"
 	@echo "  make formal     : Run formal verification"
 	@echo "  make clean      : Remove all generated files"
 	@echo "  make help       : This message"
@@ -153,6 +155,26 @@ golden:
 
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
+
+
+################################################
+## Documentation
+################################################
+
+# The pipeline timing diagram in src/cpu_main/README.md#Waveforms. The .tex is
+# hand-written -- every value in it was read off a simulation of
+# test/prog_waveform.asm -- so this target only renders it, it does not derive
+# it. If you change the pipeline, re-read the values from a fresh simulation
+# before running this.
+TIMING = src/cpu_main/timing
+
+.PHONY: timing
+timing: $(TIMING).png
+
+$(TIMING).png: $(TIMING).tex
+	pdflatex -interaction=nonstopmode -halt-on-error -output-directory=$(dir $@) $<
+	pdftoppm -r 150 -png -singlefile $(TIMING).pdf $(TIMING)
+	rm -f $(TIMING).pdf $(TIMING).aux $(TIMING).log
 
 
 ################################################

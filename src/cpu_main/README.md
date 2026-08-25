@@ -204,9 +204,72 @@ The WRITE stage uses the remaining microoperations to control the Memory and
 Register modules.
 
 ### Waveforms
-TBD: Show here a waveform of the four stages working with a given sequence of
-instructions, or just a single instruction like `ADD @R0++, @R0++`.  This
-waveform should show the bypass operation needed for updating `R0`.
+The picture below is taken from a GHDL simulation of
+[test/prog_waveform.asm](../../test/prog_waveform.asm), a small program that
+exists to produce exactly this diagram. It follows a single instruction, `ADD
+@R0++, @R0++` (encoded as `0x1082`) at address `0x0006`. On entry `R0` is
+`0x001B`, memory holds `0x1234` at `0x001B` and `0x2345` at `0x001C`, so the
+instruction reads both operands, adds them to `0x3579`, writes that back to
+`0x001C`, and leaves `R0` at `0x001D`.
+
+The instruction occupies the pipeline for four clock cycles, t=1 to t=4, and
+consequently the FETCH module is stalled for three of them, t=1 to t=3. In the
+diagram the handshake bits (`valid`/`ready`/`enable`) are always drawn with
+their true value, whereas the payload buses are greyed out whenever their
+`valid` is low, or whenever they belong to a neighbouring instruction rather
+than to this `ADD`. The breakdown is as follows:
+
+* At time t=0: The FETCH module presents the single-word instruction and the
+  DECODE stage accepts it in the same cycle. At the same time, the REGISTERS
+  module is asked to read register 0, both as source and destination register.
+* At time t=1: The instruction is now in `prep_stage_o`, and the Sequencer
+  selects the first micro-operation `0x084` (`MEM_READ_SRC` + `REG_MOD_SRC`)
+  out of the list that DECODE emitted. At the same time the register value
+  `0x001B` is returned from the REGISTERS module.
+* At time t=2: The Sequencer selects the second micro-operation `0x002`
+  (`MEM_READ_DST`). Meanwhile the WRITE stage, which now holds `0x084`, issues
+  the first memory request `MEM_READ_SRC` from address `0x001B` and asks the
+  REGISTERS module to write `0x001B`+1 = `0x001C` to register 0. This written
+  value is bypassed combinatorially and appears on `src_val_o`/`dst_val_o` in
+  the very same cycle.
+* At time t=3: The Sequencer selects the last micro-operation `0x871` (`LAST` +
+  `REG_MOD_DST` + `MEM_WAIT_SRC` + `MEM_WAIT_DST` + `MEM_WRITE`), and the WRITE
+  stage issues the request `MEM_READ_DST` from address `0x001C`. The source
+  operand `0x1234` returns from the MEMORY module in this cycle, but the
+  destination operand does not, so the `MEM_WAIT_DST` bit makes PREPARE pull
+  `seq_ready` low and hold the micro-operation for one more cycle. This is the
+  only stall in the whole diagram. No new value is written to the REGISTERS
+  module.
+* At time t=4: The destination operand `0x2345` arrives, `seq_ready` goes high
+  again, and the last micro-operation is handed on to the WRITE stage. The FETCH
+  module also gets to deliver a new word to the DECODE stage here; that word
+  appears on `prep_stage_o` in the following cycle.
+* At time t=5: The WRITE stage issues the last request `MEM_WRITE` of `0x1234` +
+  `0x2345` = `0x3579` to address `0x001C`, and at the same time the REGISTERS
+  module is instructed to update register 0 to the value `0x001D`.
+
+Note how the two `@R0++` operands depend on each other: within this one
+instruction `R0` must go `0x001B` -> `0x001C` -> `0x001D`, and the intermediate
+value `0x001C` is only written back to the register file at t=2, long after
+DECODE issued its read at t=0. This works because DECODE does not latch the
+operand values at all; `prep_stage_o.src_val` and `prep_stage_o.dst_val` are
+wired straight through to the REGISTERS outputs:
+
+```vhdl
+prep_stage_o.src_val <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
+prep_stage_o.dst_val <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
+```
+
+So the write-before-read bypass inside the REGISTERS module (see
+[Bypass](#Bypass)) is what holds `0x001C` on `dst_val_o` from t=2 to t=4, and it
+is *that* value the WRITE stage increments to `0x001D` at t=5. Without the
+bypass the second `@R0++` would work from the stale `0x001B` and leave `R0` at
+`0x001C`.
+
+![Waveform](timing.png)
+
+The diagram is drawn by hand in [timing.tex](timing.tex), from values read off a
+simulation run; `make timing` regenerates `timing.png` from it.
 
 ## External interfaces
 In the following I'll describe in detail the interfaces to the various
@@ -550,7 +613,9 @@ stage that coincides with a read from the DECODE stage returns the newly written
 value rather than the stale one. This is a combinational bypass built into the
 register file, described in
 [registers/README.md](../registers/README.md#Operation). No action is needed in
-`cpu_main` for this case.
+`cpu_main` for this case. The [waveform](#Waveforms) above shows this bypass at
+work within a single instruction: the two `@R0++` operands of `ADD @R0++, @R0++`
+chain through it.
 
 ### Why the WRITE stage needs no Status Register bypass
 
