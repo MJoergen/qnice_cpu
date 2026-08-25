@@ -146,9 +146,11 @@ then used as a pre-decrement pointer.
 and then read `R0` from the very next instruction, as source and as destination.
 Both read the previous bank unless the bank switch flushes the pipeline, see
 [Register bank switch](../src/cpu_main/README.md#Register-bank-switch); `H12` is
-the case that silently copies one bank's value into another. `H13` is the
-converse: writing `R14` *without* changing the bank must not be treated as a
-switch, so that the common flag-setup idiom stays free of a flush.
+the case that silently copies one bank's value into another. `H13` writes `R14`
+*without* changing the bank — the flag-setup idiom — and checks that `R0` still
+reads back correctly afterwards. Note it cannot check that no flush happened:
+the trigger is syntactic, so that write does flush, and the cost is invisible to
+a self-checking program. Only the cycle count would show it.
 
 `prog.asm` also has a `L_BANK_00` section checking that banking works at all —
 `R0` is banked, `R8` is not, and a value survives a round trip. Its reads are

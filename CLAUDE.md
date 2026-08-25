@@ -119,15 +119,20 @@ register write at the end of most instructions); `R13` (Stack Pointer) is an ord
 handled in DECODE.
 
 The upper eight bits of `R14` select which of the 256 pages of `R0`-`R7` the register file
-presents, and **changing them flushes the pipeline** — `bank_switch` in `src/cpu_main/write.vhd`
-joins `fetch_valid_o` and redirects FETCH to the next instruction. This is not an optimisation
-choice: DECODE issues a register read two stages ahead of WRITE, so the instruction after an
-`INCRB` has already read the old bank by the time the new one lands, and forwarding the bank into
-the read address cannot fix it (the address reaches the RAM a cycle before the new bank exists).
-The trigger is a comparison against the value actually landing in `R14`, not "writes `R14`", so
-`MOVE ST____C_, R14` to set up a carry-in costs nothing. `test/prog_hazard.asm` `H11`-`H13` pin
-this down; before the flush existed, `INCRB` / `ADD 0, R0` silently copied one bank's `R0` into
-the next bank's. See
+presents, and **changing them flushes the pipeline** — `is_crb` in `src/cpu_main/write.vhd`, plus
+the `reg_addr_o` term next to it, join `fetch_valid_o` and redirect FETCH to the next instruction.
+This is not an optimisation choice: DECODE issues a register read two stages ahead of WRITE, so the
+instruction after an `INCRB` has already read the old bank by the time the new one lands, and
+forwarding the bank into the read address cannot fix it (the address reaches the RAM a cycle before
+the new bank exists). The trigger is deliberately **syntactic** — "writes `R14`, or is
+`INCRB`/`DECRB`" — and NOT a comparison of the new bank against the old: the precise form is more
+selective but costs the entire timing margin, since `fetch_valid_o` is the reset pin of every
+flip-flop in DECODE and PREPARE. So `MOVE ST____C_, R14` does cost a branch penalty. Do not
+"optimise" this without reading the measured numbers in the comment above `is_crb`.
+`test/prog_hazard.asm` `H11`-`H13` pin the behaviour down (before the flush existed, `INCRB` /
+`ADD 0, R0` silently copied one bank's `R0` into the next bank's), and `f_flush_on_bank_change` in
+`formal/cpu_main.psl` states what the syntactic over-approximation has to cover: whenever the bank
+bits actually change, `fetch_valid_o` must assert. See
 [src/cpu_main/README.md](src/cpu_main/README.md#Register-bank-switch).
 
 ### Microcode / instruction decomposition

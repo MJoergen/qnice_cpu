@@ -218,9 +218,15 @@ begin
    --
    -- The price is that any write to R14 flushes, even one that leaves the bank
    -- alone. That covers "MOVE ST____C_, R14" and friends; they cost a branch
-   -- penalty now. Since reg_addr_o also carries pre/post-increment writes, it
-   -- happens to cover R14 used as a POINTER as well, as long as the increment
-   -- lands on the instruction's last micro-op.
+   -- penalty now. Since p_reg is combinational and drives reg_addr_o for the
+   -- pre/post-increment write-backs as well as for ordinary results -- on every
+   -- micro-op, not just the last -- this also covers R14 used as a POINTER,
+   -- e.g. "MOVE @R14++, R0".
+   --
+   -- f_flush_on_bank_change in formal/cpu_main.psl is what checks that this
+   -- syntactic trigger really does cover every change of the bank bits: it
+   -- compares the value landing in R14 against prep_stage_i.r14, which the RTL
+   -- here never does. Narrow the term below and that property objects.
 
    ------------------------------------------------------------
    -- Self-modifying code

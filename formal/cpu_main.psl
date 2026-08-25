@@ -478,6 +478,87 @@ vunit i_cpu_main(cpu_main(synthesis))
                                      reg_val_o = c_mem_src_val};
 
 
+   ------------------------------------------------------
+   -- PIPELINE FLUSH: BANK SWITCH AND SELF-MODIFYING CODE
+   ------------------------------------------------------
+
+   -- fetch_valid_o is not just the redirect back to FETCH: cpu_main.vhd wires
+   -- it into the reset pin of every flip-flop in DECODE and PREPARE, so it is
+   -- also the pipeline flush. Three things raise it (see the expression at the
+   -- end of write.vhd): a write to R15, a register bank switch, and a store
+   -- that can land on an instruction already read. Only the first was covered
+   -- by this file; the other two rested on simulation alone
+   -- (test/prog_hazard.asm H11-H13, test/prog_self_modifying.asm).
+   --
+   -- Both are trigger conditions that invite "simplification" in the name of
+   -- timing -- which has already cost the entire slack margin once, see the
+   -- long comment above the bank switch in write.vhd. So what follows states
+   -- the REQUIREMENT rather than restating the implementation: the RTL
+   -- triggers are deliberately syntactic over-approximations, and these
+   -- properties are what they have to cover. Over-approximating further stays
+   -- legal; narrowing below these fails.
+
+   signal f_r14_next : std_logic_vector(15 downto 0);
+
+   -- The value actually landing in R14 this cycle. Mirrors the priority of the
+   -- register file's own mux (and of the reg_r14_i assumption further down): a
+   -- write through the ordinary register port to R14 beats the dedicated
+   -- Status Register port.
+   f_r14_next <= reg_val_o when reg_we_o = '1' and reg_addr_o = 14 else
+                 reg_r14_o;
+
+   -- (1) THE REQUIREMENT. If the upper eight bits of R14 change, the register
+   -- bank changes with them, and the pipeline must be flushed. DECODE issues
+   -- its register read two stages ahead of WRITE, so the instruction after the
+   -- switch has already read the OLD bank by the time the new one lands, and
+   -- only a flush can undo that.
+   --
+   -- The reference for "old bank" is prep2wr_stage.r14, i.e. the Status
+   -- Register as it stood for the instruction now retiring -- not reg_r14_i,
+   -- which the forwarding assumption below makes show the NEW value in the
+   -- very same cycle, and which would therefore make this vacuous.
+   --
+   -- Note this compares banks, which the RTL never does; it triggers on
+   -- "writes R14, or is INCRB/DECRB" instead. That is exactly what makes this
+   -- a property and not a transcription.
+   f_flush_on_bank_change : assert always
+      {rst_i = '0' and prep2wr_valid = '1' and
+       ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
+       f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8)}
+      |-> {fetch_valid_o = '1'};
+
+   -- (2) THE MECHANISM for the one bank change that does not go through a
+   -- register write at all. INCRB and DECRB reach R14 through the Status
+   -- Register port, so the reg_addr_o term of fetch_valid_o never sees them;
+   -- they need the separate is_crb term. Dropping it is the regression this
+   -- catches, and it is the exact case test/prog_hazard.asm H11 covers.
+   f_flush_on_crb : assert always
+      {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+       prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+       (prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB or
+        prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB)}
+      |-> {fetch_valid_o = '1'};
+
+   -- (3) SELF-MODIFYING CODE. A store that can land on an instruction some
+   -- stage has already read must flush. Everything already read lies in
+   -- [next_pc, next_pc+8), and next_pc is addr+1 or addr+2, so in terms of the
+   -- STORE ADDRESS the danger zone is addr+1 .. addr+10 -- hence the 11 below.
+   -- See the derivation in write.vhd above smc_delta.
+   --
+   -- This deliberately measures mem_req_addr_o, the address the store really
+   -- goes to, and not prep2wr_stage.dst_val, which is what smc_hit subtracts.
+   -- The two differ by the pre-decrement mux, so this is a check on the
+   -- implementation's window and not a copy of it: smc_hit's 32 has to be wide
+   -- enough to absorb that offset, and if someone tightens it to the "exact"
+   -- form the comment in write.vhd warns against, this is what notices.
+   f_flush_on_smc : assert always
+      {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+       mem_req_valid_o = '1' and
+       mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '1' and
+       mem_req_addr_o - prep2wr_stage.addr < 11}
+      |-> {fetch_valid_o = '1'};
+
+
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
@@ -624,6 +705,32 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- Register is being rewritten, i.e. exactly the scenario that made the
    -- original whole-record stable() assertion fail.
    c_dec2prep_stalled_sr : cover {dec2prep_valid = '1' and dec2prep_ready = '0' and rst_i = '0' and fetch_valid_o = '0' and reg_r14_we_o = '1'};
+
+   -- Non-vacuity of the three flush properties. Each antecedent has to be
+   -- reachable, or the assertion above it proves nothing at all.
+   c_flush_bank_change : cover {rst_i = '0' and prep2wr_valid = '1' and
+                                ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
+                                f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8)};
+   c_flush_incrb       : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                                prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                                prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB};
+   c_flush_decrb       : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                                prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                                prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB};
+   c_flush_smc         : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                                mem_req_valid_o = '1' and
+                                mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '1' and
+                                mem_req_addr_o - prep2wr_stage.addr < 11};
+
+   -- The converse, and the reason the SMC trigger is a window rather than
+   -- "every store": a store far away from the program counter must be able to
+   -- retire WITHOUT flushing. Unconditional flushing is functionally correct,
+   -- so no assertion in this file would notice it -- but it costs +64% of the
+   -- run time of test/prog_interleave.asm. This cover is what notices.
+   c_no_flush_far_store : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                                 mem_req_valid_o = '1' and
+                                 mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '1' and
+                                 fetch_valid_o = '0'};
 
 
    ----------------------------------------------

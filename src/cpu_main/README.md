@@ -677,21 +677,35 @@ help either: the address was applied to the RAM a full cycle before the new bank
 existed. Measured on the instruction pair `DECRB` / `MOVE R0, R9`, the read is
 issued one cycle before the `wr_sr_en_i` write lands.
 
-So `bank_switch` in [write.vhd](write.vhd) joins `fetch_valid_o`, redirecting
+So the bank switch joins `fetch_valid_o` in [write.vhd](write.vhd), redirecting
 FETCH to the address of the following instruction — the same value that
 `ASUB`/`RSUB` push as a return address. The instruction that comes back has its
 register read issued long after `reg_sr` has caught up. The cost is a branch
 penalty on a bank switch, which is what the ISA uses to enter and leave a
 subroutine: rare, and much cheaper than reading the wrong registers.
 
-The trigger is a comparison against the value actually landing in `R14`, not the
-mere fact that `R14` was written. That keeps the common `MOVE ST____C_, R14`
-idiom — setting up a carry-in, as `test/prog_flags.asm` does throughout — free
-of any flush. `test/prog_hazard.asm` covers all three cases in `H11`-`H13`.
+The trigger is deliberately *syntactic* — "this instruction writes `R14`, or it
+is `INCRB`/`DECRB`" — and not a comparison of the new bank against the old. The
+precise version is more selective, and would leave the common
+`MOVE ST____C_, R14` idiom free of a flush, but it costs the entire timing
+margin: `fetch_valid_o` is the reset pin of every flip-flop in two stages, so
+feeding it from `reg_val_o` puts the ALU result and an 8-bit comparator in front
+of a high-fanout net. The measured numbers are in the comment above `is_crb` in
+[write.vhd](write.vhd). The price of the syntactic form is that *any* write to
+`R14` costs a branch penalty, `MOVE ST____C_, R14` included.
 
-**Known gap:** `R14` used as a pre/post-increment *pointer* (`MOVE @R14++, R0`)
-modifies `R14` on a micro-op that need not be the last one, and a carry out of
-bit 15 of such an increment is not detected. No test program does this.
+Because the trigger keys on `reg_addr_o`, which the combinational `p_reg` drives
+for pre/post-increment write-backs as well as for ordinary results, it covers
+`R14` used as a *pointer* (`MOVE @R14++, R0`) too, on any micro-op rather than
+only the last.
+
+`test/prog_hazard.asm` covers `INCRB`, `DECRB` and the ordinary-write case in
+`H11`-`H13`. What those cannot show is that the over-approximation is
+*complete*; that is `f_flush_on_bank_change` in
+[formal/cpu_main.psl](../../formal/cpu_main.psl), which states the requirement
+directly — whenever the upper eight bits of `R14` change, `fetch_valid_o` must
+assert — and so checks the syntactic trigger against the semantic one it stands
+in for.
 
 ### Self-modifying code
 The third thing that flushes the pipeline is a store into the instruction stream.
@@ -710,7 +724,11 @@ comment above `smc_delta`.
 
 See [Self-modifying code](../../doc/README.md#Self-modifying-code) for the
 architectural picture and [`test/prog_self_modifying.asm`](../../test/prog_self_modifying.asm)
-for the coverage.
+for the coverage. `f_flush_on_smc` in
+[formal/cpu_main.psl](../../formal/cpu_main.psl) pins the window from the other
+side: it measures the *real* store address (`mem_req_addr_o`, i.e. after the
+pre-decrement mux) against the retiring instruction's address, so it constrains
+how far `smc_hit`'s cheaper subtraction may be tightened.
 
 ## Formal verification
 `formal/cpu_main.psl` verifies the assembled DECODE + PREPARE + WRITE pipeline
@@ -720,7 +738,7 @@ each interface, the fixed one-cycle read latency of the Register module, and the
 fact that at most one source and one destination read may be outstanding
 towards the Memory module at a time.
 
-The assertions fall into three groups:
+The assertions fall into four groups:
 
 * **Internal handshakes.** `f_dec2prep_valid_stable` and `f_prep2wr_valid_stable`
   check that the payload and valid of each internal stage interface hold stable
@@ -766,6 +784,30 @@ The assertions fall into three groups:
   changing, so traces where the design writes to it are excluded from every
   property in the file.
 
+* **Pipeline flush.** `fetch_valid_o` is not only the redirect back to FETCH; it
+  is the reset pin of every flip-flop in DECODE and PREPARE, so everything that
+  raises it is a flush (see [Pipeline flush](#Pipeline-flush) above). Three
+  properties cover the two conditions that used to rest on simulation alone.
+  `f_flush_on_bank_change` states the *requirement* rather than the
+  implementation: whenever the value landing in `R14` changes the upper eight
+  bits relative to `prep2wr_stage.r14`, `fetch_valid_o` must assert. The RTL
+  never compares banks — it triggers syntactically on "writes `R14`, or is
+  `INCRB`/`DECRB`" — so this is a check that the over-approximation really does
+  cover every bank change, not a restatement of it. `f_flush_on_crb` pins the
+  `INCRB`/`DECRB` term specifically, since those two reach `R14` through the
+  Status Register port and the `reg_addr_o` term never sees them.
+  `f_flush_on_smc` does the same for self-modifying code, and deliberately
+  measures `mem_req_addr_o` — the address the store really goes to, after the
+  pre-decrement mux — rather than the `prep_stage_i.dst_val` that `smc_hit`
+  subtracts, so it constrains the window instead of copying it.
+
+  The four `c_flush_*` covers show each antecedent is reachable.
+  `c_no_flush_far_store` is the one that runs the other way: it requires that a
+  store far from the program counter can retire *without* a flush. Flushing
+  unconditionally is functionally correct, so no assertion here would object to
+  it — but it costs +64% of the run time of `test/prog_interleave.asm`, and this
+  cover is what notices.
+
 The Sequencer is additionally verified standalone in `formal/sequencer.psl`,
 where `prove` (k-induction) passes: output valid is a pure pass-through of input
 valid, the payload is stable while stalled, no new DECODE beat is accepted
@@ -775,9 +817,15 @@ under [DECODE](#DECODE) is an *assume* there, not an assert - it is a
 requirement on the microcode ROM, not a property of the Sequencer.
 
 **Status.** `cpu_main.sby` defines a `cover` and a `bmc` task, both at depth 20.
-Both pass, and the assertions are mutation-tested: corrupting the register read
+Both pass, and the assertions are mutation-tested. Corrupting the register read
 address, the register write address, the written value, or the write enable each
-produces a failure. (They also pass at depth 30, which takes about 40 seconds; depth 20
+produces a failure. So does each of five mutations of the flush logic in
+[write.vhd](write.vhd): dropping the `is_crb` term (fails `f_flush_on_crb` and
+`f_flush_on_bank_change`), dropping the `smc_hit` term (fails `f_flush_on_smc`),
+narrowing the self-modifying-code window from 32 words to 4 (fails
+`f_flush_on_smc`), narrowing the register-write term from "`R14` or `R15`" to
+"`R15` only" (fails `f_flush_on_bank_change`), and forcing `smc_hit` to `'1'` so
+that every store flushes (leaves `c_no_flush_far_store` unreached). (They also pass at depth 30, which takes about 40 seconds; depth 20
 runs in under ten.) K-induction (`prove`) is not attempted for `cpu_main`.
 
 `bmc` used to fail at depth 4 on `f_dec2prep_valid_stable`. That was a defect in
