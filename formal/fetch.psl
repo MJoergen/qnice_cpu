@@ -31,6 +31,13 @@ vunit i_fetch(fetch(synthesis))
    -- state is then cross-checked against the RTL state, which both catches
    -- bookkeeping bugs and provides strong invariants for k-induction.
    signal f_wb_outstanding     : integer range 0 to 3 := 0;
+
+   -- Every acknowledgement the slave returns inside a live bus cycle,
+   -- including one owed to a request that a redirect has abandoned. The design
+   -- discards those itself rather than cancelling them by dropping CYC, so the
+   -- shadow state has to see them; wb_rsp_accept, which the design gates, does
+   -- not carry them.
+   signal f_wb_ack : std_logic;
    signal f_wb_addr            : std_logic_vector(15 downto 0) := (others => '0');
    signal f_wb_stall_delay     : integer range 0 to 3 := 0;
    signal f_wb_ack_delay       : integer range 0 to 3 := 0;
@@ -57,19 +64,54 @@ vunit i_fetch(fetch(synthesis))
    -- SHADOW STATE MAINTENANCE
    --------------------------------------------
 
+   f_wb_ack <= wb_cyc_o and wb_ack_i;
+
    -- Count the number of outstanding WISHBONE requests.
    -- Derived from ports only.  If CYC goes low the transaction is aborted and
    -- all outstanding requests are cancelled.
+   --
+   -- NOTE: the clearing condition is "CYC low", not "redirect". Those used to
+   -- be the same thing, because a redirect always tore the bus cycle down.
+   -- FETCH now keeps CYC asserted across a redirect where it can, and discards
+   -- the acknowledgements owed to the abandoned requests itself, so a redirect
+   -- on its own cancels nothing on the bus. Getting this wrong in the obvious
+   -- direction -- clearing on dc_valid_i, as before -- makes
+   -- f_wb_slave_ack_idle forbid exactly the stale acknowledgements that the
+   -- discard logic exists to handle, and the whole mechanism goes unexercised
+   -- while every property still passes.
    p_wb_outstanding : process (clk_i)
+      variable n : integer range 0 to 3;
    begin
       if rising_edge(clk_i) then
-         if wb_req_accept = '1' and wb_rsp_accept = '0' then
-            f_wb_outstanding <= f_wb_outstanding + 1;
-         elsif wb_req_accept = '0' and wb_rsp_accept = '1' then
-            f_wb_outstanding <= f_wb_outstanding - 1;
+         n := f_wb_outstanding;
+
+         if wb_req_accept = '1' then
+            n := n + 1;
          end if;
 
-         if rst_i = '1' or dc_valid_i = '1' then
+         if f_wb_ack = '1' then
+            n := n - 1;
+         end if;
+
+         -- A redirect cancels everything outstanding exactly when FETCH cannot
+         -- redirect the bus cycle and has to tear it down instead, which is
+         -- when a request is stuck in a stall -- the only way STB can survive
+         -- the acceptance step above. The condition is port-derived, and
+         -- f_outstanding_match below cross-checks the result against the RTL's
+         -- own counter, so a divergence between this mirror and fetch.vhd is
+         -- caught rather than silently assumed away.
+         --
+         -- Clearing on "wb_cyc_o = '0'" instead looks equivalent and is not:
+         -- the registered CYC goes low one cycle after the decision, which
+         -- leaves a window where this counter is non-zero while CYC is already
+         -- low, and f_inv_cyc_outstanding fails on it.
+         if dc_valid_i = '1' and wb_stb_o = '1' and wb_stall_i = '1' then
+            n := 0;
+         end if;
+
+         f_wb_outstanding <= n;
+
+         if rst_i = '1' then
             f_wb_outstanding <= 0;
          end if;
       end if;
@@ -98,13 +140,13 @@ vunit i_fetch(fetch(synthesis))
    p_ack_addr : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if wb_rsp_accept = '1' then
+         if f_wb_ack = '1' then
             f_ack_addr0 <= f_ack_addr1;
          end if;
 
          if wb_req_accept = '1' then
             if f_wb_outstanding = 0 or
-               (f_wb_outstanding = 1 and wb_rsp_accept = '1') then
+               (f_wb_outstanding = 1 and f_wb_ack = '1') then
                f_ack_addr0 <= wb_addr_o;
             else
                f_ack_addr1 <= wb_addr_o;
@@ -339,7 +381,7 @@ vunit i_fetch(fetch(synthesis))
    -- f_const_data.  f_ack_addr0 is the address of the oldest outstanding
    -- request, i.e. the one being acknowledged.
    f_wb_slave_data : assume always
-      {wb_rsp_accept = '1' and f_ack_addr0 = f_const_addr} |-> {wb_data_i = f_const_data};
+      {f_wb_ack = '1' and f_ack_addr0 = f_const_addr} |-> {wb_data_i = f_const_data};
 
    -- WISHBONE SLAVE: Stall for at most three consecutive cycles.  This is an
    -- artificial constraint.  It is written as an implication on the input so
@@ -379,8 +421,20 @@ vunit i_fetch(fetch(synthesis))
    -- An abort while a transaction is in progress
    f_cover_abort_active : cover {wb_cyc_o and dc_valid_i};
 
-   -- An abort while two requests are outstanding
+   -- An abort while two requests are outstanding.  This is now also the case
+   -- that forces the bus cycle to be torn down rather than redirected, since
+   -- redirecting it would need a third request slot.
    f_cover_abort_full : cover {f_wb_outstanding = 2 and dc_valid_i = '1'};
+
+   -- A redirect that keeps the bus cycle alive, leaving an acknowledgement
+   -- owed to a request nobody wants any more.  This is the scenario the whole
+   -- fast path turns on: without this cover the discard logic could be dead
+   -- code and every assertion above would still pass.
+   f_cover_abort_redirect : cover {f_wb_outstanding = 1 and dc_valid_i = '1' and wb_stb_o = '0'};
+
+   -- ...and the acknowledgement actually arriving afterwards, which is the
+   -- moment the discard either works or corrupts the instruction stream.
+   f_cover_stale_ack : cover {f_wb_outstanding = 1 and dc_valid_i = '1' and wb_stb_o = '0'; wb_ack_i = '1'};
 
    -- Both outstanding request slots in use
    f_cover_two_outstanding : cover {f_wb_outstanding = 2};
@@ -435,13 +489,40 @@ vunit i_fetch(fetch(synthesis))
 
    -- Every address in the address FIFO either has its data waiting in the data
    -- buffer, or is still outstanding on the bus.
+   --
+   -- wb_stale is the part of f_wb_outstanding whose addresses are NOT in the
+   -- FIFO any more: a redirect flushes the FIFO but leaves those requests owed
+   -- an acknowledgement on the bus. Written with wb_stale added to the left
+   -- rather than subtracted from the right so that no intermediate value can
+   -- go negative. Unlike the shadow state above, this reads an RTL signal
+   -- directly -- which the rest of this k-induction section already does for
+   -- wb_pending and the two fill counts, since these are invariants about the
+   -- implementation rather than about the interface.
    f_inv_fill : assert always
       {not rst_i} |->
-      {tsf_in_addr_fill = tsb_in_data_fill + f_wb_outstanding};
+      {tsf_in_addr_fill + wb_stale = tsb_in_data_fill + f_wb_outstanding};
 
-   -- Slot allocation bounds the outstanding request count.
+   -- While an acknowledgement is still owed to an abandoned request, nothing
+   -- can yet have arrived for the new instruction stream: the slave
+   -- acknowledges in order, so every live response is behind every stale one,
+   -- and the data buffer was flushed by the redirect that created the stale
+   -- count in the first place.
+   --
+   -- Induction needs this stated explicitly. It starts from an arbitrary
+   -- state, in which a non-zero wb_stale and a non-empty data buffer can
+   -- coexist -- and from there the next acknowledgement is discarded while a
+   -- response already in the buffer gets paired with an address from the new
+   -- stream, which is exactly the corruption f_dc_data_integrity forbids.
+   -- Without this invariant that property is true but not inductive.
+   f_inv_stale_data_empty : assert always
+      {rst_i = '0' and wb_stale > 0} |-> {tsb_in_data_fill = 0};
+
+   -- Slot allocation bounds the outstanding request count.  The bound itself is
+   -- unchanged by the redirect fast path: FETCH refuses it, and tears the bus
+   -- cycle down instead, whenever taking it would need a third request slot.
    f_inv_bound : assert always
-      {not rst_i} |-> {wb_pending <= 2 and f_wb_outstanding <= wb_pending};
+      {not rst_i} |-> {wb_pending <= 2 and f_wb_outstanding <= 2 and
+                       f_wb_outstanding <= wb_pending + wb_stale};
 
    -- STB is only ever asserted together with CYC.
    f_inv_stb_cyc : assert always {wb_stb_o} |-> {wb_cyc_o};

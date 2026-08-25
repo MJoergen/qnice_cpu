@@ -230,9 +230,24 @@ the PC — both pass either way, and are there to pin the two edges.
 
 
 ## Optimizations
-I have a few ideas for cycle optimizations at the moment:
-* Make the fetch module not clear `wbi_cyc_o` at every branch. This will reduce
-  the branch penalty by one clock cycle.
+
+**Done: the FETCH module no longer clears `wbi_cyc_o` at every branch.** A
+redirect now keeps the bus cycle alive and issues the first request of the new
+instruction stream on the next clock cycle, instead of tearing the cycle down
+and waiting a cycle before `STB` can be reasserted. That saves exactly one cycle
+per redirect: 741 of them in `test/prog.asm`, **−4.7%** of its run time, and up
+to −9.1% on the branch-dense programs. The per-program figures are in
+`test/*.stats.golden`; the memory-request counts there are unchanged, i.e. the
+same bus traffic simply happens a cycle earlier. Cost: 6 LUTs and 2 flip-flops
+in FETCH, and a new requirement that the slave acknowledge in order — see
+[fetch/README.md](../src/fetch/README.md#Redirect).
+
+Remaining ideas:
+* The Icache adds a further cycle to the branch penalty: a word arriving from
+  FETCH is registered before DECODE sees it. A bypass for the empty-buffer case
+  would remove it, at the cost of a combinational path from the Wishbone data
+  input through to DECODE. Unlike the redirect above, this one trades against
+  Fmax rather than being free.
 
 
 ## TODO
@@ -245,7 +260,7 @@ I have a few ideas for cycle optimizations at the moment:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `96baad8`.
+Measured with Vivado 2022.2 on commit `ed4bb0c-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -262,30 +277,42 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  873 |     63400 | 1.38 |
-| Slice Registers |  580 |    126800 | 0.46 |
-| Slices          |  292 |     15850 | 1.84 |
+| Slice LUTs      |  891 |     63400 | 1.41 |
+| Slice Registers |  582 |    126800 | 0.46 |
+| Slices          |  287 |     15850 | 1.81 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.260 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.400 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[r14][3]` to
-`i_icache/m_addr_reg[18]`: 9 logic levels, with 76% of the delay in routing
-rather than logic.
+The worst setup path runs from `i_registers/i_ram_lower_dst/dp_ram_r_reg` to
+`i_registers/i_ram_lower_dst/gen_block_ram.rd_data_o_reg[13]`: 0 logic levels,
+with 33% of the delay in routing rather than logic.
 <!-- end -->
 
-**Read those instance names with care.** The shipping build uses
-`-flatten_hierarchy rebuilt`, which re-attributes logic across module
-boundaries, so every net on this path is reported under `i_prepare/` even though
-most of it is the ALU, which lives in WRITE. The full path listing in
-`timing_summary.rpt` gives it away: the second hop is `i_write/i_alu/addend[0]`.
+**In the build measured above, the worst path is not the one this section
+describes.** It is a Block RAM clock-to-out path inside the register file, with
+zero logic levels — nothing to optimise, and nothing this design controls. What
+that means is that the Status Register loop below, which had been the limiter in
+every build measured until now, has for once come out with more slack than the
+BRAM. Do not read it as a durable change: the loop is routing-dominated, this
+design's placement noise has been measured at up to 0.284 ns from edits nowhere
+near it, and the two paths are well inside that of each other. Re-measure before
+concluding anything. Everything below still describes the path that sets this
+CPU's Fmax whenever logic, rather than the BRAM, is the limit.
 
-What the path really is, in both builds where the full listing was examined, is
+**Read the instance names in these listings with care.** The shipping build uses
+`-flatten_hierarchy rebuilt`, which re-attributes logic across module
+boundaries, so when the Status Register loop is the worst path every net on it
+is reported under `i_prepare/` even though most of it is the ALU, which lives in
+WRITE. The full path listing in `timing_summary.rpt` gives it away: the second
+hop is `i_write/i_alu/addend[0]`.
+
+What that path really is, in every build where the full listing was examined, is
 the **Status Register loop**:
 
 ```
@@ -311,6 +338,12 @@ reduction of the ALU result, so the entire 16-way result mux sat between the
 adder and the flags. Muxing everything except the addition first, in parallel
 with the adder, left the adder facing a single 2:1 select: 11 logic levels
 became 7, and WNS went from +0.272 ns to +0.344 ns.
+
+Keeping the bus cycle alive across a redirect (see
+[Optimizations](#Optimizations)) went the other way: +0.260 ns to +0.400 ns, at
+6 LUTs more in FETCH, and the worst path moved off this loop entirely. Since
+FETCH is nowhere near the loop, read that as placement noise rather than as a
+gain — the point is that it is not a regression.
 
 Adding the register-bank flush cost **0.098 ns** of that margin (+0.344 ns to
 +0.246 ns at 4 LUTs *fewer*, both measured at commit `b987964`). That is not a
@@ -377,7 +410,7 @@ written:
 
 | Module          | LUTs | FFs |
 | --------------- | ---- | --- |
-| FETCH           |   54 |  90 |
+| FETCH           |   60 |  92 |
 | CACHE (icache)  |   40 |  66 |
 | DECODE          |   54 |  74 |
 | PREPARE         |   81 | 131 |
@@ -385,7 +418,7 @@ written:
 | Registers       |  166 | 142 |
 | Memory          |   57 |  74 |
 | Glue            |    8 |   1 |
-| **CPU total**   |  923 | 578 |
+| **CPU total**   |  929 | 580 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
@@ -404,7 +437,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (923 vs 873 LUTs). That is expected:
+The two tables do not add up to each other (929 vs 891 LUTs). That is expected:
 the first is measured after place-and-route, where physical optimisation
 replicates logic to meet timing, while the second stops after synthesis. Slices
 are not listed per module because slices are shared between modules and are not

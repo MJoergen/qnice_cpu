@@ -63,17 +63,65 @@ Internally it is three of the [elastic-pipeline primitives](../sub):
 returning data, and `pipe_concat` joins the two streams into
 `dc_addr_o`/`dc_data_o`. All three are reset with `rst_i or dc_valid_i`.
 
-The interface contracts (also stated in the file header) are:
+### Redirect
+
+A redirect (`dc_valid_i`) does **not** normally terminate the bus cycle. `CYC`
+stays asserted and the first request of the new instruction stream goes out on
+the very next clock cycle. Tearing the bus cycle down instead — which is what
+this module used to do — costs an extra cycle before `STB` can be reasserted,
+and that cycle lands on the critical path of every taken branch, because the
+pipeline behind it is empty and waiting.
+
+The price is that requests the slave has already accepted still owe an
+acknowledgement, and those acknowledgements must not be paired with an address
+from the new stream. `wb_stale` counts them, and `wb_rsp_accept` — the signal
+that pushes into the data buffer — is gated so they are discarded on arrival.
+That is what turns contract (c) below into contract (d): cancellation by
+dropping `CYC` is replaced by discarding a known number of responses, which
+works only against a slave that acknowledges **in order**.
+
+Two details are load-bearing:
+
+* The redirect is applied **before** the issue step in `p_wishbone`, not after.
+  That ordering is the entire optimisation; it used to be the other way round,
+  with the redirect explicitly overriding the issue.
+* The issue budget counts `wb_stale` alongside the allocated slots. A stale
+  request still occupies a slot on the *bus* even though it no longer occupies
+  one here, and without that term a redirect could push the number of
+  unacknowledged requests past `C_MAX_PENDING` — which is both an assertion
+  (`f_wb_master_req_count_max`) and a constraint on how much any slave has to
+  be able to queue.
+
+The bus cycle is still torn down in the one case where it cannot be redirected:
+a request already asserted on `STB` that the slave has not yet accepted.
+WISHBONE B4 lets the master neither withdraw `STB` nor alter the request while
+`STALL` is asserted. A slave that never stalls — the dual-port RAM this CPU is
+built around — never reaches that path.
+
+Measured over the nine test programs, this removes one clock cycle from every
+redirect: 741 cycles off `test/prog.asm` (−4.7%), and up to −9.1% on the
+branch-dense ones. The per-program figures live in `test/*.stats.golden`; the
+memory-request counts in those files are unchanged, i.e. the same bus traffic
+happens one cycle earlier rather than more of it happening.
+
+### Interface contracts
+
+Also stated in the file header:
 
 * `dc_valid_i` is an unconditional, single-cycle flush with no back-pressure:
-  the current WISHBONE transaction is aborted, both internal FIFOs are cleared,
-  and fetching restarts at `dc_addr_i`.
+  everything already fetched is abandoned, both internal FIFOs are cleared, and
+  fetching restarts at `dc_addr_i`.
 * WRITE **must** supply a PC before any fetched instruction is meaningful —
   `wb_addr_o` resets to zero, so without one the unit fetches from address 0.
 * The WISHBONE slave **must not** assert `ACK` after `CYC` has been deasserted.
   Deasserting `CYC` cancels all outstanding requests; a slave that acked a
   cancelled request would pair stale data with the address of a new request,
   i.e. silent instruction corruption.
+* The WISHBONE slave **must** acknowledge requests **in order**. Nothing on the
+  bus says which request an `ACK` belongs to, so discarding what an abandoned
+  request is owed means discarding the next `wb_stale` acknowledgements. The
+  Memory module makes the same assumption for the same reason, see
+  [memory/README.md](../memory/README.md).
 
 ## icache.vhd
 
@@ -199,6 +247,44 @@ proves the *composition* — in particular that `cpu.vhd` really does drive
 `icache_rst` with the same redirect `fetch` sees. That wiring is the one thing
 that used to be internal to `fetch_cache.vhd` and is now the top level's
 responsibility.
+
+#### The shadow model and the redirect fast path
+
+`fetch.psl` maintains shadow state recomputed from the module's **ports only**,
+then cross-checks it against the RTL (`f_outstanding_match`). That gives the
+properties independence from the implementation and hands k-induction strong
+invariants. The redirect fast path moved one line of it that is easy to get
+wrong: `f_wb_outstanding` used to be cleared on `dc_valid_i`, because a redirect
+always tore the bus cycle down. It no longer does, so the counter is now cleared
+only when the design actually cancels — a request stuck in a stall.
+
+The failure mode of getting this wrong is silent rather than loud. The
+assumption `f_wb_slave_ack_idle` forbids an `ACK` when `f_wb_outstanding = 0`;
+clear the counter on every redirect and the environment can never produce a
+stale acknowledgement at all, so the discard logic goes completely unexercised
+while every assertion in the file still passes. `f_cover_abort_redirect` and
+`f_cover_stale_ack` exist to make that visible: they require a redirect that
+leaves an acknowledgement owed, and that acknowledgement then arriving.
+
+Clearing on `wb_cyc_o = '0'` instead looks equivalent and is not — the
+registered `CYC` goes low one cycle after the decision, leaving a window where
+the counter is non-zero while `CYC` is already low, which
+`f_inv_cyc_outstanding` catches. The shadow therefore mirrors the design's own
+cancel condition, from ports.
+
+Two invariants carry the induction proof across the change:
+
+* `f_inv_fill` gains a `wb_stale` term. It relates the address FIFO to the data
+  buffer plus what is outstanding on the bus, and a stale request is precisely
+  one whose address is no longer in the FIFO.
+* `f_inv_stale_data_empty` is new: while an acknowledgement is owed to an
+  abandoned request, the data buffer must be empty. This is true because the
+  slave acknowledges in order and the redirect flushed the buffer — but
+  induction begins from an arbitrary state where a stale count and a non-empty
+  buffer can coexist, and from there a discarded response lets a buffered one be
+  paired with an address from the new stream. That is exactly what
+  `f_dc_data_integrity` forbids, and without this invariant it is true but not
+  inductive.
 
 ### Reset and flush escapes
 
