@@ -10,6 +10,8 @@
 ; run both polarities of the relevant SR bit. What this program adds is timing:
 ; producer and consumer in adjacent clock cycles, at several spacings and in
 ; several addressing modes.
+; For added robustness the carry flag is deliberately set to the inverted value
+; at the beginning of each test.
 ;
 ; Every failed sub-test branches to its own HALT. Success falls through to EXIT.
 
@@ -20,6 +22,7 @@
 ; ---------------------------------------------------------------
 ; T1: C produced by ADD, consumed by the ADDC in the very next cycle
 ; ---------------------------------------------------------------
+                MOVE    ST______, R14   ; Clear carry (this becomes the old value)
                 MOVE    0x0000, R2
                 MOVE    0x0000, R3
                 MOVE    0xFFFF, R0
@@ -33,7 +36,8 @@ E_T1            HALT
 ; ---------------------------------------------------------------
 ; T2: same shape, but the ADD produces C = 0
 ; ---------------------------------------------------------------
-T2              MOVE    0x0000, R2
+T2              MOVE    ST____C_, R14   ; Set carry (this becomes the old value)
+                MOVE    0x0000, R2
                 MOVE    0x0000, R3
                 MOVE    0x0001, R0
                 MOVE    0x0001, R1
@@ -47,7 +51,8 @@ E_T2            HALT
 ; T3: C written to R14 through the ORDINARY register write port,
 ;     consumed by the ADDC in the very next cycle
 ; ---------------------------------------------------------------
-T3              MOVE    0x0000, R2
+T3              MOVE    ST______, R14   ; Clear carry (this becomes the old value)
+                MOVE    0x0000, R2
                 MOVE    0x0000, R3
                 MOVE    ST____C_, R14   ; C = 1
                 ADDC    R3, R2          ; R2 = 0 + 0 + 1
@@ -59,7 +64,8 @@ E_T3            HALT
 ; T4: one instruction of spacing between producer and consumer.
 ;     MOVE updates N and Z but preserves C.
 ; ---------------------------------------------------------------
-T4              MOVE    0x0000, R2
+T4              MOVE    ST______, R14   ; Clear carry (this becomes the old value)
+                MOVE    0x0000, R2
                 MOVE    0x0000, R3
                 MOVE    0xFFFF, R0
                 MOVE    0x0001, R1
@@ -73,7 +79,8 @@ E_T4            HALT
 ; ---------------------------------------------------------------
 ; T5: two instructions of spacing
 ; ---------------------------------------------------------------
-T5              MOVE    0x0000, R2
+T5              MOVE    ST______, R14   ; Clear carry (this becomes the old value)
+                MOVE    0x0000, R2
                 MOVE    0x0000, R3
                 MOVE    0xFFFF, R0
                 MOVE    0x0001, R1
@@ -89,7 +96,8 @@ E_T5            HALT
 ; T6: ADDC with a MEMORY source operand, so the consumer is a
 ;     multi-micro-op instruction that stalls on the memory read
 ; ---------------------------------------------------------------
-T6              MOVE    D_ZERO, R6
+T6              MOVE    ST______, R14   ; Clear carry (this becomes the old value)
+                MOVE    D_ZERO, R6
                 MOVE    0x0000, R7
                 MOVE    0xFFFF, R0
                 MOVE    0x0001, R1
@@ -103,12 +111,14 @@ E_T6            HALT
 ; T7: differential SUBC. Same operands, borrow-in 0 vs 1.
 ;     The two results MUST differ, whatever the exact convention is.
 ; ---------------------------------------------------------------
-T7              MOVE    0x0000, R2
+T7              MOVE    ST____C_, R14   ; Set carry (this becomes the old value)
+                MOVE    0x0000, R2
                 MOVE    0x0000, R3
                 MOVE    ST______, R14   ; C = 0
                 SUBC    R3, R2
                 MOVE    R2, R8          ; save first result
 
+                MOVE    ST______, R14   ; Clear carry (this becomes the old value)
                 MOVE    0x0000, R2
                 MOVE    0x0000, R3
                 MOVE    ST____C_, R14   ; C = 1
@@ -122,11 +132,13 @@ E_T7            HALT
 ; ---------------------------------------------------------------
 ; T8: differential SHR. The vacated top bits are filled with C.
 ; ---------------------------------------------------------------
-T8              MOVE    0x8000, R2
+T8              MOVE    ST____C_, R14   ; Set carry (this becomes the old value)
+                MOVE    0x8000, R2
                 MOVE    ST______, R14   ; C = 0
                 SHR     0x0004, R2
                 MOVE    R2, R8
 
+                MOVE    ST______, R14   ; Clear carry (this becomes the old value)
                 MOVE    0x8000, R2
                 MOVE    ST____C_, R14   ; C = 1
                 SHR     0x0004, R2
@@ -144,3 +156,4 @@ EXIT            MOVE    OK, R8
 
 OK              .ASCII_W "OK\n"
 D_ZERO          .DW     0x0000
+

@@ -1,6 +1,15 @@
 ; Data-hazard tests: back-to-back dependent instructions.
 ;
+; The sub-tests that check a Status Register bit first write R14 directly with
+; that bit CLEARED, so the bit the test then looks for can only have come from
+; the producing instruction. Without that, an SR path that never updated at all
+; would pass: every sub-test is entered through a taken "ABRA <label>, Z", so
+; Z is already 1 on arrival.
+;
 ; Every failed sub-test branches to its own HALT. Success falls through to EXIT.
+
+; Status register (bits 7 - 0) of R14:  - - V N Z C X 1
+#define ST______ 0x0001
 
                 .ORG 0x0000
 
@@ -43,10 +52,12 @@ H4              MOVE    0x0007, R0
 E_H4            HALT
 
 ; ---------------------------------------------------------------
-; H5: SR written, then consumed by the next instruction's condition
+; H5: SR written as an ORDINARY register, read back by the next instruction,
+;     and the Z it produces consumed by the one after that. The value 0x0005
+;     has Z clear, so the ABRA can only be taken on the CMP's own Z.
 ; ---------------------------------------------------------------
-H5              MOVE    0x0005, R0
-                CMP     R0, 0x0005
+H5              MOVE    0x0005, R14
+                CMP     R14, 0x0005
                 ABRA    H6, Z
 E_H5            HALT
 
@@ -55,7 +66,8 @@ E_H5            HALT
 ;     Z (bit 3) must be set by the ADD.
 ; ---------------------------------------------------------------
 H6              MOVE    0x0000, R0
-                ADD     0x0000, R0
+                MOVE    ST______, R14   ; Z = 0, the inverse of what ADD produces
+                ADD     0x0000, R0      ; result 0, so Z = 1
                 MOVE    R14, R9
                 AND     0x0008, R9
                 CMP     R9, 0x0008
@@ -68,7 +80,8 @@ E_H6            HALT
 ; ---------------------------------------------------------------
 H7              MOVE    D_B, R5
                 MOVE    0x0000, R0
-                ADD     0x0000, R0
+                MOVE    ST______, R14   ; Z = 0, the inverse of what ADD produces
+                ADD     0x0000, R0      ; result 0, so Z = 1
                 MOVE    R14, @R5
                 MOVE    @R5, R9
                 AND     0x0008, R9
@@ -82,7 +95,8 @@ E_H7            HALT
 ; ---------------------------------------------------------------
 H8              MOVE    D_ZERO, R5
                 MOVE    0x0000, R0
-                ADD     0x0000, R0
+                MOVE    ST______, R14   ; Z = 0, the inverse of what ADD produces
+                ADD     0x0000, R0      ; result 0, so Z = 1
                 ADD     @R5, R14        ; adds 0, so SR is unchanged...
                 MOVE    R14, R9
                 AND     0x0008, R9
