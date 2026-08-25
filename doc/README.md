@@ -255,7 +255,15 @@ Remaining ideas:
   modules, thirty-five tasks). What is still missing is a `prove` (k-induction)
   task for `cpu_main`, and closing the last open property of `memory`'s
   inductive proof.
-* Add interrupts.
+* Add interrupts. `RTI`, `INT` and `EXC` are not decoded anywhere today, and
+  without help they retire as silent no-ops; `p_unimplemented` in
+  [write.vhd](../src/cpu_main/write.vhd) fails the simulation on them instead,
+  so a half-finished implementation cannot look like a working one. Two
+  constraints to know before starting: `RTI` restores `R14` and so can change
+  the register bank, which must reach the flush described under
+  [Register bank switch](../src/cpu_main/README.md#Register-bank-switch); and an
+  interrupt would be a fourth driver of `fetch_valid_o`, a net whose timing
+  history is documented above `is_crb` in the same file.
 
 
 ## Utilization

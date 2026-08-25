@@ -124,10 +124,38 @@ begin
          when C_OPCODE_AND  => res_other <= "0" & (dst_data_i and src_data_i);
          when C_OPCODE_OR   => res_other <= "0" & (dst_data_i or src_data_i);
          when C_OPCODE_XOR  => res_other <= "0" & (dst_data_i xor src_data_i);
-         when C_OPCODE_CMP  => null; -- TBD
-         when C_OPCODE_RES  => null; -- TBD
-         when C_OPCODE_CTRL => null; -- TBD
-         when C_OPCODE_JMP  => null; -- TBD
+         -- The four arms below all fall through to res_other's default of
+         -- "0" & src_data_i. They used to be marked TBD; they are not
+         -- unfinished. Each was checked by forcing res_other to a different
+         -- value in that arm alone and re-running the whole test suite:
+         --
+         --   CMP  -- don't care. The microcode issues neither REG_WRITE nor
+         --           MEM_WRITE for a CMP, so res_data is never consumed. Only
+         --           the flags matter, and those come from alu_flags.
+         --   CTRL -- don't care, for the same reason: entry 0 of the microcode
+         --           ROM writes nothing. INCRB/DECRB reach R14 through
+         --           alu_flags, and HALT writes nothing at all.
+         --   JMP  -- LOAD-BEARING. Do not give this arm a value of its own.
+         --           DECODE rewrites a JMP's microcode to carry REG_WRITE with
+         --           res_reg = R15 (see the C_OPCODE_JMP special case in
+         --           decode.vhd), so WRITE stores alu_res_val into the PC --
+         --           and the default above is precisely what makes that the
+         --           branch target. Forcing anything else here breaks every
+         --           branch in the CPU: the test suite stops reaching HALT at
+         --           all and dies on the watchdog.
+         --   RES  -- reserved opcode 0xD, and the only genuinely open one.
+         --           DECODE classifies it like ADD, so it reads the
+         --           destination and then writes the source over it: MOVE's
+         --           effect with ADD's micro-op sequence. Nothing in the ISA
+         --           sanctions that; it is just what falls out of the default.
+         --           Rather than freeze it as behaviour, p_unimplemented in
+         --           write.vhd traps it in simulation so no program can come to
+         --           depend on it. The suite passing with this arm changed
+         --           proves only that nothing exercises 0xD.
+         when C_OPCODE_CMP  => null;
+         when C_OPCODE_RES  => null;
+         when C_OPCODE_CTRL => null;
+         when C_OPCODE_JMP  => null;
          when others    => null;
       end case;
    end process p_res_other;

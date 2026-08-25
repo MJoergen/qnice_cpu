@@ -59,6 +59,15 @@ its statistics against `test/<name>.stats.golden`. Every one of these targets ex
 if the test passed. See [test/README.md](test/README.md); if a golden diff is *expected*,
 regenerate both with `make golden` and read the `git diff` carefully.
 
+A run can also fail before any of that, on `p_unimplemented` in `src/cpu_main/write.vhd`: a
+simulation-only assertion that kills the run if an instruction retires that nothing decodes. Today
+that means the control commands `RTI`, `INT` and `EXC`, and reserved opcode `0xD`. Without it they
+are **silent no-ops** — DECODE classifies every CTRL instruction as no-operand/no-read/no-write, so
+the microcode ROM returns entry 0, three bare `C_VAL_LAST`, and `alu_flags` leaves the SR alone via
+its `when others => null`. The assembler emits them regardless (`RTI` is `0xE040`). This matters
+most while interrupts are being implemented, since a half-finished `RTI` would otherwise look like
+it works. Drop each arm of the check as its instruction gains a real implementation.
+
 The statistics file is the performance counterpart of the writes log, and exists because a change
 that makes the CPU flush twice as often produces an identical writes log and passes CI green.
 `test_monitor.vhd` counts cycles (reset release to the retiring `HALT`), accepted beats on each
@@ -158,6 +167,13 @@ micro-ops serialize that. Each micro-op is a 12-bit word (`LAST`, `REG_MOD_SRC`,
 `MEM_WAIT_SRC`, `MEM_WAIT_DST`, `REG_WRITE`, `MEM_READ_SRC`, `MEM_READ_DST`, `MEM_WRITE`); the
 three register-op bits are mutually exclusive, as are the three memory-op bits. Immediate operands
 (`@R15++`) are special-cased to skip a memory read since FETCH already supplies the value inline.
+**`alu_data.vhd`'s four `null` arms are not dead code.** `CMP` and `CTRL` genuinely are don't-cares
+(their microcode writes nothing), but `JMP` is **load-bearing**: DECODE rewrites a JMP's microcode
+to carry `REG_WRITE` with `res_reg = R15`, so the branch target reaches the PC through
+`res_other`'s `"0" & src_data_i` default. Give that arm a value of its own and every branch in the
+CPU breaks — verified by forcing it, which makes the suite stop reaching `HALT` at all. The fourth,
+reserved opcode `0xD`, is classified like `ADD` and so writes the source over the destination; that
+is unsanctioned fall-through, which is why `p_unimplemented` traps it.
 See [src/cpu_main/README.md](src/cpu_main/README.md#Microcoding-of-instructions) for the full
 worked examples (`MOVE R0,R1`, `MOVE @R0,@R1`, `ADD @R0,@R1`).
 

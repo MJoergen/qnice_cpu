@@ -100,6 +100,57 @@ begin
          end if;
       end if;
    end process p_debug;
+
+
+   -- An unimplemented instruction must not execute silently.
+   --
+   -- DECODE classifies every CTRL instruction as no source operand, no
+   -- destination operand, neither read from nor written to, so microcode_addr
+   -- is 0 and the ROM returns entry 0 -- three bare C_VAL_LAST, i.e. a single
+   -- micro-op that does nothing at all. alu_flags acts only on INCRB/DECRB and
+   -- leaves the Status Register alone otherwise (its "when others => null").
+   -- The result is that RTI, INT and EXC currently RETIRE AS NO-OPS, and the
+   -- assembler emits them without complaint: "RTI" assembles to 0xE040 and
+   -- executes as nothing whatsoever.
+   --
+   -- That is the worst behaviour to have while interrupts are being written,
+   -- because a half-finished implementation looks like it works -- the
+   -- instruction that should have failed instead does nothing, quietly, and the
+   -- test program passes. Reserved opcode 0xD is the same story: alu_data has
+   -- no case for it, so it falls through that mux's MOVE-like default and
+   -- executes as a MOVE.
+   --
+   -- Simulation only, and deliberately so. QNICE defines no illegal-instruction
+   -- exception, so there is nothing for synthesised hardware to do here that
+   -- the ISA would sanction; this is a development aid, not a feature. As each
+   -- instruction gains a real implementation, drop it from the list below.
+   p_unimplemented : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if inst_done_o = '1' and rst_i = '0' then
+
+            assert not (prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
+                        prep_stage_i.inst(R_CTRL_CMD) /= C_CTRL_HALT and
+                        prep_stage_i.inst(R_CTRL_CMD) /= C_CTRL_INCRB and
+                        prep_stage_i.inst(R_CTRL_CMD) /= C_CTRL_DECRB)
+               report "UNIMPLEMENTED instruction at address 0x" &
+                      to_hstring(prep_stage_i.addr) & ": control command " &
+                      to_hstring(prep_stage_i.inst(R_CTRL_CMD)) & " (" &
+                      ctrl_str(prep_stage_i.inst(R_CTRL_CMD)) & "). " &
+                      "It is not decoded anywhere and would otherwise retire " &
+                      "as a no-op."
+               severity failure;
+
+            assert prep_stage_i.inst(R_OPCODE) /= C_OPCODE_RES
+               report "RESERVED opcode 0xD at address 0x" &
+                      to_hstring(prep_stage_i.addr) & ". " &
+                      "It has no ISA definition and would otherwise execute " &
+                      "as a MOVE."
+               severity failure;
+
+         end if;
+      end if;
+   end process p_unimplemented;
 -- pragma synthesis_on
 
 

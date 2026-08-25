@@ -48,6 +48,8 @@ package cpu_constants is
    constant C_CTRL_INT   : integer := 2;
    constant C_CTRL_INCRB : integer := 3;
    constant C_CTRL_DECRB : integer := 4;
+   -- Not decoded anywhere yet; see p_unimplemented in cpu_main/write.vhd.
+   constant C_CTRL_EXC   : integer := 5;
 
    -- Addressing modes
    constant C_MODE_REG  : integer := 0;   -- R
@@ -97,6 +99,11 @@ package cpu_constants is
 
    procedure disassemble(pc : std_logic_vector; inst : std_logic_vector; operand : std_logic_vector);
 
+   -- Mnemonic for a control instruction's command field. At package level
+   -- rather than nested inside disassemble, because the unimplemented-
+   -- instruction check in cpu_main/write.vhd names the offender with it too.
+   function ctrl_str(cmd : std_logic_vector) return string;
+
    type t_stage is record
       microcodes  : std_logic_vector(35 downto 0);
       addr        : std_logic_vector(15 downto 0);
@@ -128,6 +135,21 @@ use ieee.std_logic_textio.all;
 use std.textio.all;
 
 package body cpu_constants is
+
+   function ctrl_str(cmd : std_logic_vector) return string is
+   begin
+      case to_integer(cmd) is
+         when C_CTRL_HALT  => return "HALT";
+         when C_CTRL_RTI   => return "RTI";
+         when C_CTRL_INT   => return "INT";
+         when C_CTRL_INCRB => return "INCRB";
+         when C_CTRL_DECRB => return "DECRB";
+         when C_CTRL_EXC   => return "EXC";
+         when others => return "???";
+      end case;
+      return "???";
+   end function ctrl_str;
+
 
    procedure disassemble(pc : std_logic_vector; inst : std_logic_vector; operand : std_logic_vector) is
       function to_hstring(slv : std_logic_vector) return string is
@@ -190,19 +212,6 @@ package body cpu_constants is
          end case;
          return "???";
       end function mode_str;
-
-      function ctrl_str(cmd : std_logic_vector) return string is
-      begin
-         case to_integer(cmd) is
-            when C_CTRL_HALT  => return "HALT";
-            when C_CTRL_RTI   => return "RTI";
-            when C_CTRL_INT   => return "INT";
-            when C_CTRL_INCRB => return "INCRB";
-            when C_CTRL_DECRB => return "DECRB";
-            when others => return "???";
-         end case;
-         return "???";
-      end function ctrl_str;
 
       function neg_str(neg : std_logic) return string is
       begin

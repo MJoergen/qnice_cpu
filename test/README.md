@@ -197,6 +197,31 @@ up past both post-increments and that the sum `0x1234 + 0x2345 = 0x3579` landed
 in memory. When it does need to change, re-read the values from a fresh
 simulation and run `make timing`.
 
+## Unimplemented instructions fail the run
+
+Independently of the verdict protocol above, `p_unimplemented` in
+[src/cpu_main/write.vhd](../src/cpu_main/write.vhd) kills the simulation if an
+instruction retires that nothing in the CPU decodes:
+
+```
+write.vhd:132:13:@180ns:(assertion failure): UNIMPLEMENTED instruction at
+address 0x0002: control command 01 (RTI). It is not decoded anywhere and would
+otherwise retire as a no-op.
+```
+
+The list is currently the control commands `RTI`, `INT` and `EXC`, plus reserved
+opcode `0xD`. It exists because the alternative is worse than useless: DECODE
+classifies every CTRL instruction as having no operands and neither reading nor
+writing its destination, so the microcode ROM hands back entry 0 — three bare
+`C_VAL_LAST` — and `alu_flags` leaves the Status Register alone. Those
+instructions therefore *execute as nothing*, and the assembler emits them
+without complaint. A test program containing `RTI` used to pass.
+
+It is a simulation-only check (`pragma synthesis_off`), and deliberately so:
+QNICE defines no illegal-instruction exception, so there is nothing here the ISA
+would have synthesised hardware do. Remove an arm of the check as its
+instruction gains a real implementation.
+
 ## The golden writes-log comparison
 
 `src/cpu.vhd` instantiates `src/debug.vhd` (inside a `pragma synthesis_off`
