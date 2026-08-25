@@ -53,10 +53,20 @@ word** to the reserved address `0x1FFF` (0 = pass) just before its final `HALT`,
 `test/test_monitor.vhd` snoops the data Wishbone bus for it and ends the simulation via
 `std.env.finish(0)` / `stop(1)`. A `HALT` reached with no status write — which is every failure
 `HALT`, at no cost to the failure paths — fails the run, as does never reaching a `HALT` (the
-`G_TIMEOUT` watchdog in `tb_cpu.vhd`). `make check` / `make test` additionally diff the run's
-register/memory write log against the committed `test/<name>.writes.golden`. Every one of these
-targets exits 0 if and only if the test passed. See [test/README.md](test/README.md); if a golden
-diff is *expected*, regenerate with `make golden` and read the `git diff` carefully.
+`G_TIMEOUT` watchdog in `tb_cpu.vhd`). `make check` / `make test` additionally diff **two** golden
+files per program: the run's register/memory write log against `test/<name>.writes.golden`, and
+its statistics against `test/<name>.stats.golden`. Every one of these targets exits 0 if and only
+if the test passed. See [test/README.md](test/README.md); if a golden diff is *expected*,
+regenerate both with `make golden` and read the `git diff` carefully.
+
+The statistics file is the performance counterpart of the writes log, and exists because a change
+that makes the CPU flush twice as often produces an identical writes log and passes CI green.
+`test_monitor.vhd` counts cycles (reset release to the retiring `HALT`), accepted beats on each
+Wishbone bus (`cyc and stb and not stall`), and cycles in which *both* buses accepted a beat. That
+last one measures the Harvard split directly: for `prog.asm`, 1822 of 1848 data requests coincide
+with an instruction fetch, so serialising them onto one port would cost at least +11.5% of the run.
+Note the instruction count includes speculative fetches that a flush later discarded, which is part
+of why it is worth watching.
 
 Retiring a `HALT` now stops the CPU. `p_halt_fetched` in `src/cpu.vhd` gates the
 Icache-to-DECODE handshake off as soon as a `HALT` is handed to DECODE (gating on the `halt_o`

@@ -60,6 +60,13 @@ ASSEMBLER ?= $(HOME)/git/sy2002/QNICE-FPGA/assembler/asm
 WRITES = test/$(TEST).writes
 GOLDEN = test/$(TEST).writes.golden
 
+# Per-run statistics (cycle count, memory request counts), and its reference
+# copy. Unlike WRITES this is about performance rather than behaviour: a diff
+# here means the program got faster or slower, or changed how it uses the two
+# memory buses. See test/README.md.
+STATS  = test/$(TEST).stats
+STATS_GOLDEN = test/$(TEST).stats.golden
+
 TB  = tb_cpu
 TEST_SOURCES += test/$(TB).vhd
 WAVE          = test/$(TB)_$(TEST).ghw
@@ -103,7 +110,8 @@ help:
 GHDL_RUN = ghdl -r --std=08 -frelaxed $(TB) \
 	   -gG_ROM=$(ROM) \
 	   -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) \
-	   -gG_WRITES_FILE=$(WRITES)
+	   -gG_WRITES_FILE=$(WRITES) \
+	   -gG_STATS_FILE=$(STATS)
 
 .PHONY: build
 build: $(SOURCES) $(TEST_SOURCES)
@@ -130,6 +138,7 @@ run: build $(ROM)
 .PHONY: check
 check: run
 	diff -u $(GOLDEN) $(WRITES)
+	diff -u $(STATS_GOLDEN) $(STATS)
 
 # Run every test program. Unlike a plain "make -k", this reports the failures
 # together at the end, and still fails the build as a whole.
@@ -151,6 +160,7 @@ golden:
 	   echo "=== $$t ==="; \
 	   $(MAKE) --no-print-directory run TEST=$$t || exit 1; \
 	   cp test/$$t.writes test/$$t.writes.golden; \
+	   cp test/$$t.stats  test/$$t.stats.golden; \
 	done
 
 $(ROM): $(ASM)
@@ -290,6 +300,7 @@ clean:
 	rm -rf test/*.out
 	rm -rf test/*.rom
 	rm -rf test/*.writes
+	rm -rf test/*.stats
 	rm -rf work-obj08.cf
 	rm -rf test/$(TB)_*.ghw
 	rm -rf yosys.log

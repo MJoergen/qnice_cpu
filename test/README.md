@@ -220,7 +220,71 @@ make golden
 
 and read the resulting `git diff` carefully — these files are the regression
 check, so a diff that is not fully understood is a bug report, not noise.
+`make golden` regenerates the statistics reference copies described below at the
+same time.
 
 For `prog.asm` there is one further human-readable signal: the instruction just
 before the successful exit sequence is `MOVE OK, R8`, which loads `R8` with a
 pointer to the string `"OK\n"`.
+
+## The statistics comparison
+
+The writes log catches changes in *behaviour*. It says nothing about
+performance: a change that makes the CPU flush twice as often produces an
+identical writes log and passes CI green. That is not hypothetical — three
+recent changes each added a pipeline flush, and each one was measured by hand,
+once, and then never again.
+
+So `test/test_monitor.vhd` also counts four things per run and writes them to
+the file named by `G_STATS_FILE`, which `make` points at
+`test/<program>.stats`:
+
+```
+cycles: 15811
+instruction memory requests: 13484
+data memory requests: 1848
+simultaneous requests: 1822
+```
+
+`cycles` runs from the release of reset up to and including the cycle the `HALT`
+retires. A "request" is an accepted Wishbone beat — `cyc and stb and not
+stall` — so a stalled request counts once rather than once per cycle it is held,
+and it is the cycle the slave *takes* the request, not the cycle the data comes
+back. `simultaneous requests` counts cycles in which both buses accepted a beat.
+
+`make check` diffs this against the committed `test/<program>.stats.golden`
+exactly as it does the writes log, so a performance change is now as loud as a
+behavioural one. Nothing here decides pass or fail on its own — a program that
+got slower still passes its own self-checks — it just produces a diff that has
+to be explained. Regenerate with `make golden`.
+
+### What the numbers say about the Harvard split
+
+Instruction and data memory are separate Wishbone interfaces backed by one
+dual-port RAM (see [doc/README.md](../doc/README.md)), so the fourth counter is
+a direct measure of what that split buys. Every simultaneous request is a cycle
+a single-ported design would have had to serialise. For `prog.asm`:
+
+| | |
+| --- | --- |
+| cycles | 15811 |
+| instruction requests | 13484 (85% of cycles) |
+| data requests | 1848 |
+| ...of which simultaneous | 1822 (**98.6%** of data requests) |
+
+Almost every data access collides with an instruction fetch, which follows from
+the instruction bus being busy 85% of the time. Serialising them would cost at
+least 1822 extra cycles, i.e. **+11.5%**, and in practice more, since each
+inserted stall also delays whatever was behind it in the pipeline. That is a
+lower bound in a second sense too: it counts only the collisions that actually
+happened in a machine built not to have to avoid them.
+
+The ratio is not uniform across the programs. `prog_flags.asm` is almost pure
+register arithmetic (2 data requests in 271 cycles) and gains nothing;
+`prog_interleave.asm` is the store-heavy one (21 data requests in 54 cycles,
+17 of them simultaneous) and gains most.
+
+One caveat on the instruction count: fetches are speculative, so a flush
+discards work that has already been requested. The instruction-request count
+therefore includes fetches that were never executed, and it rises when flushes
+become more frequent — which is exactly what makes it worth watching.

@@ -10,6 +10,9 @@ entity tb_cpu is
       -- Simulation only: file to log every register and memory write to.
       -- An empty string (the default) disables the logging entirely.
       G_WRITES_FILE : string := "";
+      -- Simulation only: file to write the run statistics to (cycle count and
+      -- memory request counts). An empty string (the default) disables them.
+      G_STATS_FILE : string := "";
       -- A test program that has not halted by now is considered hung. The
       -- longest of the current test programs (prog.asm) halts at about 840 us.
       G_TIMEOUT : time := 2 ms
@@ -55,7 +58,8 @@ begin
       generic map (
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
          G_ROM => G_ROM,
-         G_WRITES_FILE => G_WRITES_FILE
+         G_WRITES_FILE => G_WRITES_FILE,
+         G_STATS_FILE => G_STATS_FILE
       )
       port map (
          clk_i  => clk,

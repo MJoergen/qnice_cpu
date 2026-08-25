@@ -149,6 +149,38 @@ such *pair* takes a total of three clock cycles rather than four. So the pair is
 faster than the sum of the two instructions taken separately, because the
 instruction and data memories are operating simultaneously.
 
+### How much the split is worth
+
+That experiment shows the effect on three instructions. `test/test_monitor.vhd`
+measures it over whole programs: it counts accepted beats on each Wishbone bus,
+and cycles in which *both* buses accepted one. The counts are written to
+`test/<program>.stats` and diffed against a committed reference copy by
+`make check`, so they cannot silently drift — see
+[test/README.md](../test/README.md#The-statistics-comparison).
+
+Every simultaneous request is a cycle a single-ported design would have had to
+serialise. For `test/prog.asm`, the longest of the test programs:
+
+| | |
+| --- | --- |
+| cycles | 15811 |
+| instruction requests | 13484 (85% of cycles) |
+| data requests | 1848 |
+| ...of which simultaneous | 1822 (**98.6%** of data requests) |
+
+Almost every data access collides with an instruction fetch — which follows from
+the instruction bus being busy 85% of the time. Serialising them onto one port
+would cost at least 1822 cycles, i.e. **+11.5%**, and more in practice, since
+each inserted stall also delays whatever was behind it in the pipeline. It is a
+lower bound in a second sense as well: it counts only the collisions that
+actually occurred in a machine built not to have to avoid them.
+
+The gain is uneven across programs, as the reasoning above predicts.
+`test/prog_flags.asm` is almost pure register arithmetic — 2 data requests in
+271 cycles — and gains essentially nothing. `test/prog_interleave.asm`, the
+experiment described above, is at the other end: 21 data requests in 54 cycles,
+17 of them simultaneous.
+
 ## Self-modifying code
 Instruction and data memory are two ports of the same physical RAM, so a program
 can store into its own instruction stream. Doing so is fully supported, with no

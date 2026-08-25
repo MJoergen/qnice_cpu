@@ -7,7 +7,10 @@ entity system is
       G_ROM : string;
       -- Simulation only: file to log every register and memory write to.
       -- An empty string (the default) disables the logging entirely.
-      G_WRITES_FILE : string := ""
+      G_WRITES_FILE : string := "";
+      -- Simulation only: file to write the run statistics to (cycle count and
+      -- memory request counts). An empty string disables them.
+      G_STATS_FILE  : string := ""
    );
    port (
       clk_i  : in  std_logic;
@@ -94,14 +97,23 @@ begin
 
 
 -- pragma synthesis_off
+   -- The two request terms are accepted beats in pipelined Wishbone: the slave
+   -- takes the request in the cycle where cyc and stb are high and stall is
+   -- low. Counting those rather than stb alone means a stalled request is
+   -- counted once, not once per cycle it is held.
    i_test_monitor : entity work.test_monitor
+      generic map (
+         G_STATS_FILE => G_STATS_FILE
+      )
       port map (
          clk_i      => clk_i,
          rst_i      => not rstn_i,
          halt_i     => halt,
          mem_we_i   => wbd_stb and wbd_we and not wbd_stall,
          mem_addr_i => wbd_addr,
-         mem_data_i => wbd_data_wr
+         mem_data_i => wbd_data_wr,
+         wbi_req_i  => wbi_cyc and wbi_stb and not wbi_stall,
+         wbd_req_i  => wbd_cyc and wbd_stb and not wbd_stall
       ); -- i_test_monitor
 -- pragma synthesis_on
 
