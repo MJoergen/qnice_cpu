@@ -367,3 +367,35 @@ f_stable_dst : assert always {rd_en_i = '1';
                          |=> {wr_en_i = '1' or stable(dst_val_o)};
 ```
 
+### Output undisturbed by a write elsewhere
+
+The pair above only covers a *quiet* bus — `wr_en_i = '0'` throughout. Nothing
+said what a write to an **unrelated** register does to an output whose read
+address is standing still, and that turned out to be a real hole rather than a
+theoretical one:
+
+```
+f_undisturbed_src : assert always {rd_en_i = '1';
+                                   rd_en_i = '0' and wr_en_i = '1' and
+                                   wr_reg_i /= src_reg_d and rst_i = '0'}
+                              |=> {wr_en_i = '1' or
+                                   (f_sr_fwd = '1' and src_reg_d = C_REG_SR) or
+                                   rst_i = '1' or stable(src_val_o)};
+```
+
+The hole surfaced while trying the timing experiment recorded above `src_val_o`
+in [registers.vhd](registers.vhd), which precomputes term 3's condition a cycle
+early. Written the obvious way — comparing the write address against
+`src_reg_i` rather than against the value `src_reg_d` will actually hold, since
+it only advances while `rd_en_i` is asserted — it forwards a write aimed at a
+register nobody is reading. Every other property in the file passed on that
+version; only these two catch it, confirmed by mutation. The experiment was
+reverted as not worth its complexity; the properties stayed.
+
+Why the older properties miss it is worth knowing before trusting them
+elsewhere. When `rd_en_i` was low in the previous cycle, term 3 and the term 4
+that follows it agree *by construction* — the immediate forward already produced
+that value a cycle earlier and `src_val_d` carried it across. The two only
+disagree when the forward fires for the **wrong** register, and no antecedent
+reached that case.
+

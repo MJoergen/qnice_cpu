@@ -221,9 +221,34 @@ begin
                wr_sr_val_i or X"0001" when wr_sr_en_i = '1' else
                reg_sr;
 
-   -- TBD: Possible timing optimization: Make "wr_en_d = '1' and wr_addr_d =
-   -- src_reg_d" a single register.
-   -- Potential improvement: Small
+   -- TRIED AND REJECTED: precomputing "wr_en_d = '1' and wr_addr_d = src_reg_d"
+   -- into a single registered bit. Every input to it is available a cycle
+   -- earlier, so it can be moved off this mux entirely. It does not help.
+   --
+   -- Why it cannot help, which is worth seeing before reaching for it again:
+   -- the late-arriving select here is the FIRST term, not the third.
+   -- wr_en_i/wr_reg_i/wr_val_i come combinationally out of the WRITE stage,
+   -- wr_val_i being the ALU result itself. The third term's inputs are already
+   -- register outputs, so precomputing it removes a level of logic from a
+   -- select that had slack to spare.
+   --
+   -- Measured anyway, since timing here is brittle enough that reasoning is
+   -- not proof: WNS +0.260 ns -> +0.214 ns, i.e. no improvement, and the
+   -- difference is far inside the +-0.28 ns this design has moved from edits
+   -- nowhere near the path. It bought 3 flip-flops and 1 LUT inside this
+   -- module and cost 4 LUTs at the device level. Reverted as not worth the
+   -- complexity.
+   --
+   -- The complexity in question, since it is the interesting part: the
+   -- precomputed comparison must NOT be against src_reg_i. src_reg_d only
+   -- advances while rd_en_i is asserted, so what has to be compared against is
+   -- "src_reg_i if rd_en_i else src_reg_d" -- the value src_reg_d will hold on
+   -- the next edge. Using src_reg_i unconditionally forwards a write aimed at
+   -- a register nobody is reading, and when this was first written that way,
+   -- every property in formal/registers.psl still passed: the older properties
+   -- only reach the case where this term and the src_val_d term below already
+   -- agree by construction. f_undisturbed_src/f_undisturbed_dst were added to
+   -- close that hole and stay behind as the lasting result of the experiment.
 
    -- The wr_sr_val_i term forwards a write made through the dedicated SR port,
    -- mirroring the wr_val_i term that forwards the ordinary port. Without it,

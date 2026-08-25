@@ -302,7 +302,11 @@ every build measured until now, has for once come out with more slack than the
 BRAM. Do not read it as a durable change: the loop is routing-dominated, this
 design's placement noise has been measured at up to 0.284 ns from edits nowhere
 near it, and the two paths are well inside that of each other. Re-measure before
-concluding anything. Everything below still describes the path that sets this
+concluding anything — a later measurement, of a build differing only in how the
+register file's forwarding mux was written, put the Status Register loop back on
+top at +0.214 ns. Three builds spanning 0.186 ns for changes that do not touch
+this path is the best available measure of what a single slack number is worth
+here. Everything below still describes the path that sets this
 CPU's Fmax whenever logic, rather than the BRAM, is the limit.
 
 **Read the instance names in these listings with care.** The shipping build uses

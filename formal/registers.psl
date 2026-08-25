@@ -123,6 +123,37 @@ vunit i_registers(registers(synthesis))
    f_stable_src : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or (f_sr_fwd = '1' and src_reg_d = C_REG_SR) or stable(src_val_o)};
    f_stable_dst : assert always {rd_en_i = '1'; wr_en_i = '0'[*]; wr_en_i = '0' and rd_en_i = '0'} |=> {wr_en_i = '1' or (f_sr_fwd = '1' and dst_reg_d = C_REG_SR) or stable(dst_val_o)};
 
+   -- ...and a write to some OTHER register must not disturb it either. The two
+   -- properties above only cover a quiet bus (wr_en_i = '0' throughout), so
+   -- until these were added nothing said what a write to an unrelated register
+   -- does to an output whose read address is standing still.
+   --
+   -- That is not a hypothetical hole. It surfaced while trying the timing
+   -- experiment described above src_val_o in registers.vhd, which precomputes
+   -- the delayed-forward condition a cycle early. Written the obvious way --
+   -- comparing the write address against src_reg_i rather than against the
+   -- value src_reg_d will actually hold -- it forwards a write aimed at a
+   -- register nobody is reading, and every other property in this file passed
+   -- on it. The experiment was reverted; these two stayed.
+   --
+   -- The reason the older properties miss it is worth knowing before trusting
+   -- them elsewhere: whenever rd_en_i was low in the previous cycle, the
+   -- delayed-forward term and the src_val_d term below it agree by
+   -- construction, because the immediate forward already produced that value a
+   -- cycle earlier and src_val_d carried it across. The two only disagree when
+   -- the forward fires for the WRONG register, and no antecedent reached that.
+   --
+   -- The escape clauses are the usual ones: a write landing on the checked
+   -- cycle legitimately overrides the prediction through the same
+   -- combinational bypass, and so does an SR forward when the register being
+   -- read is R14.
+   f_undisturbed_src : assert always
+      {rd_en_i = '1'; rd_en_i = '0' and wr_en_i = '1' and wr_reg_i /= src_reg_d and rst_i = '0'} |=>
+      {wr_en_i = '1' or (f_sr_fwd = '1' and src_reg_d = C_REG_SR) or rst_i = '1' or stable(src_val_o)};
+   f_undisturbed_dst : assert always
+      {rd_en_i = '1'; rd_en_i = '0' and wr_en_i = '1' and wr_reg_i /= dst_reg_d and rst_i = '0'} |=>
+      {wr_en_i = '1' or (f_sr_fwd = '1' and dst_reg_d = C_REG_SR) or rst_i = '1' or stable(dst_val_o)};
+
 
    ----------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
