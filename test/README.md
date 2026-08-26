@@ -1,8 +1,14 @@
 # Test programs and how to tell whether they passed
 
 This directory holds the testbench (`tb_cpu.vhd`), the memory models it needs
-(`tdp_ram.vhd`, `wb_tdp_mem.vhd`, `system.vhd`), the test-result monitor
+(`dp_mem.vhd`, `wb_dp_mem.vhd`, `system.vhd`), the test-result monitor
 (`test_monitor.vhd`), and the QNICE assembly programs run against the CPU.
+
+The memory model has two read ports and one write port: the instruction bus
+(port A) reads, the data bus (port B) reads and writes. The program is loaded
+through `G_INIT_FILE`, not over the bus. `dp_mem.vhd`'s header explains why it
+cannot have a second write port and still be VHDL-2008 that Vivado will infer a
+RAM from.
 
 ```
 make test                      # run every test program headless; this is the CI entry point

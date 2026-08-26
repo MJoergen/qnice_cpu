@@ -31,8 +31,8 @@ SOURCES += src/cpu_main/cpu_main.vhd
 
 SOURCES += src/cpu.vhd
 
-TEST_SOURCES += test/tdp_ram.vhd
-TEST_SOURCES += test/wb_tdp_mem.vhd
+TEST_SOURCES += test/dp_mem.vhd
+TEST_SOURCES += test/wb_dp_mem.vhd
 TEST_SOURCES += test/test_monitor.vhd
 TEST_SOURCES += test/system.vhd
 
@@ -107,7 +107,7 @@ help:
 # The simulation ends itself: test/test_monitor.vhd reads the status word that
 # the test program writes just before its final HALT and exits 0 on pass,
 # 1 on fail, so every target below can simply be believed. See test/README.md.
-GHDL_RUN = ghdl -r --std=08 -frelaxed $(TB) \
+GHDL_RUN = ghdl -r --std=08 $(TB) \
 	   -gG_ROM=$(ROM) \
 	   -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) \
 	   -gG_WRITES_FILE=$(WRITES) \
@@ -116,7 +116,7 @@ GHDL_RUN = ghdl -r --std=08 -frelaxed $(TB) \
 .PHONY: build
 build: $(SOURCES) $(TEST_SOURCES)
 	ghdl -i --std=08 $(SOURCES) $(TEST_SOURCES)
-	ghdl -m --std=08 -frelaxed $(TB)
+	ghdl -m --std=08 $(TB)
 
 # Run one test program, with waveform tracing, and open the waveform viewer.
 .PHONY: sim
@@ -277,8 +277,8 @@ hw/$(TOP)_hier.tcl: Makefile
 
 .PHONY: synth
 synth: $(SOURCES) $(TEST_SOURCES) $(ROM)
-	ghdl -a --std=08 -frelaxed $(SOURCES) $(TEST_SOURCES)
-	yosys -m ghdl -p 'ghdl --std=08 -frelaxed -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) $(TOP); synth_xilinx -top $(TOP) -edif $(TOP).edif' > yosys.log
+	ghdl -a --std=08 $(SOURCES) $(TEST_SOURCES)
+	yosys -m ghdl -p 'ghdl --std=08 -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) $(TOP); synth_xilinx -top $(TOP) -edif $(TOP).edif' > yosys.log
 
 
 ################################################

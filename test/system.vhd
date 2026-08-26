@@ -67,7 +67,7 @@ begin
          halt_o      => halt
       ); -- i_cpu
 
-   i_tdp_mem : entity work.wb_tdp_mem
+   i_wb_dp_mem : entity work.wb_dp_mem
       generic map (
          G_INIT_FILE => G_ROM,
          G_RAM_STYLE => "block",
@@ -81,8 +81,6 @@ begin
          wb_a_stb_i   => wbi_stb,
          wb_a_stall_o => wbi_stall,
          wb_a_addr_i  => wbi_addr(12 downto 0),
-         wb_a_we_i    => '0',
-         wb_a_data_i  => X"0000",
          wb_a_ack_o   => wbi_ack,
          wb_a_data_o  => wbi_data_rd,
          wb_b_cyc_i   => wbd_cyc,
@@ -93,7 +91,7 @@ begin
          wb_b_data_i  => wbd_data_wr,
          wb_b_ack_o   => wbd_ack,
          wb_b_data_o  => wbd_data_rd
-      ); -- i_tdp_mem
+      ); -- i_wb_dp_mem
 
 
 -- pragma synthesis_off

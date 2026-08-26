@@ -11,6 +11,10 @@ It is not a drop-in replacement for the original QNICE-FPGA CPU.
 
 All VHDL in this repo is **VHDL-2008** (`ghdl --std=08`, `read_vhdl -vhdl2008` in the Vivado flow).
 Use 2008 constructs freely (e.g. `ieee.numeric_std_unsigned`, unconstrained record elements).
+No `ghdl` invocation passes `-frelaxed`: the design is conformant VHDL-2008, not
+conformant-plus-waivers, and it should stay that way. House style is written up in
+[CODING_STYLE.md](CODING_STYLE.md); the one rule with teeth beyond formatting is **no shared
+variables** — see `test/dp_mem.vhd` for why that constrains RAM inference.
 
 Full architecture description: [doc/README.md](doc/README.md). Per-module design notes live next
 to the code: [src/fetch/README.md](src/fetch/README.md), [src/registers/README.md](src/registers/README.md),
@@ -127,6 +131,11 @@ stalls PREPARE while waiting on the Wishbone bus.
 
 Instruction and data memory are separate interfaces (Harvard-style) but backed by the same
 physical dual-port RAM, since a program must be loadable and then executable from the same memory.
+That RAM (`test/dp_mem.vhd`) has **two read ports but only one write port**, on the data side.
+The instruction side never writes — the program arrives through `G_INIT_FILE` and self-modifying
+code stores over the data bus — and it cannot: Vivado will not infer a RAM from two write ports
+unless they sit in two processes over a `shared variable`, which VHDL-2008 does not allow. The
+file's header records the whole argument.
 The working Program Counter (`R15`) lives inside FETCH. The register file *does* have an `R15`
 slot in its upper bank and WRITE writes it whenever an instruction targets `R15` (i.e. on
 branches), but it is stale during sequential execution, so PREPARE substitutes the real PC for

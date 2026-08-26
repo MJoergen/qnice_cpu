@@ -3,9 +3,15 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use std.textio.all;
 
--- A True Dual Port memory with two Wishbone Slave interfaces.
+-- A dual-port memory with two Wishbone Slave interfaces.
+--
+-- Port A is READ ONLY; port B reads and writes. That asymmetry comes from
+-- dp_mem, which cannot have two write ports and still be both LRM-conformant
+-- VHDL-2008 and inferrable as a RAM by Vivado -- see the header of
+-- test/dp_mem.vhd. It costs nothing: port A carries the instruction bus,
+-- which never writes.
 
-entity wb_tdp_mem is
+entity wb_dp_mem is
    generic (
       G_INIT_FILE : string := "";
       G_RAM_STYLE : string := "block";
@@ -15,16 +21,14 @@ entity wb_tdp_mem is
    port (
       clk_i        : in  std_logic;
       rst_i        : in  std_logic;
-      -- Port A
+      -- Port A: read only
       wb_a_cyc_i   : in  std_logic;
       wb_a_stall_o : out std_logic;
       wb_a_stb_i   : in  std_logic;
       wb_a_ack_o   : out std_logic;
-      wb_a_we_i    : in  std_logic;
       wb_a_addr_i  : in  std_logic_vector(G_ADDR_SIZE-1 downto 0);
-      wb_a_data_i  : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
       wb_a_data_o  : out std_logic_vector(G_DATA_SIZE-1 downto 0);
-      -- Port B
+      -- Port B: read and write
       wb_b_cyc_i   : in  std_logic;
       wb_b_stall_o : out std_logic;
       wb_b_stb_i   : in  std_logic;
@@ -34,14 +38,12 @@ entity wb_tdp_mem is
       wb_b_data_i  : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
       wb_b_data_o  : out std_logic_vector(G_DATA_SIZE-1 downto 0)
    );
-end entity wb_tdp_mem;
+end entity wb_dp_mem;
 
-architecture synthesis of wb_tdp_mem is
+architecture synthesis of wb_dp_mem is
 
    -- Port A
    signal a_addr    : std_logic_vector(G_ADDR_SIZE-1 downto 0);
-   signal a_wr_en   : std_logic;
-   signal a_wr_data : std_logic_vector(G_DATA_SIZE-1 downto 0);
    signal a_rd_data : std_logic_vector(G_DATA_SIZE-1 downto 0);
    signal wb_a_ack  : std_logic;
 
@@ -54,7 +56,7 @@ architecture synthesis of wb_tdp_mem is
 
 begin
 
-   i_tdp_ram : entity work.tdp_ram
+   i_dp_mem : entity work.dp_mem
       generic map (
          G_INIT_FILE => G_INIT_FILE,
          G_RAM_STYLE => G_RAM_STYLE,
@@ -65,14 +67,12 @@ begin
          clk_i       => clk_i,
          rst_i       => rst_i,
          a_addr_i    => a_addr,
-         a_wr_en_i   => a_wr_en,
-         a_wr_data_i => a_wr_data,
          a_rd_data_o => a_rd_data,
          b_addr_i    => b_addr,
          b_wr_en_i   => b_wr_en,
          b_wr_data_i => b_wr_data,
          b_rd_data_o => b_rd_data
-      ); -- i_tdp_ram
+      ); -- i_dp_mem
 
 
    -- Acknowledge
@@ -90,8 +90,6 @@ begin
    end process p_ack;
 
 
-   a_wr_en      <= wb_a_cyc_i and wb_a_stb_i and wb_a_we_i and not wb_a_stall_o;
-   a_wr_data    <= wb_a_data_i;
    a_addr       <= wb_a_addr_i;
    wb_a_data_o  <= a_rd_data;
    wb_a_stall_o <= '0';
