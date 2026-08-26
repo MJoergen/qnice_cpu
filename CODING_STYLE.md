@@ -266,9 +266,6 @@ low-risk, cosmetic work, best done a file at a time.
 | Deviation | Files |
 |---|---|
 | Port modes written `in    ` / `out   ` | `sub/sequencer.vhd` |
-| Spaces around `-` in width expressions (`G_X - 1`) | `fetch/icache.vhd` |
-| Section separators not 60 dashes (72) | `memory/memory.vhd` |
-| Two spaces after a period in prose | `fetch/fetch.vhd`, `fetch/icache.vhd` |
 | Implicit `std_logic` condition (`if x then`) | `cpu_main/write.vhd:98`, `debug.vhd:44,49`, `cpu_main/prepare.vhd:128,131` |
 | `or(vec) /= '0'` spelling | `cpu_main/write.vhd:390` |
 | Unused numeric import | `cpu_main/sub/alu.vhd`, `cpu_main/sub/sequencer.vhd`, `cpu_main/cpu_main.vhd`, `test/wb_dp_mem.vhd` |

@@ -102,10 +102,10 @@ architecture synthesis of memory is
 
 begin
 
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
    -- Apply back-pressure to incoming requests and buffer outgoing
    -- requests until accepted (wb_stall_i = '0').
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
 
    -- Accept request, EXCEPT when any one of:
    -- * SRC read data is presented, but not yet accepted
@@ -140,9 +140,9 @@ begin
    mreq_ready_o <= mreq_ready and mreq_accept;
 
 
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
    -- Store the incoming memory request
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
 
    tsf_req_in_valid <= mreq_valid_i and mreq_ready_o;
 
@@ -176,9 +176,9 @@ begin
    tsf_req_out_ready <= wb_cyc_o and wb_ack_i;
 
 
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
    -- Buffer outgoing Wishbone request until accepted
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
 
    i_one_stage_buffer_wb : entity work.one_stage_buffer
       generic map (
@@ -211,9 +211,9 @@ begin
                '0';
 
 
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
    -- Store the response for the SRC output
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
 
    -- wb_data_i itself doesn't say which read it belongs to -- this reads the
    -- type recovered above (tsf_req_out_data, the FIFO head) to decide the ack
@@ -242,9 +242,9 @@ begin
       ); -- i_two_stage_buffer_src
 
 
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
    -- Store the response for the DST output
-   ------------------------------------------------------------------------
+   ------------------------------------------------------------
 
    -- Mirror of tsb_src_in_valid above, for READ_DST.
    tsb_dst_in_valid <= '1' when wb_ack_i = '1' and tsf_req_out_valid = '1' and
