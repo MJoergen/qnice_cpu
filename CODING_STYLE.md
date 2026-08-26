@@ -37,7 +37,8 @@ end architecture synthesis;
   first, before wading through boilerplate imports.
 * `library ieee;` itself is not indented, but every `use` clause is indented 3 spaces —
   including `use work.*` clauses, which have no `library work;` line of their own.
-* A blank line separates the `ieee` `use` clauses from the `work` ones.
+* A blank line separates one library's `use` clauses from the next one's — the `ieee` block, then
+  the `std` or `work` ones. No blank line *within* a library's block.
 * Architecture name is `synthesis`, or `simulation` for a unit that is simulation-only
   (`debug.vhd`, `tb_cpu.vhd`, `test_monitor.vhd`).
 * Close with the full form: `end entity foo;`, `end architecture synthesis;`,
@@ -130,6 +131,8 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
         s_ready_o : out std_logic;
   ```
 
+* Bit-string literals use an **uppercase base specifier**: `X"1FFF"`, not `x"1fff"`. The digits
+  are uppercase too.
 * No spaces around `-` in a width expression: `std_logic_vector(G_DATA_SIZE-1 downto 0)`.
   Spaces around arithmetic in ordinary expressions: `addr_v + 1`, `pending_v + stale_v`.
 * `when ... else` chains put `else` at the **end** of the line and align the conditions:
@@ -186,7 +189,10 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
 ## 4. Coding idioms
 
 * **Direct entity instantiation** (`entity work.foo`) everywhere. No component declarations,
-  no configurations.
+  no configurations, and no architecture identifier on the instantiation
+  (`entity work.foo`, not `entity work.foo(synthesis)`).
+* A process header is written `process (clk_i)`, without the optional `is`. An `if` condition is
+  not parenthesized: `if halt_i = '1' then`, not `if (halt_i = '1') then`.
 * **Synchronous, active-high reset**, sampled inside `if rising_edge(clk_i) then`, and written as
   the **last** `if` in the process so that it overrides everything above it:
 
@@ -281,8 +287,50 @@ When you touch RTL that has PSL, re-run it (`cd formal && sby --yosys "yosys -m 
 — several properties in this repo hold only because of non-obvious interactions. See
 [CLAUDE.md](CLAUDE.md#formal-verification).
 
+## 8. Linting
+
+`make lint` checks every VHDL source file against this document, as far as a tool can. It runs
+[VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) with the repo's `vsg.yml`,
+which maps the rules stated here onto VSG's rule set. Read that file's header before changing it:
+it records, rule by rule, which section of this document each override comes from, and it carries
+a **Known gaps** list of rules here that VSG cannot express at all — the header comment structure,
+the section separators, "reset is the last `if` in the process", "compare `std_logic` explicitly",
+and the rest. Those stay this document's job, and a reviewer's.
+
+`vsg.yml` deliberately overrides only what this document actually says. Everything else is left at
+VSG's shipped defaults, so the tool will also flag things no rule here mentions.
+
+**`make lint` is not clean yet** — see the deviations below. Treat it as a guide while editing a
+file rather than as a gate: it is not wired into `make test` or CI. Run it on the file you touched
+and leave that file no worse than you found it.
+
+When a *single construct in a single file* deliberately breaks a rule, suppress it there with
+VSG's own markers rather than weakening `vsg.yml` for the whole repo:
+
+```vhdl
+-- Deliberate one-line-per-opcode table: the alignment is the point (see
+-- CODING_STYLE.md's "one statement per line" exception for this file).
+-- vsg_off case_005 case_012 case_201 sequential_007
+   ...
+-- vsg_on case_005 case_012 case_201 sequential_007
+```
+
+Written at column 0, like the pragma guards in section 5, and preceded by a comment saying *why*.
+`cpu_constants.vhd`, `decode.vhd`, `microcode.vhd`, `alu_data.vhd` and `alu_flags.vhd` all use
+this. Reach for a `vsg.yml` entry only when the deviation is a repo-wide convention.
+
 ## Known deviations
 
-None currently — the VHDL in this repository is consistent with the rules above. If you introduce
-one (or find one), list it here as `| Deviation | Files |` so it isn't lost, and fix it when
-convenient; low-risk, cosmetic work like this is best done a file at a time.
+Deviations from the rules above. Fix them when convenient; low-risk, cosmetic work like this is
+best done a file at a time. If you introduce one (or find one), list it here so it isn't lost.
+
+| Deviation | Files |
+|---|---|
+| Section 3: colons aligned *across* blank-line-separated groups in a declarative region, rather than within each group (VSG `architecture_026`, 28 sites) | `cpu_main.vhd`, `write.vhd`, `prepare.vhd`, `alu_flags.vhd`, `memory.vhd`, `registers.vhd`, `two_stage_fifo.vhd`, `test/system.vhd` |
+| Section 3: a `when ... else` chain with `else` starting the line instead of ending the previous one (VSG `when_001`, 4 sites) | `decode.vhd`, `write.vhd` |
+
+Separately, `make lint` reports a few hundred violations of VSG defaults on points this document
+does not cover — blank lines around `case` alternatives and subprogram bodies, parenthesis
+placement in a multi-line function call, `report` continuation alignment, and so on. Those are not
+listed here: each one is a question this document has not answered yet. Answer it here first (and
+map it in `vsg.yml`), then fix the code.
