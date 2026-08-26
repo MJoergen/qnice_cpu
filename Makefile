@@ -91,6 +91,7 @@ help:
 	@echo "  make synth      : Run synthesis using yosys"
 	@echo "  make timing     : Re-render src/cpu_main/timing.png (needs pdflatex)"
 	@echo "  make formal     : Run formal verification"
+	@echo "  make lint       : Run VSG style-guide linting on all source files"
 	@echo "  make clean      : Remove all generated files"
 	@echo "  make help       : This message"
 	@echo "Optional arguments:"
@@ -287,6 +288,21 @@ synth: $(SOURCES) $(TEST_SOURCES) $(ROM)
 .PHONY: formal
 formal:
 	make -C formal
+
+
+################################################
+## Linting
+################################################
+
+# Checks every VHDL source file against CODING_STYLE.md, as encoded in
+# vsg.yml -- see that file's header for what it does and does not cover.
+# -ap (all_phases) reports every phase's violations in one pass instead of
+# stopping at the first phase that has any, so one run shows the full
+# picture. Exits non-zero if any violation is found, same as "make check"/
+# "make test".
+.PHONY: lint
+lint: $(SOURCES) $(TEST_SOURCES)
+	vsg -c vsg.yml -ap -f $(SOURCES) $(TEST_SOURCES)
 
 
 ################################################
