@@ -30,8 +30,49 @@ DECISION: When external evidence is contradicting, use the following priority:
 1. Ground truth is ISA (documented in doc/intro/qnice_intro.tex)
 2. For questions not answered in the ISA document, the definitive source is then
    doc/int-device.md.
-3. If there are any discrepencies between any of these external sources, then
-   list them clearly, and document the implemented choice.
+3. For behaviour specified in neither document, the reference implementation
+   (`vhdl/qnice_cpu.vhd`, `vhdl/register_file.vhd`) is the fallback. It ranks
+   below both documents, never above them.
+4. If there are any discrepancies between any of these external sources, then
+   list them clearly, and document the implemented choice. See
+   [Where the sources disagree](#where-the-sources-disagree) below.
+
+### Where the sources disagree
+
+Applying rule 4 above. Three disagreements matter, and one of them is inside the
+ground-truth document itself.
+
+**`EXC` — the ISA document contradicts itself, and `EXC` is not implemented.**
+The instruction table at `qnice_intro.tex:248` lists
+`EXC const, dst — Exchange shadow register`. The control-command bit table at
+`:343`-`:348` lists only `HALT`, `RTI`, `INT`, `INCRB` and `DECRB`, and gives
+`EXC` **no encoding at all**. The reference CPU has no `ctrlEXC` constant and no
+case arm, so it falls into `when others => HALT`; only the assembler knows the
+mnemonic, at `qasm.c:41`.
+
+The resolution follows from the decision below to save `R14` and `R15` only:
+`EXC` exists to exchange *shadow registers*, which this design does not have.
+So `EXC` is out of scope because of that decision, not merely because upstream
+never built it. Its arm of `p_unimplemented` stays armed permanently.
+
+**`INT`'s operand field — the ISA document contradicts itself, and the
+destination field wins.** The instruction table at `qnice_intro.tex:246` says
+`INT dst`. The control-command table at `:345` says the address is "supplied by
+the source operand". Three sources agree on the destination against that one
+sentence: the instruction table, the reference CPU (which reads `Dst_Mode` and
+`reg_read_data2`), and — decisively, since the test programs go through it —
+the assembler, which ORs `dest_op_code` into bits 5..0 at `qasm.c:1037`.
+**Implemented choice: the destination field.**
+
+Worth knowing alongside it: `INT <constant>` assembles to **two words**
+(`qasm.c:1025`), so `INT` can itself be a two-word instruction. That interacts
+with `next_pc` and gets its own test case.
+
+**Saved state — the document and the implementation disagree.** The slides say
+two latches for `R14` and `R15`; `register_file.vhd:199` reverts `R8`-`R15`.
+Rule 1 makes the document ground truth, and the decision under
+[what state is saved](#the-decision-to-make-first-what-state-is-saved) follows
+it. **Implemented choice: `R14` and `R15` only.**
 
 ### Bus protocol
 
@@ -47,6 +88,15 @@ which position is priority — the closer to the CPU, the higher.
 4. The CPU samples the address and releases `IGRANT_N`. The device must release
    the bus **combinationally** — the CPU starts fetching on the next cycle.
 
+DECISION: the ISR address arrives on a **port of its own**, `isr_addr_i`, not on
+the data Wishbone. The daisy-chain data phase is not a Wishbone transaction —
+the device drives the bus while `igrant_n_o` is low, outside any CYC/STB cycle —
+so reusing `wbd_data_i` would mean a bus protocol violation, or a mux outside
+the CPU, or modelling the grant as a read from a reserved address. A dedicated
+port avoids all three, and costs nothing this design has to defend: the
+instruction and data interfaces are already split Harvard-style, and this CPU is
+already not a drop-in replacement for the original.
+
 There is no way to abort a request. Once a device has asked, the CPU will
 eventually grant, and the device must have a valid ISR address to supply even if
 the interrupt has since been masked in software.
@@ -55,7 +105,8 @@ DECISION: Port names are to be lower case (snake case?) following the
 CODING_STYLE.md. This means "int_n_i" and "igrant_n_o".
 
 DECISION: Make a timing diagram (similar to src/cpu_main/timing.tex) that shows
-the relationship between the important signals (e.g. int_n_i, igrant_n_o, wbd_data_i).
+the relationship between the important signals (e.g. int_n_i, igrant_n_o,
+isr_addr_i).
 Particularly important is whether changes are registered (i.e. delayed until
 next clock cycle) or combinatorial.  The current design already allows for data
 input to be registered.
@@ -73,6 +124,16 @@ input to be registered.
 * **A rogue `RTI`** — one executed outside an ISR — halts the CPU
   (`qnice_cpu.vhd:550`). So does a **rogue `INT`**, one executed inside an ISR
   (`qnice_cpu.vhd:586`).
+
+  DECISION: both halt, and both are documented as such. Note the provenance:
+  neither the ISA document nor `int-device.md` says anything about either case,
+  so this is rule 3 above — the reference implementation as fallback. It is also
+  the only defined behaviour on offer anywhere, and it fails loudly, which is
+  how this design already treats the rest of this area (`p_unimplemented`).
+  Because it is a deliberate choice rather than a documented requirement, say so
+  where a reader will find it: in the `write.vhd` header, in
+  [test/README.md](../test/README.md) next to the other ways a run can fail, and
+  in the two test programs that exercise it.
 * Bit 0 of the SR is always 1. This design already does that, in `alu_flags.vhd`
   (`sr_o <= sr_i or X"0001"`).
 
@@ -207,12 +268,36 @@ The reference halts on both.
 
 ### Phase 0 — de-risk
 
-* **T0. Timing spike.** Add a throwaway fourth term to `fetch_valid_o`, run
-  `make system.bit`, record the WNS, discard the change. If it comes back
-  negative the answer is to restructure — for instance by registering the grant
-  a cycle earlier so it arrives as one pre-computed bit — and it is far cheaper
-  to learn that now than after the ISA work is done. **Done when** a measured
-  WNS for a four-term `fetch_valid_o` exists.
+* **T0. Timing spike. DONE — the fourth term is free.** Measured at commit
+  `342ca31`, against the `a9f2c0b` baseline of **+0.135 ns**:
+
+  | Build | WNS | LUTs | FFs | Worst path, in `wr_stage_o` |
+  |---|---|---|---|---|
+  | baseline | +0.135 ns | 887 | 598 | `alu_src_val[1]` -> `alu_src_val[2]` |
+  | four terms | +0.167 ns | 892 | 599 | `r14[5]` -> `alu_src_val[4]` |
+
+  The spike was one free-running toggle flip-flop standing in for the interrupt
+  module's registered grant output, with `(inst_done_o and spike_grant)` added
+  as a fourth OR term — the exact topology this note predicts. The build passed
+  and wrote a bitstream, so timing was met, not merely close.
+
+  Slack went **up** by 0.032 ns. Nothing about a fourth OR term makes a design
+  faster, so the right reading is not "it helped" but "its cost is below the
+  noise floor": this page records placement noise of up to 0.284 ns from edits
+  nowhere near the path, which is an order of magnitude larger. The fourth term
+  costs **nothing measurable**.
+
+  Two things worth having on record beyond the headline. `fetch_valid_o` did not
+  become critical — both builds end up on the same Status Register loop inside
+  PREPARE, at 9 logic levels and roughly 80% routing, which is the path
+  [The critical path](README.md#The-critical-path) already describes. And the
+  cost in area is +5 LUTs and +1 flip-flop, where the flip-flop is the spike's
+  own toggle and so will not appear in the real implementation.
+
+  **Consequence: T3-T6 proceed as planned.** No need to register the grant a
+  cycle earlier, and no need to restructure `fetch_valid_o`. Re-measure at T12
+  all the same — a real grant term is not a toggle flip-flop, and this margin is
+  thin enough that it is worth confirming rather than assuming.
 
 ### Phase 1 — infrastructure, no CPU changes
 
@@ -234,10 +319,25 @@ The reference halts on both.
   as the edge cases I added, and the rogue RTI and rogue INT. Basically, I want
   all the test cases written up front for careful review.
 
-* **T2. `src/interrupt/interrupt.vhd`.** The daisy-chain FSM: request in,
-  `IGRANT_N` out, ISR address out over valid/ready. Plus
+  DECISION: those programs cannot pass until Phase 2 lands, so they go in a new
+  `TESTS_PENDING` variable in the Makefile that `make test` does **not** run.
+  Without it every Phase 1 and Phase 2 commit turns CI red, and a red CI that is
+  expected to be red stops being a signal. A program moves from `TESTS_PENDING`
+  to `TESTS` on the commit that makes it pass, which gives each step below a
+  crisp definition of done: name the programs that graduate.
+
+* **T2. `src/interrupt/interrupt.vhd`.** The daisy-chain FSM: `int_n_i` in,
+  `igrant_n_o` out, `isr_addr_i` sampled, ISR address out over valid/ready. Plus
   `formal/interrupt.{psl,sby,gtkw}`. **Done when** `sby` passes bmc, cover and
   prove.
+* **T2b. Protocol timing diagram.** The diagram called for above: `int_n_i`,
+  `igrant_n_o`, `isr_addr_i` and the grant handshake, showing for each signal
+  whether it is registered or combinational. Hand-written `.tex` rendered to
+  `.png`, as `src/cpu_main/timing.tex` is. Note `make timing` currently renders
+  exactly one diagram from one hard-coded path, so that rule needs generalising,
+  and both the `.tex` and the generated `.png` get committed. **Done when** the
+  diagram matches T2's implementation, not merely the prose above it — draw it
+  after T2 works, or expect to redraw it.
 
 ### Phase 2 — CPU core
 
@@ -251,19 +351,22 @@ The reference halts on both.
   indirect modes need a memory read first. Rogue `INT` halts.
 
   DECISION: Make it so that test cases 1, 2, and 3 above (in the happy path) can
-  be verified as working by this point in the development process.
+  be verified as working by this point in the development process. They graduate
+  from `TESTS_PENDING` to `TESTS` on this commit — they need only `INT R0` and
+  `RTI`, so they do not depend on T6 or T7.
 
 * **T6. Hardware grant.** Consume T2's output at `inst_done_o`, take `next_pc`
-  as the return address, add the fourth term to `fetch_valid_o`.
-* **T7. Top-level ports.** `int_n_i` and `igrant_n_o` on
+  as the return address, add the fourth term to `fetch_valid_o` — measured free
+  by T0. Graduates test cases 4, 5 and 7 from `TESTS_PENDING`.
+* **T7. Top-level ports.** `int_n_i`, `igrant_n_o` and `isr_addr_i` on
   [cpu.vhd](../src/cpu.vhd) and `system.vhd`.
 
 ### Phase 3 — close it out
 
-* **T8. Test programs.** The seven cases above plus the two rogue cases.
-  Regenerate the golden files and read the diff carefully.
-
-  DECISION: This is moved to T1 above.
+* **T8. Graduate the last test programs.** Writing them moved to T1; what is
+  left here is emptying `TESTS_PENDING` — every program in it must now be in
+  `TESTS` and passing, including the two rogue cases. Regenerate the golden
+  files and read the diff carefully. **Done when** `TESTS_PENDING` is empty.
 
 * **T9. Formal.** Extend [cpu_main.psl](../formal/cpu_main.psl): no grant while
   an ISR is active; `RTI` restores both registers; a grant asserts
