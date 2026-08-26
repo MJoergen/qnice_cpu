@@ -1,0 +1,186 @@
+# Configuration for VHDL Style Guide (vsg, https://vhdl-style-guide.readthedocs.io/).
+#
+# This maps the rules that CODING_STYLE.md states explicitly onto vsg's rule
+# set. It is deliberately NOT a full allow-list of "only these rules run" --
+# vsg's sensible built-in defaults (lowercase keywords, single blank lines,
+# etc.) are left alone wherever CODING_STYLE.md doesn't say otherwise. Only
+# the settings below are overrides of vsg's shipped defaults, each tied to a
+# specific CODING_STYLE.md rule via the comment above it.
+#
+# Usage:  vsg -c vsg.yml -f <files...>
+#
+# Known gaps (vsg has no matching option, or its model doesn't fit):
+#   - "Colons aligned within each blank-line-separated group" (CODING_STYLE.md
+#     section 3): vsg's alignment rules (port_014/port/generic column
+#     alignment, etc.) align across the WHOLE port/generic list, not
+#     per-group. cpu.vhd is the one file that actually uses whole-region
+#     alignment (see CODING_STYLE.md's Known Deviations), so it will pass;
+#     every per-group-aligned file will report violations here that are not
+#     real deviations. Left at vsg's default rather than disabled outright,
+#     since whole-region alignment is a valid, readable fallback.
+#   - Section separator comments (60 dashes), instantiation closing label
+#     comments ("); -- i_foo"), header comment structure (THEORY OF
+#     OPERATION/INTERFACE CONTRACTS/RESET), em-dash comment spacing, and
+#     "TBD:" markers: these are comment-content conventions vsg does not
+#     model (it checks comment indentation/case, not prose content).
+#   - "Synchronous reset written as the last if in the process": a semantic
+#     rule about statement ORDER, not something a token-based style checker
+#     evaluates.
+#   - "No spaces around `-` in a width expression" (Section 3) directly
+#     contradicts vsg's whitespace_011, which unconditionally wants spaces
+#     around every +, -, *, /, ** in every expression -- vsg has no token-
+#     level way to tell a width expression's `-1` apart from an ordinary
+#     subtraction. Since width expressions like `G_DATA_SIZE-1` vastly
+#     outnumber ordinary arithmetic in this codebase, whitespace_011 is
+#     disabled below rather than left to fire on nearly every declaration.
+#   - "One statement per line. The exception is a deliberate table -- see
+#     the opcode/flag matrix in alu_flags.vhd" (Section 3): sequential_007
+#     enforces "one statement per line" everywhere, which is correct almost
+#     everywhere and stays enabled; alu_flags.vhd's table is a single,
+#     named, deliberate exception with no per-file override in a shared
+#     config, so it will report violations there that are not real
+#     deviations.
+
+rule:
+
+  # --- Section 1: File layout -----------------------------------------------
+
+  # "Indent is 3 spaces." (Section 3, Formatting)
+  # This is a `rule: global:` override, so it silently applies only to the
+  # ~100 rules that actually use indent_size (everything derived from vsg's
+  # token_indent/multiline-alignment base classes); it is a no-op harmless
+  # attribute on every other rule.
+  global:
+    indent_size: 3
+
+  # --- Section 4: Coding idioms ----------------------------------------------
+
+  # "Direct entity instantiation (entity work.foo) everywhere. No component
+  # declarations, no configurations."
+  instantiation_034:
+    method: entity
+  # No explicit architecture identifier on entity instantiations
+  # (`entity work.foo`, not `entity work.foo(synthesis)`).
+  instantiation_036:
+    action: remove
+
+  # Process sensitivity lists are written `process (clk_i)`, not
+  # `process (clk_i) is` -- see every process in CODING_STYLE.md's examples.
+  process_012:
+    action: remove
+
+  # "Compare std_logic explicitly: if halt_i = '1' then" -- conditions are
+  # not parenthesized (`if x = '1' then`, not `if (x = '1') then`).
+  if_002:
+    parenthesis: remove
+
+  # "Port modes are written `in ` / `out` with a single alignment space
+  # after `in`" -- vsg's default (spaces_after: 4/3) assumes a field wide
+  # enough for `inout`/`buffer`; this repo only ever uses in/out, so the
+  # field is 4 columns wide: `in` + 2 spaces, `out` + 1 space.
+  port_007:
+    spaces_after: 2
+  port_008:
+    spaces_after: 1
+
+  # See "Known gaps" above: conflicts with the no-space-around-'-' rule for
+  # width expressions, which vsg cannot distinguish from ordinary arithmetic.
+  whitespace_011:
+    disable: true
+
+  # A single-branch conditional assignment stays on one line
+  # (`m_data_o <= m_data_r when m_valid_r = '1' else s_data_i;`); only a
+  # multi-branch chain is split with one branch per line (Section 3,
+  # "when ... else chains put else at the end of the line"). when_001 (else
+  # must trail the previous line, not start a new one) has no matching
+  # option and is left at its default -- it already encodes that rule
+  # correctly.
+  conditional_waveforms_001:
+    allow_single_line: 'yes'
+
+  # This repo's canonical synchronous-reset example (Section 4) puts the
+  # `if rising_edge(clk_i) then` directly under `begin`, with no blank line
+  # -- and no blank line before `end process` either. vsg's defaults require
+  # both.
+  process_022:
+    style: no_blank_line
+  process_023:
+    style: no_blank_line
+  if_030:
+    style: no_blank_line
+  if_031:
+    style: no_blank_line
+
+  # "Signal initializers (:= '0', := (others => '0')) are used on registers
+  # whose power-up state matters for simulation or for the formal
+  # environment" (Section 3) -- this is deliberate and load-bearing in
+  # several files (e.g. one_stage_buffer.vhd's m_valid_r/m_data_r). vsg's
+  # signal_007 wants every one removed unconditionally, with no exception
+  # mechanism.
+  signal_007:
+    disable: true
+
+  # --- Section 2: Naming -------------------------------------------------
+
+  # | Kind                                    | Convention   |
+  # |------------------------------------------|--------------|
+  # | Generic                                   | G_UPPER_SNAKE |
+  generic_020:
+    disable: false
+    prefixes: ['G_']
+  generic_007:
+    case: upper
+  # The formal part of a generic map association (`generic map (G_X => ...)`)
+  # echoes the callee's generic name, so it follows the same G_UPPER_SNAKE
+  # case as the declaration, not vsg's default lowercase.
+  generic_map_002:
+    case: upper
+
+  # | Constant                                  | C_UPPER_SNAKE |
+  # | Bit-field subtype / bit index             | R_UPPER_SNAKE |
+  # (constants and subtypes share the same table in CODING_STYLE.md but use
+  # two different prefixes depending on role; a constant may legitimately be
+  # either -- e.g. R_JMP_NEG in cpu_constants.vhd)
+  constant_015:
+    disable: false
+    prefixes: ['C_', 'R_']
+  constant_004:
+    case: upper
+  subtype_004:
+    disable: false
+    prefixes: ['R_']
+
+  # | Type                                      | t_ prefix    |
+  type_015:
+    disable: false
+  # (type_004, the identifier-case rule, already defaults to lower and needs
+  # no override -- t_stage, not T_STAGE)
+
+  # | Port                                      | lower_snake_case + _i / _o |
+  port_605:
+    disable: false
+  port_606:
+    disable: false
+
+  # | Process label                             | p_ prefix    |
+  process_036:
+    disable: false
+    prefixes: ['p_']
+
+  # | Instance label                            | i_ prefix    |
+  instantiation_601:
+    disable: false
+    prefixes: ['i_']
+
+  # | Generate label                            | gen_ prefix  |
+  # vsg's default prefix ('gen_') already matches; only needs enabling.
+  generate_017:
+    disable: false
+
+  # --- Section 3: Formatting --------------------------------------------
+
+  # "Aim to keep lines under 100 columns. This is a target, not a hard
+  # limit" -- Warning rather than Error reflects that it's advisory.
+  length_001:
+    length: 100
+    severity: Warning
