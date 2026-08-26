@@ -14,7 +14,8 @@ Use 2008 constructs freely (e.g. `ieee.numeric_std_unsigned`, unconstrained reco
 No `ghdl` invocation passes `-frelaxed`: the design is conformant VHDL-2008, not
 conformant-plus-waivers, and it should stay that way. House style is written up in
 [CODING_STYLE.md](CODING_STYLE.md); the one rule with teeth beyond formatting is **no shared
-variables** — see `src/sub/dp_ram.vhd` for why that constrains RAM inference.
+variables** — see `src/sub/dp_ram.vhd` for why that constrains RAM inference. Most of the rest is
+machine-checked: see [Linting](#linting) below.
 
 Full architecture description: [doc/README.md](doc/README.md). Per-module design notes live next
 to the code: [src/fetch/README.md](src/fetch/README.md), [src/registers/README.md](src/registers/README.md),
@@ -37,6 +38,7 @@ make utilization                      # refresh the measured numbers in doc/READ
 make timing                           # re-render src/cpu_main/timing.png from timing.tex (needs pdflatex)
 make synth                            # Yosys synthesis (ghdl -a, then yosys -m ghdl synth_xilinx)
 make formal                           # run all formal verification (delegates to formal/Makefile)
+make lint                             # check every VHDL file against CODING_STYLE.md (needs vsg)
 make clean                            # remove all generated files, including formal/ outputs
 ```
 
@@ -44,8 +46,8 @@ Test programs live in `test/*.asm` and are assembled with the external QNICE ass
 `$HOME/git/sy2002/QNICE-FPGA/assembler/asm` (must be checked out separately). That default lives in
 the top-level `Makefile` as `ASSEMBLER ?=`, so it can be overridden — `make test ASSEMBLER=<path>`
 is what [.github/workflows/test.yml](.github/workflows/test.yml) does. That workflow runs
-`make test` on every push to `main` and every pull request (formal verification runs separately,
-see below); it builds only `qasm`/`qasm2rom` from
+`make test` on every push to `main` and every pull request (formal verification and linting run in
+their own workflows, see below); it builds only `qasm`/`qasm2rom` from
 the upstream project rather than the whole QNICE toolchain, and asserts up front that the
 installed GHDL really does map `std.env.finish(0)`/`stop(1)` onto process exit codes, since the
 whole pass/fail signal rests on that.
@@ -86,6 +88,26 @@ Icache-to-DECODE handshake off as soon as a `HALT` is handed to DECODE (gating o
 retire pulse from WRITE would be one or two instructions too late), and clears that gate on a
 pipeline flush, since a branch retiring can discard an already-accepted `HALT` —
 `test/prog_pipeline.asm` branches over twelve `HALT`s used as padding and depends on this.
+
+### Linting
+
+`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 26
+VHDL files with the repo's `vsg.yml`, which maps CODING_STYLE.md onto VSG's rule set. CI runs it
+too, in its own workflow [.github/workflows/lint.yml](.github/workflows/lint.yml), from a **pinned**
+vsg release — the pin is load-bearing, because VSG adds and re-scopes rules between releases and
+`vsg.yml` only overrides the defaults it knows about, so an unpinned bump can turn the job red
+with no VHDL change at all.
+
+**The tree is clean: zero errors.** What remains is 42 `length_001` warnings, which are the
+100-column *target* of CODING_STYLE.md section 3 advising rather than failing; warnings do not fail
+the job. Every rule VSG applies here is now either stated in CODING_STYLE.md or deliberately
+disabled in `vsg.yml` with the reason written next to it, so wanting to change a `vsg.yml` rule is
+a sign CODING_STYLE.md has an unanswered question — answer it there first. Deliberate *local*
+exceptions (an instruction-format table, an opcode matrix, an aligned boolean expression) use
+VSG's own `-- vsg_off <rule>` / `-- vsg_on <rule>` markers at column 0, next to a comment saying
+why; six files carry them. Most violations are machine-fixable with
+`vsg -c vsg.yml --fix -f <files>`, but read the diff: `--fix` will happily reformat a deliberate
+table.
 
 ### Formal verification
 

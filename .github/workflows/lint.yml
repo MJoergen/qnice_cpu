@@ -1,0 +1,54 @@
+name: lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: VHDL style
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out the CPU
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The version is pinned rather than tracking the newest release, for the
+      # same reason formal.yml pins the OSS CAD Suite: vsg adds rules and
+      # re-scopes existing ones between releases, and vsg.yml only overrides
+      # the defaults it knows about. An unpinned upgrade could turn this job
+      # red without a single line of VHDL changing. Bump it deliberately, and
+      # re-run "make lint" locally when you do -- a new release may need new
+      # entries in vsg.yml before the tree is clean again.
+      - name: Install VHDL Style Guide
+        run: |
+          pip install vsg==3.35.0
+          vsg --version
+
+      # Checks all 26 VHDL source files against CODING_STYLE.md, as encoded in
+      # vsg.yml -- see that file's header for what it does and does not cover,
+      # and CODING_STYLE.md section 8 for the vsg_off/vsg_on markers that carry
+      # the deliberate local exceptions. The tree is clean as of the commit
+      # that added this job, so any Error here is something this change
+      # introduced. The 100-column rule of section 3 is deliberately a Warning
+      # and does not fail the job; everything else is an Error and does.
+      - name: Check the VHDL style
+        run: make lint
+
+      # vsg reports the file, the line and the fix for every violation, so the
+      # job log is already the full report and there is nothing to upload.
+      # What is not obvious from it is that most of this is machine-fixable.
+      - name: How to fix these
+        if: failure()
+        run: |
+          echo "::notice::Most violations are auto-fixable: vsg -c vsg.yml --fix -f <files>"
+          echo "::notice::Read the resulting diff -- --fix will happily reformat a deliberate table."
+          echo "::notice::See CODING_STYLE.md section 8 before turning a rule off instead."

@@ -347,8 +347,12 @@ VSG's shipped defaults, so the tool will also flag things no rule here mentions.
 
 **`make lint` is clean** — zero errors. What remains is 42 `length_001` warnings, which are the
 100-column *target* of section 3 doing exactly what it is supposed to: advising, not failing. Keep
-it that way. It is not wired into `make test` or CI, so it does not enforce itself; run it on the
-file you touched before committing.
+it that way.
+
+CI runs it on every push and pull request, in its own workflow
+[.github/workflows/lint.yml](.github/workflows/lint.yml), from a pinned VSG release. Warnings do
+not fail the job; anything else does. Run it locally before committing — it takes a couple of
+seconds and needs no toolchain beyond `pip install vsg`.
 
 Every rule VSG applies to this repo is now either stated in this document or deliberately turned
 off in `vsg.yml` with the reason written next to it. If you find yourself wanting to change a
