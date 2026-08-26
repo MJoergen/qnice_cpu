@@ -1,8 +1,3 @@
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
-use std.textio.all;
-
 -- dp_ram - Single-clock dual-port RAM: port A reads, port B reads and writes.
 --
 -- FUNCTION
@@ -76,6 +71,11 @@ use std.textio.all;
 --                 tie-off is not enough on its own.
 --   G_ADDR_SIZE : address width; memory depth is 2**G_ADDR_SIZE words.
 --   G_DATA_SIZE : data word width in bits.
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std_unsigned.all;
+use std.textio.all;
 
 entity dp_ram is
    generic (

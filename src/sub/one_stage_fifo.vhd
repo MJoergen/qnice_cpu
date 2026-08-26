@@ -1,7 +1,3 @@
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
-
 -- This module implements a FIFO consisting of only a single register layer.
 -- It has its use in elastic pipelines, where the data flow has back-pressure.
 -- It places registers on the valid and data signals in the downstream direction,
@@ -36,6 +32,10 @@ use ieee.numeric_std.all;
 -- first stage's s_ready_o. This is fine for short pipelines but should be
 -- budgeted against Fmax closure for long chains; consider breaking long
 -- chains periodically with a throughput-bubble-tolerant register stage.
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
 entity one_stage_fifo is
    generic (

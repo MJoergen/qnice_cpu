@@ -1,8 +1,3 @@
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
-use std.textio.all;
-
 -- A dual-port memory with two Wishbone Slave interfaces.
 --
 -- Port A is READ ONLY; port B reads and writes. That asymmetry comes from
@@ -10,6 +5,11 @@ use std.textio.all;
 -- LRM-conformant VHDL-2008 and inferrable as a RAM by Vivado -- see its
 -- header. It costs nothing: port A carries the instruction bus, which never
 -- writes.
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use std.textio.all;
 
 entity wb_dp_mem is
    generic (

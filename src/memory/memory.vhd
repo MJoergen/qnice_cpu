@@ -1,10 +1,3 @@
-library ieee;
-use ieee.std_logic_1164.all;
-
-use work.cpu_constants.C_MEM_READ_SRC;
-use work.cpu_constants.C_MEM_READ_DST;
-use work.cpu_constants.C_MEM_WRITE;
-
 -- This module multiplexes one request channel and two readback channels into a
 -- single Wishbone Master interface. The Wishbone slave is expected to follow:
 -- * Requests are ack'ed in the same order.
@@ -43,6 +36,13 @@ use work.cpu_constants.C_MEM_WRITE;
 -- observed. This is assumed, not checked, by this module (see f_mreq_stable
 -- in formal/memory.psl) and is relied upon by the mreq_accept subtlety noted
 -- below.
+
+library ieee;
+use ieee.std_logic_1164.all;
+
+use work.cpu_constants.C_MEM_READ_SRC;
+use work.cpu_constants.C_MEM_READ_DST;
+use work.cpu_constants.C_MEM_WRITE;
 
 entity memory is
    port (

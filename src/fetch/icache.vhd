@@ -1,7 +1,3 @@
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
-
 -- A small instruction buffer sitting between the instruction FETCH stage and
 -- the DECODE stage.
 --
@@ -56,6 +52,10 @@ use ieee.numeric_std_unsigned.all;
 -- All state is synchronously reset by rst_i, with the combinational gating of
 -- m_valid_o and s_ready_o noted above.  No clock domain crossing is present;
 -- all ports are synchronous to clk_i.
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std_unsigned.all;
 
 entity icache is
    generic (

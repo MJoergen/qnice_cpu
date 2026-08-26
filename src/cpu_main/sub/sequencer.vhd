@@ -1,11 +1,3 @@
-library ieee;
-   use ieee.std_logic_1164.all;
-   use ieee.numeric_std.all;
-
-use work.cpu_constants.t_stage;
-use work.cpu_constants.C_LAST;
-use work.cpu_constants.C_UCODE_BITS;
-
 -- This module accepts a list of microcode instructions (in
 -- s_stage_i.microcodes) and sequences them into fixed-width chunks
 -- (in m_stage_o.microcodes), emitting one chunk per PREPARE beat.
@@ -21,6 +13,14 @@ use work.cpu_constants.C_UCODE_BITS;
 -- would push 'index' past its subtype range and slice 'microcodes' out of
 -- bounds. This contract is enforced formally in sequencer.psl (see the
 -- "index = C_NUM_CHUNKS-1 |-> last" assume).
+
+library ieee;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std.all;
+
+use work.cpu_constants.t_stage;
+use work.cpu_constants.C_LAST;
+use work.cpu_constants.C_UCODE_BITS;
 
 entity sequencer is
    port (

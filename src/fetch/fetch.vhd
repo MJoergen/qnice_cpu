@@ -1,7 +1,3 @@
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
-
 -- A simple instruction fetch unit.
 --
 -- This unit has four interfaces:
@@ -64,6 +60,10 @@ use ieee.numeric_std_unsigned.all;
 -- RESET
 -- All state is synchronously reset by rst_i.  No clock domain crossing is
 -- present; all ports are synchronous to clk_i.
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std_unsigned.all;
 
 entity fetch is
    port (

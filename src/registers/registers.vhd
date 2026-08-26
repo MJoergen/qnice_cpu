@@ -1,9 +1,3 @@
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
-
-use work.cpu_constants.C_REG_SR;
-
 -- This is the register file of the QNICE CPU
 -- Lower registers (R0-R7) are banked (indexed by SR register (aka R14)  bits 15-8).
 -- Upper registers (R8-R15) are not banked.
@@ -13,6 +7,12 @@ use work.cpu_constants.C_REG_SR;
 -- It supports Write-Before-Read, which means that if one reads from and writes
 -- to the same register in a given clock cycle, then the next clock cycle gives
 -- the NEW value, i.e. the one just written.
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std_unsigned.all;
+
+use work.cpu_constants.C_REG_SR;
 
 entity registers is
    generic (

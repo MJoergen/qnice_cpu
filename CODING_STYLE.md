@@ -13,13 +13,13 @@ constructs freely.
 Every file is one design unit (or one package + package body) and is laid out in this order:
 
 ```vhdl
+-- <module description: what it is, THEORY OF OPERATION, INTERFACE CONTRACTS, RESET>
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std_unsigned.all;
 
 use work.cpu_constants.t_stage;
-
--- <module description: what it is, THEORY OF OPERATION, INTERFACE CONTRACTS, RESET>
 
 entity foo is
    generic (...);
@@ -33,9 +33,9 @@ begin
 end architecture synthesis;
 ```
 
-* **`library` first, header comment second.** The descriptive block sits *between* the `use`
-  clauses and the `entity`, not above `library`. Rationale: the boilerplate stays out of the way of
-  the prose.
+* **Header comment first, `library` second.** The descriptive block sits *above* `library`, not
+  between the `use` clauses and the `entity`. Rationale: the header is what a reader wants to see
+  first, before wading through boilerplate imports.
 * `library ieee;` and its `use` clauses are **not indented**.
 * A blank line separates the `ieee` `use` clauses from the `work` ones.
 * Architecture name is `synthesis`, or `simulation` for a unit that is simulation-only
@@ -265,7 +265,6 @@ low-risk, cosmetic work, best done a file at a time.
 | Deviation | Files |
 |---|---|
 | `use` clauses indented under `library ieee;` | `sub/sequencer.vhd`, `sub/pipe_concat.vhd` |
-| Header comment placed *above* `library` | `sub/pipe_concat.vhd`, `sub/two_stage_buffer.vhd`, `sub/two_stage_fifo.vhd` |
 | Header wrapped in a `-- ------` box | `sub/pipe_concat.vhd` |
 | Port modes written `in    ` / `out   ` | `sub/sequencer.vhd`, `sub/pipe_concat.vhd` |
 | Spaces around `-` in width expressions (`G_X - 1`) | `fetch/icache.vhd`, `sub/pipe_concat.vhd` |

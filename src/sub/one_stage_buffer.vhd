@@ -1,7 +1,3 @@
-library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
-
 -- This is a simple buffer that is transparent (combinatorial) when the
 -- receiver is ready, but registers the incoming value if not. Unlike
 -- one_stage_fifo, data presented on s_data_i can reach m_data_o (and be
@@ -54,6 +50,10 @@ use ieee.numeric_std.all;
 -- not depend on s_valid_i) -- but external logic that makes m_ready_i
 -- depend combinatorially on this module's m_valid_o (or the symmetric case
 -- upstream) would create a genuine combinational loop.
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
 
 entity one_stage_buffer is
    generic (
