@@ -4,6 +4,9 @@
 
 library ieee;
    use ieee.std_logic_1164.all;
+   -- Not used by this architecture's own statements, but required by the
+   -- vunit in formal/cpu_main.psl (bound to this architecture, so it shares
+   -- this context clause), which subtracts two std_logic_vector signals.
    use ieee.numeric_std_unsigned.all;
 
    use work.cpu_constants.t_stage;

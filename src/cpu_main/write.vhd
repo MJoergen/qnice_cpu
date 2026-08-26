@@ -95,7 +95,7 @@ begin
    p_debug : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if inst_done_o then
+         if inst_done_o = '1' then
             disassemble(prep_stage_i.addr, prep_stage_i.inst, prep_stage_i.immediate);
          end if;
       end if;
@@ -387,7 +387,7 @@ begin
    next_pc   <= prep_stage_i.addr + 2 when (prep_stage_i.src_imm = '1' or prep_stage_i.dst_imm = '1') else
                 prep_stage_i.addr + 1;
    mem_data  <= next_pc;
-   mem_valid <= '1' when or(prep_stage_i.microcodes(2 downto 0)) /= '0' and prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP else
+   mem_valid <= '1' when or(prep_stage_i.microcodes(2 downto 0)) = '1' and prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP else
                 '0';
 
 

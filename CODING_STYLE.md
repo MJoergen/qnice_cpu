@@ -265,11 +265,8 @@ low-risk, cosmetic work, best done a file at a time.
 
 | Deviation | Files |
 |---|---|
-| Port modes written `in    ` / `out   ` | `sub/sequencer.vhd` |
-| Implicit `std_logic` condition (`if x then`) | `cpu_main/write.vhd:98`, `debug.vhd:44,49`, `cpu_main/prepare.vhd:128,131` |
-| `or(vec) /= '0'` spelling | `cpu_main/write.vhd:390` |
-| Unused numeric import | `cpu_main/sub/alu.vhd`, `cpu_main/sub/sequencer.vhd`, `cpu_main/cpu_main.vhd`, `test/wb_dp_mem.vhd` |
-| Type named `<x>_t` instead of `t_<x>` | `cpu_main/sub/microcode.vhd` |
+| Implicit `std_logic` condition (`if x then`) | `debug.vhd:44,49` |
+| Unused numeric import | `test/wb_dp_mem.vhd` |
 | Colons aligned across the whole declarative region | `cpu.vhd` |
 | Generic declarations not colon-aligned | `test/system.vhd`, `test/tb_cpu.vhd` |
 | `end cpu_constants;` instead of `end package cpu_constants;` | `cpu_constants.vhd` (both package and body) |

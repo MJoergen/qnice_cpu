@@ -16,7 +16,6 @@
 
 library ieee;
    use ieee.std_logic_1164.all;
-   use ieee.numeric_std.all;
 
    use work.cpu_constants.t_stage;
    use work.cpu_constants.C_LAST;
@@ -24,16 +23,16 @@ library ieee;
 
 entity sequencer is
    port (
-      clk_i     : in    std_logic;
-      rst_i     : in    std_logic;
+      clk_i     : in  std_logic;
+      rst_i     : in  std_logic;
       -- Connect to DECODE
-      s_valid_i : in    std_logic;
-      s_ready_o : out   std_logic;
-      s_stage_i : in    t_stage;
+      s_valid_i : in  std_logic;
+      s_ready_o : out std_logic;
+      s_stage_i : in  t_stage;
       -- Connect to PREPARE
-      m_valid_o : out   std_logic;
-      m_ready_i : in    std_logic;
-      m_stage_o : out   t_stage
+      m_valid_o : out std_logic;
+      m_ready_i : in  std_logic;
+      m_stage_o : out t_stage
    );
 end entity sequencer;
 

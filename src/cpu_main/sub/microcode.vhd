@@ -13,8 +13,8 @@ end entity microcode;
 
 architecture synthesis of microcode is
 
-   type microcode_t is array (0 to 15) of std_logic_vector(35 downto 0);
-   constant C_MICROCODE : microcode_t := (
+   type t_microcode is array (0 to 15) of std_logic_vector(35 downto 0);
+   constant C_MICROCODE : t_microcode := (
       -- For control and jump instructions that neither reads from nor writes to destination:
 
       -- JMP R, R
