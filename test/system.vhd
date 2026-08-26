@@ -4,13 +4,13 @@ library ieee;
 entity system is
    generic (
       G_REGISTER_BANK_WIDTH : integer;
-      G_ROM : string;
+      G_ROM                 : string;
       -- Simulation only: file to log every register and memory write to.
       -- An empty string (the default) disables the logging entirely.
-      G_WRITES_FILE : string := "";
+      G_WRITES_FILE         : string := "";
       -- Simulation only: file to write the run statistics to (cycle count and
       -- memory request counts). An empty string disables them.
-      G_STATS_FILE  : string := ""
+      G_STATS_FILE          : string := ""
    );
    port (
       clk_i  : in  std_logic;

@@ -1,9 +1,8 @@
 # VHDL coding style
 
 This document records the conventions the VHDL in this repository already follows, so that new
-code — and edits to old code — look like they came from the same hand. Where the repository is
-currently inconsistent, the rule below states the *majority* form, and
-[Known deviations](#known-deviations) lists the files that still differ.
+code — and edits to old code — look like they came from the same hand. See
+[Known deviations](#known-deviations) for any files that currently differ.
 
 All VHDL here is **VHDL-2008** (`ghdl --std=08`, `read_vhdl -vhdl2008` in Vivado). Use 2008
 constructs freely.
@@ -260,14 +259,6 @@ When you touch RTL that has PSL, re-run it (`cd formal && sby --yosys "yosys -m 
 
 ## Known deviations
 
-The rules above describe the majority style. These files currently differ; fixing them is
-low-risk, cosmetic work, best done a file at a time.
-
-| Deviation | Files |
-|---|---|
-| Implicit `std_logic` condition (`if x then`) | `debug.vhd:44,49` |
-| Unused numeric import | `test/wb_dp_mem.vhd` |
-| Colons aligned across the whole declarative region | `cpu.vhd` |
-| Generic declarations not colon-aligned | `test/system.vhd`, `test/tb_cpu.vhd` |
-| `end cpu_constants;` instead of `end package cpu_constants;` | `cpu_constants.vhd` (both package and body) |
-| No trailing blank line after `end architecture` | `test/test_monitor.vhd` |
+None currently — the VHDL in this repository is consistent with the rules above. If you introduce
+one (or find one), list it here as `| Deviation | Files |` so it isn't lost, and fix it when
+convenient; low-risk, cosmetic work like this is best done a file at a time.

@@ -6,16 +6,16 @@ library ieee;
 entity tb_cpu is
    generic (
       G_REGISTER_BANK_WIDTH : integer;
-      G_ROM : string;
+      G_ROM                 : string;
       -- Simulation only: file to log every register and memory write to.
       -- An empty string (the default) disables the logging entirely.
-      G_WRITES_FILE : string := "";
+      G_WRITES_FILE         : string := "";
       -- Simulation only: file to write the run statistics to (cycle count and
       -- memory request counts). An empty string (the default) disables them.
-      G_STATS_FILE : string := "";
+      G_STATS_FILE          : string := "";
       -- A test program that has not halted by now is considered hung. The
       -- longest of the current test programs (prog.asm) halts at about 840 us.
-      G_TIMEOUT : time := 2 ms
+      G_TIMEOUT             : time := 2 ms
    );
 end entity tb_cpu;
 

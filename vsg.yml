@@ -13,11 +13,10 @@
 #   - "Colons aligned within each blank-line-separated group" (CODING_STYLE.md
 #     section 3): vsg's alignment rules (port_014/port/generic column
 #     alignment, etc.) align across the WHOLE port/generic list, not
-#     per-group. cpu.vhd is the one file that actually uses whole-region
-#     alignment (see CODING_STYLE.md's Known Deviations), so it will pass;
-#     every per-group-aligned file will report violations here that are not
-#     real deviations. Left at vsg's default rather than disabled outright,
-#     since whole-region alignment is a valid, readable fallback.
+#     per-group, so every per-group-aligned declaration list in this repo
+#     will report a violation here that is not a real deviation. Left at
+#     vsg's default rather than disabled outright, since whole-region
+#     alignment is a valid, readable fallback vsg can actually check for.
 #   - Section separator comments (60 dashes), instantiation closing label
 #     comments ("); -- i_foo"), header comment structure (THEORY OF
 #     OPERATION/INTERFACE CONTRACTS/RESET), em-dash comment spacing, and

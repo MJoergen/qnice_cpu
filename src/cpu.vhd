@@ -41,24 +41,24 @@ end entity cpu;
 architecture synthesis of cpu is
 
    -- FETCH to ICACHE
-   signal fetch2icache_valid                 : std_logic;
-   signal fetch2icache_ready                 : std_logic;
-   signal fetch2icache_addr                  : std_logic_vector(15 downto 0);
-   signal fetch2icache_data                  : std_logic_vector(15 downto 0);
+   signal fetch2icache_valid : std_logic;
+   signal fetch2icache_ready : std_logic;
+   signal fetch2icache_addr  : std_logic_vector(15 downto 0);
+   signal fetch2icache_data  : std_logic_vector(15 downto 0);
 
    -- Halt
-   signal halt                               : std_logic;
-   signal halt_d                             : std_logic := '0';
-   signal halt_fetched                       : std_logic := '0';
+   signal halt         : std_logic;
+   signal halt_d       : std_logic := '0';
+   signal halt_fetched : std_logic := '0';
 
    -- ICACHE to DECODE
-   signal icache_rst                         : std_logic;
-   signal icache2decode_valid                : std_logic;
-   signal icache2decode_ready                : std_logic;
-   signal icache2decode_double_valid         : std_logic;
-   signal icache2decode_addr                 : std_logic_vector(15 downto 0);
-   signal icache2decode_data                 : std_logic_vector(31 downto 0);
-   signal icache2decode_double_consume       : std_logic;
+   signal icache_rst                   : std_logic;
+   signal icache2decode_valid          : std_logic;
+   signal icache2decode_ready          : std_logic;
+   signal icache2decode_double_valid   : std_logic;
+   signal icache2decode_addr           : std_logic_vector(15 downto 0);
+   signal icache2decode_data           : std_logic_vector(31 downto 0);
+   signal icache2decode_double_consume : std_logic;
 
    -- Same three signals, gated off once a HALT has been fetched (p_halt_fetched)
    signal icache2decode_valid_gated          : std_logic;
@@ -66,38 +66,38 @@ architecture synthesis of cpu is
    signal icache2decode_double_consume_gated : std_logic;
 
    -- WRITE to FETCH (branches: the new PC, which also flushes the pipeline)
-   signal wr2fetch_valid                     : std_logic;
-   signal wr2fetch_addr                      : std_logic_vector(15 downto 0);
+   signal wr2fetch_valid : std_logic;
+   signal wr2fetch_addr  : std_logic_vector(15 downto 0);
 
    -- DECODE read from register file
-   signal decode2reg_rd_en                   : std_logic;
-   signal decode2reg_src_reg                 : std_logic_vector(3 downto 0);
-   signal decode2reg_src_val                 : std_logic_vector(15 downto 0);
-   signal decode2reg_dst_reg                 : std_logic_vector(3 downto 0);
-   signal decode2reg_dst_val                 : std_logic_vector(15 downto 0);
-   signal reg2decode_r14                     : std_logic_vector(15 downto 0);
+   signal decode2reg_rd_en   : std_logic;
+   signal decode2reg_src_reg : std_logic_vector(3 downto 0);
+   signal decode2reg_src_val : std_logic_vector(15 downto 0);
+   signal decode2reg_dst_reg : std_logic_vector(3 downto 0);
+   signal decode2reg_dst_val : std_logic_vector(15 downto 0);
+   signal reg2decode_r14     : std_logic_vector(15 downto 0);
 
    -- WRITE to register file
-   signal wr2reg_r14_we                      : std_logic;
-   signal wr2reg_r14                         : std_logic_vector(15 downto 0);
-   signal wr2reg_we                          : std_logic;
-   signal wr2reg_addr                        : std_logic_vector(3 downto 0);
-   signal wr2reg_val                         : std_logic_vector(15 downto 0);
+   signal wr2reg_r14_we : std_logic;
+   signal wr2reg_r14    : std_logic_vector(15 downto 0);
+   signal wr2reg_we     : std_logic;
+   signal wr2reg_addr   : std_logic_vector(3 downto 0);
+   signal wr2reg_val    : std_logic_vector(15 downto 0);
 
    -- WRITE request to memory
-   signal wr2mem_req_valid                   : std_logic;
-   signal wr2mem_req_ready                   : std_logic;
-   signal wr2mem_req_op                      : std_logic_vector(2 downto 0);
-   signal wr2mem_req_addr                    : std_logic_vector(15 downto 0);
-   signal wr2mem_req_data                    : std_logic_vector(15 downto 0);
+   signal wr2mem_req_valid : std_logic;
+   signal wr2mem_req_ready : std_logic;
+   signal wr2mem_req_op    : std_logic_vector(2 downto 0);
+   signal wr2mem_req_addr  : std_logic_vector(15 downto 0);
+   signal wr2mem_req_data  : std_logic_vector(15 downto 0);
 
    -- Memory response back to PREPARE
-   signal mem2prep_src_valid                 : std_logic;
-   signal mem2prep_src_ready                 : std_logic;
-   signal mem2prep_src_data                  : std_logic_vector(15 downto 0);
-   signal mem2prep_dst_valid                 : std_logic;
-   signal mem2prep_dst_ready                 : std_logic;
-   signal mem2prep_dst_data                  : std_logic_vector(15 downto 0);
+   signal mem2prep_src_valid : std_logic;
+   signal mem2prep_src_ready : std_logic;
+   signal mem2prep_src_data  : std_logic_vector(15 downto 0);
+   signal mem2prep_dst_valid : std_logic;
+   signal mem2prep_dst_ready : std_logic;
+   signal mem2prep_dst_data  : std_logic_vector(15 downto 0);
 
 begin
 

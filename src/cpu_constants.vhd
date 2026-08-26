@@ -126,7 +126,7 @@ package cpu_constants is
       alu_dst_val : std_logic_vector(15 downto 0);
    end record t_stage;
 
-end cpu_constants;
+end package cpu_constants;
 
 library ieee;
    use ieee.std_logic_1164.all;
@@ -265,5 +265,5 @@ package body cpu_constants is
 
    end procedure disassemble;
 
-end cpu_constants;
+end package body cpu_constants;
 

@@ -41,12 +41,12 @@ begin
       main_loop : loop
          wait until clk_i = '1';
 
-         if reg_we_i then
+         if reg_we_i = '1' then
             write(l, "Write value 0x" & to_hstring(reg_data_i) & " to register " & to_hstring(reg_addr_i));
             writeline(tf, l);
          end if;
 
-         if mem_we_i then
+         if mem_we_i = '1' then
             write(l, "Write value 0x" & to_hstring(mem_data_i) & " to memory 0x" & to_hstring(mem_addr_i));
             writeline(tf, l);
          end if;
