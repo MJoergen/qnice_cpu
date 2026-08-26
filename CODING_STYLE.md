@@ -16,10 +16,10 @@ Every file is one design unit (or one package + package body) and is laid out in
 -- <module description: what it is, THEORY OF OPERATION, INTERFACE CONTRACTS, RESET>
 
 library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std_unsigned.all;
 
-use work.cpu_constants.t_stage;
+   use work.cpu_constants.t_stage;
 
 entity foo is
    generic (...);
@@ -36,7 +36,8 @@ end architecture synthesis;
 * **Header comment first, `library` second.** The descriptive block sits *above* `library`, not
   between the `use` clauses and the `entity`. Rationale: the header is what a reader wants to see
   first, before wading through boilerplate imports.
-* `library ieee;` and its `use` clauses are **not indented**.
+* `library ieee;` itself is not indented, but every `use` clause is indented 3 spaces —
+  including `use work.*` clauses, which have no `library work;` line of their own.
 * A blank line separates the `ieee` `use` clauses from the `work` ones.
 * Architecture name is `synthesis`, or `simulation` for a unit that is simulation-only
   (`debug.vhd`, `tb_cpu.vhd`, `test_monitor.vhd`).
@@ -264,7 +265,6 @@ low-risk, cosmetic work, best done a file at a time.
 
 | Deviation | Files |
 |---|---|
-| `use` clauses indented under `library ieee;` | `sub/sequencer.vhd`, `sub/pipe_concat.vhd` |
 | Header wrapped in a `-- ------` box | `sub/pipe_concat.vhd` |
 | Port modes written `in    ` / `out   ` | `sub/sequencer.vhd`, `sub/pipe_concat.vhd` |
 | Spaces around `-` in width expressions (`G_X - 1`) | `fetch/icache.vhd`, `sub/pipe_concat.vhd` |

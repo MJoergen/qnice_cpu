@@ -62,8 +62,8 @@
 -- present; all ports are synchronous to clk_i.
 
 library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std_unsigned.all;
 
 entity fetch is
    port (

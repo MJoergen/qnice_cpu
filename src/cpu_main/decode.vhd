@@ -1,8 +1,8 @@
 library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std_unsigned.all;
 
-use work.cpu_constants.all;
+   use work.cpu_constants.all;
 
 entity decode is
    port (

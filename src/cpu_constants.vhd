@@ -1,5 +1,5 @@
 library ieee;
-use ieee.std_logic_1164.all;
+   use ieee.std_logic_1164.all;
 
 package cpu_constants is
 
@@ -129,10 +129,10 @@ package cpu_constants is
 end cpu_constants;
 
 library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
-use ieee.std_logic_textio.all;
-use std.textio.all;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std_unsigned.all;
+   use ieee.std_logic_textio.all;
+   use std.textio.all;
 
 package body cpu_constants is
 

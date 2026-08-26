@@ -23,8 +23,8 @@
 -- against that file, not just re-simulated.
 
 library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std_unsigned.all;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std_unsigned.all;
 
 entity two_stage_buffer is
    generic (

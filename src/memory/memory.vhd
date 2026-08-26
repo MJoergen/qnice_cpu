@@ -38,11 +38,11 @@
 -- below.
 
 library ieee;
-use ieee.std_logic_1164.all;
+   use ieee.std_logic_1164.all;
 
-use work.cpu_constants.C_MEM_READ_SRC;
-use work.cpu_constants.C_MEM_READ_DST;
-use work.cpu_constants.C_MEM_WRITE;
+   use work.cpu_constants.C_MEM_READ_SRC;
+   use work.cpu_constants.C_MEM_READ_DST;
+   use work.cpu_constants.C_MEM_WRITE;
 
 entity memory is
    port (

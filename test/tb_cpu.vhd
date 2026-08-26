@@ -1,7 +1,7 @@
 library ieee;
-use ieee.std_logic_1164.all;
+   use ieee.std_logic_1164.all;
 
-use std.env.all;
+   use std.env.all;
 
 entity tb_cpu is
    generic (

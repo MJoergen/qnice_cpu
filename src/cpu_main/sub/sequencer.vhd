@@ -18,9 +18,9 @@ library ieee;
    use ieee.std_logic_1164.all;
    use ieee.numeric_std.all;
 
-use work.cpu_constants.t_stage;
-use work.cpu_constants.C_LAST;
-use work.cpu_constants.C_UCODE_BITS;
+   use work.cpu_constants.t_stage;
+   use work.cpu_constants.C_LAST;
+   use work.cpu_constants.C_UCODE_BITS;
 
 entity sequencer is
    port (

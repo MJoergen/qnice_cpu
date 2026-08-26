@@ -52,8 +52,8 @@
 -- upstream) would create a genuine combinational loop.
 
 library ieee;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
+   use ieee.std_logic_1164.all;
+   use ieee.numeric_std.all;
 
 entity one_stage_buffer is
    generic (
