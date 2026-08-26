@@ -38,6 +38,10 @@ architecture synthesis of decode is
    -- Instruction format decoding
    ------------------------------------------------------------
 
+-- Deliberate compact tables: each maps an opcode straight to a single bit,
+-- with "others" as the fall-through. vsg's constant_012 wants every
+-- association reindented to the open-paren column (66+ spaces deep here).
+-- vsg_off constant_012
    constant C_HAS_SRC_OPERAND : std_logic_vector(15 downto 0) := (
       C_OPCODE_CTRL => '0',
       others        => '1');
@@ -59,6 +63,7 @@ architecture synthesis of decode is
       C_OPCODE_CTRL => '0',
       C_OPCODE_JMP  => '0',
       others        => '1');
+-- vsg_on constant_012
 
 
    signal has_src_operand : std_logic; -- Does the instruction have a source operand?

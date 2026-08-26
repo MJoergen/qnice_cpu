@@ -9,6 +9,14 @@
 #
 # Usage:  vsg -c vsg.yml -f <files...>
 #
+# A handful of files carry inline `-- vsg_off <rule_id>...` / `-- vsg_on
+# <rule_id>...` markers (vsg's own local-suppression syntax) around a
+# specific deliberate table, rather than a global override here -- see
+# cpu_constants.vhd, decode.vhd, microcode.vhd, alu_data.vhd and
+# alu_flags.vhd. Prefer that over a config change when the deviation is
+# local to one construct in one file; reach for a `rule:` entry below only
+# when the same deviation is a repo-wide convention.
+#
 # Known gaps (vsg has no matching option, or its model doesn't fit):
 #   - Section separator comments (60 dashes), instantiation closing label
 #     comments ("); -- i_foo"), header comment structure (THEORY OF
@@ -28,10 +36,11 @@
 #   - "One statement per line. The exception is a deliberate table -- see
 #     the opcode/flag matrix in alu_flags.vhd" (Section 3): sequential_007
 #     enforces "one statement per line" everywhere, which is correct almost
-#     everywhere and stays enabled; alu_flags.vhd's table is a single,
-#     named, deliberate exception with no per-file override in a shared
-#     config, so it will report violations there that are not real
-#     deviations.
+#     everywhere and stays enabled. alu_flags.vhd's table already carries a
+#     local `vsg_off`/`vsg_on` marker for case_005/case_012/case_201 (the
+#     "when ... =>" side of that same table); sequential_007 itself is not
+#     in that marker yet, so it still reports violations there that are not
+#     real deviations -- a natural follow-up, using the same marker.
 
 rule:
 

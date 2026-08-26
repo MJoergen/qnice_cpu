@@ -115,6 +115,10 @@ begin
    p_res_other : process (src_data_i, dst_data_i, opcode_i, sr_i, res_shl, res_shr)
    begin
       res_other <= ("0" & src_data_i);  -- Default value to avoid latches
+
+-- Deliberate one-line-per-opcode table: the alignment is the point (see
+-- CODING_STYLE.md's alu_flags.vhd exception for "one statement per line").
+-- vsg_off case_005 case_012 case_201
       case to_integer(unsigned(opcode_i)) is
          when C_OPCODE_MOVE => res_other <= "0" & src_data_i;
          when C_OPCODE_SHL  => res_other <= res_shl(16) & (res_shl(15 downto 0));
@@ -158,6 +162,7 @@ begin
          when C_OPCODE_JMP  => null;
          when others    => null;
       end case;
+-- vsg_on case_005 case_012 case_201
    end process p_res_other;
 
    res_data <= res_sum when is_sum = '1' else

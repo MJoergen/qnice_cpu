@@ -136,6 +136,12 @@ library ieee;
 
 package body cpu_constants is
 
+-- Deliberate one-line-per-value tables, mapping an encoding straight to its
+-- mnemonic: the alignment is the point (see CODING_STYLE.md's alu_flags.vhd
+-- exception for "one statement per line"). vsg's case_005/case_012/case_201
+-- want each "when" broken across several deeply-indented lines instead.
+-- vsg_off case_005 case_012 case_201
+
    function ctrl_str(cmd : std_logic_vector) return string is
    begin
       case to_integer(cmd) is
@@ -235,6 +241,8 @@ package body cpu_constants is
          end case;
          return "?";
       end function cond_str;
+
+-- vsg_on case_005 case_012 case_201
 
    begin
       if to_integer(inst(R_OPCODE)) = C_OPCODE_CTRL then

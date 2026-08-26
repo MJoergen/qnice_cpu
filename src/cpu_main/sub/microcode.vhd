@@ -14,6 +14,11 @@ end entity microcode;
 architecture synthesis of microcode is
 
    type t_microcode is array (0 to 15) of std_logic_vector(35 downto 0);
+
+-- Deliberate compact table: one ROM entry per instruction shape, laid out so
+-- the src/dst micro-op columns line up by eye. vsg's constant_012 wants each
+-- array element reindented to the open-paren column (44+ spaces deep here).
+-- vsg_off constant_012
    constant C_MICROCODE : t_microcode := (
       -- For control and jump instructions that neither reads from nor writes to destination:
 
@@ -122,6 +127,7 @@ architecture synthesis of microcode is
       (C_VAL_MEM_READ_DST) &
       (C_VAL_MEM_READ_SRC or C_VAL_REG_MOD_SRC))
    );
+-- vsg_on constant_012
 
 begin
 
