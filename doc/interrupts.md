@@ -21,10 +21,27 @@ implementation, and not before.
 ## Requirements
 
 Sources, in the upstream [QNICE-FPGA](https://github.com/sy2002/QNICE-FPGA)
-repository: `doc/int-device.md` for the bus protocol,
-`doc/intro/qnice_intro.tex` (the Interrupts slides) for the programmer's model,
-and `vhdl/qnice_cpu.vhd` plus `vhdl/register_file.vhd` for what the reference
-CPU actually does, which is not in every respect what the slides say.
+repository, on branch **`dev-V1.61`, at commit `aede0ce`**. That branch is the
+one to track. An earlier reading of this note was taken from `dev-cpu-pipeline`,
+an experimental branch, and two of the three disagreements it recorded turned
+out to exist only there.
+
+* `doc/intro/qnice_intro.tex` — the Interrupts slides; the programmer's model.
+* `doc/int-device.md` — the daisy-chain bus protocol.
+* `doc/programming_card/programming_card.tex` — a one-page ISA summary with an
+  `Interrupts` section of its own. Terse, and it disagrees with the slides.
+* `doc/best-practices.md` — the rules ISR *authors* are told to follow, which
+  turn out to bound how much the divergence below can cost.
+* `vhdl/qnice_cpu.vhd` and `vhdl/register_file.vhd` — what the reference CPU
+  actually does, which is not in every respect what the slides say.
+* `emulator/qnice.c` and `assembler/qasm.c` — the other two implementations. The
+  assembler is decisive on encoding, since the test programs go through it.
+
+Cite these **by symbol** — `SP_org`, `cs_int_wait_isr`, the `ctrlRTI` arm,
+`fsm_output_decode` — never by line number. Every line number an earlier draft of
+this note carried had gone stale, in both directions: some pointed at the wrong
+line of the right file, and some pointed at code that only ever existed on
+`dev-cpu-pipeline`.
 
 DECISION: When external evidence is contradicting, use the following priority:
 1. Ground truth is ISA (documented in doc/intro/qnice_intro.tex)
@@ -37,42 +54,113 @@ DECISION: When external evidence is contradicting, use the following priority:
    list them clearly, and document the implemented choice. See
    [Where the sources disagree](#where-the-sources-disagree) below.
 
+Two riders on that ranking, both earned below. The programming card is a
+document, but it is a *summary* document: it ranks between rules 2 and 3, and
+loses to the slides wherever the two disagree. And rule 1 makes the slides ground
+truth about *intent*, not about encoding — they get the control-instruction field
+layout flatly wrong, and on a bit position the assembler wins, because a bit
+position is only true if the toolchain agrees.
+
 ### Where the sources disagree
 
-Applying rule 4 above. Three disagreements matter, and one of them is inside the
-ground-truth document itself.
+Applying rule 4 above. What follows is the full list, re-derived against
+`dev-V1.61`. Two of the three items this note carried before the move rested on
+text and code that exist only on `dev-cpu-pipeline`: the `EXC` contradiction is
+gone entirely, and the saved-state disagreement is real but far narrower than it
+looked. A bit-numbering error in the ISA document takes their place as the item
+that most needs writing down.
 
-**`EXC` — the ISA document contradicts itself, and `EXC` is not implemented.**
-The instruction table at `qnice_intro.tex:248` lists
-`EXC const, dst — Exchange shadow register`. The control-command bit table at
-`:343`-`:348` lists only `HALT`, `RTI`, `INT`, `INCRB` and `DECRB`, and gives
-`EXC` **no encoding at all**. The reference CPU has no `ctrlEXC` constant and no
-case arm, so it falls into `when others => HALT`; only the assembler knows the
-mnemonic, at `qasm.c:41`.
+**`EXC` is not a contradiction. It is assembler-only.** Nothing in the ISA
+document mentions `EXC` — not the instruction table, not the control-command bit
+table. Neither does the programming card, nor the emulator, whose
+`control_mnemonics` array stops at `DECRB`. Nor does the reference CPU:
+`vhdl/cpu_constants.vhd` defines `ctrlHALT`, `ctrlRTI`, `ctrlINT`, `ctrlINCRB`
+and `ctrlDECRB` and stops there, so the encoding falls into the `Ctrl_Cmd` case's
+`when others` arm, commented "illegal command: HALT". `EXC` exists in exactly one
+place in the whole upstream project: the assembler, which knows the mnemonic and
+emits `5` for it.
 
-The resolution follows from the decision below to save `R14` and `R15` only:
-`EXC` exists to exchange *shadow registers*, which this design does not have.
-So `EXC` is out of scope because of that decision, not merely because upstream
-never built it. Its arm of `p_unimplemented` stays armed permanently.
+An earlier draft of this note reported the ISA document as contradicting itself
+here, listing `EXC const, dst — Exchange shadow register` in the instruction
+table while giving it no encoding. That line is real, but it is not in
+`dev-V1.61`; it was added on `dev-cpu-pipeline` by commit `19a1657`, "Added EXC
+instruction to qnice_intro". **Implemented choice: unchanged — `EXC` is out of
+scope, and its arm of `p_unimplemented` stays armed permanently.** The reasoning
+is now shorter and stronger. It no longer leans on the saved-state decision
+below: there is simply no source above the assembler that has ever said what
+`EXC` does.
 
-**`INT`'s operand field — the ISA document contradicts itself, and the
-destination field wins.** The instruction table at `qnice_intro.tex:246` says
-`INT dst`. The control-command table at `:345` says the address is "supplied by
-the source operand". Three sources agree on the destination against that one
-sentence: the instruction table, the reference CPU (which reads `Dst_Mode` and
-`reg_read_data2`), and — decisively, since the test programs go through it —
-the assembler, which ORs `dest_op_code` into bits 5..0 at `qasm.c:1037`.
-**Implemented choice: the destination field.**
+**`INT`'s operand field — the ISA document contradicts itself twice, and the
+destination field wins.** The instruction table says `INT dst`. The
+control-command table says the address is "supplied by the source operand", and
+the Interrupts slide says it again one sentence after writing the opposite: "A
+software interrupt is triggered by `INT <dst op>`. The source operand contains
+the address of the ISR."
 
-Worth knowing alongside it: `INT <constant>` assembles to **two words**
-(`qasm.c:1025`), so `INT` can itself be a two-word instruction. That interacts
-with `next_pc` and gets its own test case.
+Everything else agrees on the destination: the instruction table, the programming
+card ("the ISR address is specified by the `dst` part of the instruction"), the
+reference CPU (which switches on `Dst_Mode` and uses `reg_read_data2`), the
+emulator (which reads `destination_mode`/`destination_regaddr`), and —
+decisively, since the test programs go through it — the assembler, which ORs
+`dest_op_code` into bits 5..0. **Implemented choice: the destination field.**
 
-**Saved state — the document and the implementation disagree.** The slides say
-two latches for `R14` and `R15`; `register_file.vhd:199` reverts `R8`-`R15`.
-Rule 1 makes the document ground truth, and the decision under
-[what state is saved](#the-decision-to-make-first-what-state-is-saved) follows
-it. **Implemented choice: `R14` and `R15` only.**
+*Why* the slides say "source" twice is worth writing down, because it is a third
+error and a live trap. The control-instruction slide states that "the command to
+be executed is specified by bits **5..0** of the instruction". That is wrong. The
+assembler builds a control word as
+
+```c
+0xe000 | ((opcode & 0x3f) << 6) | (dest_op_code & 0x3f)
+```
+
+and the reference CPU decodes `Ctrl_Cmd <= Instruction(11 downto 6)`. The command
+sits in bits **11..6**, the operand in bits **5..0**. In the slide's own
+(incorrect) frame, with the command in 5..0, the field left over at 11..6 *is*
+the source field — `Src_RegNo` at 11..8, `Src_Mode` at 7..6. So one bit-numbering
+error explains both "source operand" sentences.
+
+This design already has it right: `src/cpu_constants.vhd` declares
+`subtype R_CTRL_CMD is natural range 11 downto 6`. That is exactly why the error
+belongs in this list rather than being quietly ignored — anyone implementing
+`INT` from the ISA document alone decodes the wrong field, and rule 1 points them
+straight at it.
+
+Worth knowing alongside all this: `INT <constant>` assembles to **two words**, so
+`INT` can itself be a two-word instruction. That interacts with `next_pc` and
+gets its own test case.
+
+**Saved state — all four sources disagree, and the ISA document has the
+narrowest set.** This is the disagreement that changed most under `dev-V1.61`.
+
+| Source | Saved and restored |
+|---|---|
+| `qnice_intro.tex`, the Interrupts slide (rule 1) | `R14`, `R15` |
+| `programming_card.tex`, `Interrupts` section | `PC` and `SP` — `R15`, `R13`, **not** `R14` |
+| `vhdl/qnice_cpu.vhd` (rule 3) | `R13`, `R14`, `R15` |
+| `emulator/qnice.c` | `R14`, `R15` |
+
+The reference keeps `SP_org`, `SR_org` and `PC_org` in the CPU itself — the
+declarations are commented `(R13)`, `(R14)`, `(R15)` — mirrors all three
+continuously while `Int_Active = '0'`, and reverts all three in the `ctrlRTI`
+arm. So it saves one register more than the slides do, and the programming card
+saves a different set again, omitting the status register that both other
+implementations save.
+
+Rule 1 makes the slides ground truth, the emulator independently agrees with
+them, and the programming card is a summary that loses to the slides.
+**Implemented choice: `R14` and `R15` only** — see
+[what state is saved](#the-decision-to-make-first-what-state-is-saved) for what
+that costs here, which is far less than it once looked.
+
+An earlier draft of this note recorded this disagreement as slides-say-two versus
+`register_file.vhd`-reverts-`R8`-`R15`, describing a register file that
+continuously mirrors the upper registers into shadow copies. **No such code
+exists in `dev-V1.61`.** `vhdl/register_file.vhd` is 102 lines with no shadow
+array, no `revert_en` and no `Int_Active` port at all; `R8`-`R12` are ordinary
+registers, and `R13`/`R14`/`R15` are not in the file — they are driven in from
+the CPU. The shadow file is `dev-cpu-pipeline`-only, from commit `87f9d4b` "WIP
+CPU and Register File: Refactoring R13..R15", and even there the loop body reads
+`for regnr in 8 to 12` — five registers, not eight.
 
 ### Bus protocol
 
@@ -82,11 +170,24 @@ which position is priority — the closer to the CPU, the higher.
 1. A device pulls `INT_N` low to request. It may hold it low indefinitely and
    must tolerate waiting arbitrarily long, because an ISR may already be
    running or a higher-priority device may be ahead of it.
-2. When the CPU can service it, the CPU pulls `IGRANT_N` low. The device then
-   drives the address of its ISR onto the data bus.
+2. When the CPU can service it, it saves `R14` and `R15` and *then* pulls
+   `IGRANT_N` low. The ISA document states that ordering explicitly — "it will
+   save `R14` and `R15` and then signals the device by pulling `/IGRANT` low" —
+   so the save is not merely concurrent with the grant. The device then drives
+   the address of its ISR onto the data bus.
 3. The device pulls `INT_N` high once that address is valid.
-4. The CPU samples the address and releases `IGRANT_N`. The device must release
-   the bus **combinationally** — the CPU starts fetching on the next cycle.
+4. The CPU samples the address and releases `IGRANT_N`, and the device releases
+   the bus.
+
+DECISION: on step 4 the device must release the bus **combinationally** — the CPU
+starts fetching on the next cycle. This is a constraint this design adds, not one
+it inherits: neither `int-device.md` nor the slides state any cycle budget, and
+the reference CPU is more relaxed, spending a whole state between sampling the
+address and fetching (`cs_int_jmp_isr`, whose comment reads "IGRANT_N goes back
+to high, new PC and CpuAddr is being clocked in"). A conforming device satisfies
+the tighter rule anyway — the reference device drives and releases `data_out`
+combinationally off `grant_n_in`, in `fsm_output_decode` in `vhdl/timer.vhd` —
+but it is a decision of ours, and T2b's diagram is where it gets pinned down.
 
 DECISION: the ISR address arrives on a **port of its own**, `isr_addr_i`, not on
 the data Wishbone. The daisy-chain data phase is not a Wishbone transaction —
@@ -114,16 +215,20 @@ input to be registered.
 ### Programmer's model
 
 * **Interrupts do not nest.** A request is granted only when no ISR is already
-  running. The reference gates this on `Int_Active` at instruction fetch
-  (`qnice_cpu.vhd:476`).
+  running. The reference gates this on `Int_Active` in the `cs_fetch` arm of
+  `fsm_output_decode`, before the fetched word is taken as an instruction.
 * **`R14` (SR) and `R15` (PC) are saved** into latches invisible to software.
+  The reference saves `R13` as well; this design follows the document. See
+  [Where the sources disagree](#where-the-sources-disagree).
 * **`RTI`** restores them, clears the in-ISR state and resumes.
 * **`INT <dst op>`** is a software interrupt; the destination operand supplies
-  the ISR address. The reference accepts all four addressing modes
-  (`qnice_cpu.vhd:561`-`582`).
-* **A rogue `RTI`** — one executed outside an ISR — halts the CPU
-  (`qnice_cpu.vhd:550`). So does a **rogue `INT`**, one executed inside an ISR
-  (`qnice_cpu.vhd:586`).
+  the ISR address. The reference accepts all four addressing modes — the
+  `Dst_Mode` case inside the `ctrlINT` arm.
+* **A rogue `RTI`** — one executed outside an ISR — halts the CPU (the `else` of
+  `if Int_Active = '1'` in the `ctrlRTI` arm). So does a **rogue `INT`**, one
+  executed inside an ISR (the `else` of `if Int_Active = '0'` in the `ctrlINT`
+  arm). The emulator halts on both too, printing a diagnostic that names each as
+  "Rogue".
 
   DECISION: both halt, and both are documented as such. Note the provenance:
   neither the ISA document nor `int-device.md` says anything about either case,
@@ -135,59 +240,75 @@ input to be registered.
   [test/README.md](../test/README.md) next to the other ways a run can fail, and
   in the two test programs that exercise it.
 * Bit 0 of the SR is always 1. This design already does that, in `alu_flags.vhd`
-  (`sr_o <= sr_i or X"0001"`).
+  (`sr_o <= sr_i or X"0001"`). The reference forces it in the saved copy too —
+  it mirrors `SR(15 downto 1) & "1"` into `SR_org`, not `SR` verbatim.
+* **An ISR must leave every register as it found it.** That is not this design's
+  rule, it is upstream's, from `doc/best-practices.md`: "When writing an
+  interrupt service routine (ISR), make sure that you do not leave any register
+  modified when calling `RTI`. You may use the stack." The same file tells ISR
+  authors they may use register banks, and requires the bank selector in the
+  upper eight bits of the SR to point at the highest active bank at all times, so
+  that an ISR can safely `INCRB` on entry. Both facts matter here: the first
+  bounds what saving only `R14`/`R15` can break, and the second is what test
+  case 7 exercises.
 
 ### `EXC` is out of scope, and that is not a shortcut
 
-Upstream `vhdl/cpu_constants.vhd` defines `ctrlHALT`, `ctrlRTI`, `ctrlINT`,
-`ctrlINCRB` and `ctrlDECRB` and stops there. There is no `ctrlEXC` and no case
-arm for it; it falls into `when others => HALT`. Only the *assembler* knows the
-mnemonic, at `assembler/qasm.c:41`, and emits `5` for it.
-
-So `EXC` has never been implemented in QNICE hardware. Keep its arm of
-`p_unimplemented` armed, along with reserved opcode `0xD`, and drop only the
-`RTI` and `INT` arms.
+The evidence is under
+[Where the sources disagree](#where-the-sources-disagree): `EXC` appears nowhere
+in the ISA document, the programming card, the reference CPU or the emulator —
+only in the assembler, which is the one place in the project that knows the
+mnemonic. So `EXC` has never been implemented in QNICE hardware, and no document
+has ever specified what it should do. Keep its arm of `p_unimplemented` armed,
+along with reserved opcode `0xD`, and drop only the `RTI` and `INT` arms.
 
 ## The decision to make first: what state is saved
 
-The slides say two latches, for `R14` and `R15`. **The reference implementation
-does more than that.** `register_file.vhd` continuously mirrors `R8`-`R15` into
-shadow copies whenever `Int_Active = '0'`, and `RTI` reverts all of them —
-see the loop at `register_file.vhd:199`, commented "revert R8 .. R15". Shadowing
-stops while an ISR runs, so the shadows freeze at their pre-interrupt values and
-no explicit save step is needed. An ISR gets a private `R8`-`R12` for free.
+Settled, and cheaper than it first looked. The slides say two latches, for `R14`
+and `R15`. The reference CPU saves `R13` as well — `SP_org` alongside `SR_org`
+and `PC_org`, all three mirrored continuously while `Int_Active = '0'` and all
+three reverted in the `ctrlRTI` arm. The gap is one register.
 
-That model does not fit here:
+**DECISION: save `R14` and `R15` only.** Rule 1 puts the document first, the
+emulator independently agrees with it, and adding `R13` is not free here: `R13`
+is an ordinary banked register in a [dp_ram.vhd](../src/sub/dp_ram.vhd)-backed
+file, and `RTI` already uses both write ports into that file — the ordinary one
+for `R15` and the dedicated SR port (`wr_sr_en_i`) for `R14`. A third restore
+needs a second cycle, and therefore a micro-op, turning `RTI` from a single-beat
+instruction into a sequenced one. That is a real cost for a divergence the
+ground-truth document does not ask for.
 
-* The register file is backed by [dp_ram.vhd](../src/sub/dp_ram.vhd), which has
-  **one write port**. Reverting five registers is not a single-cycle operation
-  on a RAM.
-* A continuous mirror needs a second writer into the same array, which is
-  precisely what that module's header explains cannot be inferred.
+**The cost of diverging is close to zero**, which is a change from how this note
+first read it. Upstream's own `doc/best-practices.md` already requires an ISR to
+"not leave any register modified when calling `RTI`", and offers the stack as the
+way to manage that. No conforming upstream ISR can rely on the CPU restoring
+anything beyond the two registers the slides name — `R13` included, since an ISR
+that balances its own stack leaves `SP` where it found it anyway. Write the
+divergence down (T11), but it is a footnote, not a hazard.
 
-**Recommendation: save `R14` and `R15` only**, and write the divergence down.
-That matches the published programmer's model, and this CPU is already not a
-drop-in replacement for the original. The cost is that an ISR must preserve
-`R8`-`R12` itself — ordinary practice elsewhere, and the register bank
-(`INCRB`) already offers a cheaper answer for code that wants private
-registers.
-
-The cost is real, though: upstream software that assumes a private `R8`-`R12`
-inside an ISR would break. Decide this before starting, because retrofitting
-shadow registers into a `dp_ram`-backed file later is a rewrite, not a patch.
-
-DECISION: I follow your advice; only R14 and R15 are saved.
+For the record, since it shaped the plan: an earlier draft of this note argued
+this decision against a register file that continuously mirrors `R8`-`R12` into
+shadow copies and reverts them on `RTI`, giving an ISR a private `R8`-`R12` for
+free. It concluded that such a model could not be built here — one write port on
+`dp_ram.vhd`, and a continuous mirror needs a second writer into the same array,
+which that module's header explains cannot be inferred. Both statements remain
+true *about this design*. They are just not statements about the reference, which
+has no shadow register file at all; that code lives only on the experimental
+`dev-cpu-pipeline` branch. Nothing in the plan below turned on the difference,
+but the argument for the decision did, so it is restated above on grounds that
+survive.
 
 ## How it fits this pipeline
 
 ### Three things already fit
 
 * **The return address already exists, and is already correct.**
-  `write.vhd:391` computes
+  `next_pc` in [write.vhd](../src/cpu_main/write.vhd) computes
 
   ```vhdl
-     next_pc <= prep_stage_i.addr + 2 when (src_imm = '1' or dst_imm = '1') else
-                prep_stage_i.addr + 1;
+     next_pc   <= prep_stage_i.addr + 2
+                  when (prep_stage_i.src_imm = '1' or prep_stage_i.dst_imm = '1')
+                  else prep_stage_i.addr + 1;
   ```
 
   which is exactly what interrupt entry needs, including for two-word
@@ -201,7 +322,8 @@ DECISION: I follow your advice; only R14 and R15 are saved.
   needs no micro-op sequencing.
 
 * **`INT` and `RTI` are branches, and branches already work.** DECODE rewrites
-  JMP's microcode to carry `REG_WRITE` with `res_reg = R15` (`decode.vhd:181`),
+  JMP's microcode to carry `REG_WRITE` with `res_reg = R15` (the
+  `C_OPCODE_JMP` arm in [decode.vhd](../src/cpu_main/decode.vhd)),
   which routes the target through `res_other`. Both instructions reuse that path
   unchanged, and get the pipeline flush that comes with any write to `R15`.
 
@@ -253,7 +375,12 @@ Happy path:
 5. Request a second interrupt from inside an ISR. Checks it is **not** granted
    until after the `RTI`.
 6. Interrupt an instruction that is two words, e.g. `MOVE 0x1234, R0`. Checks
-   the `+2` path of `next_pc`.
+   the `+2` path of `next_pc`. The reference treats this as a case worth handling
+   explicitly rather than by inference: for `INT <constant>`, which is itself two
+   words (`@R15++` on the destination), the `amIndirPostInc` arm bumps the
+   *saved* PC — `fsmPC_org <= PC + 1` — so that `RTI` resumes after the constant
+   word rather than on it. That is exactly the semantics `next_pc` already gives
+   this design for free.
 7. `INT` immediately after `INCRB`, with an ISR that changes the bank. Checks
    the bank-change flush still holds across an interrupt.
 
@@ -376,17 +503,19 @@ The reference halts on both.
   keep `EXC` and opcode `0xD`, and update the list in
   [test/README.md](../test/README.md).
 * **T11. Documentation.** Fold this note into
-  [doc/README.md](README.md), delete its TODO bullet, record the `R8`-`R12`
-  divergence where a reader will find it, and update
-  [CLAUDE.md](../CLAUDE.md).
+  [doc/README.md](README.md), delete its TODO bullet, record the saved-state
+  divergence — the reference restores `R13` on `RTI` and this design does not —
+  where a reader will find it, and update [CLAUDE.md](../CLAUDE.md).
 * **T12. Re-measure.** `make lint`, `make test`, `make -C formal -k`, then
   `make utilization` against the `a9f2c0b` baseline.
 
 ## Risks
 
 * **Timing on `fetch_valid_o`.** T0 exists to find this out on day one.
-* **The `R8`-`R12` divergence.** Decide before T3. Retrofitting shadow
-  registers into a `dp_ram`-backed register file later is a rewrite.
+* **The saved-state divergence.** Settled: `R14` and `R15` only, one register
+  short of the reference. Upstream's own best-practices rule for ISR authors is
+  what makes that cheap. Retrofitting extra saved state into a `dp_ram`-backed
+  register file later would still be a rewrite, so the decision stays made.
 * **Golden-file churn.** T1's determinism choice is what protects against it.
 * **Interaction with the HALT gate.** `p_halt_fetched` in `cpu.vhd` gates the
   Icache-to-DECODE handshake off when a `HALT` is handed to DECODE, and clears
