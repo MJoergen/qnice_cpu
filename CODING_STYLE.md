@@ -203,7 +203,7 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
 * **No shared variables.** VHDL-2008 requires a shared variable to be of a protected type, and a
   protected type is not synthesisable, so a plain one compiles only under GHDL's `-frelaxed` —
   which this repository deliberately does not pass (see below). A memory array is an ordinary
-  signal with exactly one driver, written from one process; see `test/dp_mem.vhd` for the
+  signal with exactly one driver, written from one process; see `src/sub/dp_ram.vhd` for the
   consequences that has for RAM inference.
 * **The GHDL command line carries no `-frelaxed`.** Every `ghdl` invocation in the `Makefile` is
   plain `--std=08`, so the whole design is LRM-conformant VHDL-2008 rather than
@@ -264,10 +264,10 @@ low-risk, cosmetic work, best done a file at a time.
 
 | Deviation | Files |
 |---|---|
-| `use` clauses indented under `library ieee;` | `sub/sequencer.vhd`, `sub/dp_ram.vhd`, `sub/pipe_concat.vhd` |
+| `use` clauses indented under `library ieee;` | `sub/sequencer.vhd`, `sub/pipe_concat.vhd` |
 | Header comment placed *above* `library` | `sub/pipe_concat.vhd`, `sub/two_stage_buffer.vhd`, `sub/two_stage_fifo.vhd` |
-| Header wrapped in a `-- ------` box | `sub/dp_ram.vhd`, `sub/pipe_concat.vhd` |
-| Port modes written `in    ` / `out   ` | `sub/sequencer.vhd`, `sub/dp_ram.vhd`, `sub/pipe_concat.vhd` |
+| Header wrapped in a `-- ------` box | `sub/pipe_concat.vhd` |
+| Port modes written `in    ` / `out   ` | `sub/sequencer.vhd`, `sub/pipe_concat.vhd` |
 | Spaces around `-` in width expressions (`G_X - 1`) | `fetch/icache.vhd`, `sub/pipe_concat.vhd` |
 | Section separators not 60 dashes (72 / 26) | `memory/memory.vhd`, `sub/two_stage_fifo.vhd` |
 | Two spaces after a period in prose | `fetch/fetch.vhd`, `fetch/icache.vhd`, `sub/two_stage_fifo.vhd` |
@@ -275,7 +275,7 @@ low-risk, cosmetic work, best done a file at a time.
 | `or(vec) /= '0'` spelling | `cpu_main/write.vhd:390` |
 | Unused numeric import | `sub/one_stage_buffer.vhd`, `sub/one_stage_fifo.vhd`, `sub/two_stage_buffer.vhd`, `cpu_main/sub/alu.vhd`, `cpu_main/sub/sequencer.vhd`, `cpu_main/cpu_main.vhd`, `test/wb_dp_mem.vhd` |
 | `-- pragma translate_off` instead of `synthesis_off`, and indented | `sub/one_stage_buffer.vhd`, `sub/one_stage_fifo.vhd` |
-| Type named `<x>_t` instead of `t_<x>` | `cpu_main/sub/microcode.vhd`, `sub/dp_ram.vhd` |
+| Type named `<x>_t` instead of `t_<x>` | `cpu_main/sub/microcode.vhd` |
 | Colons aligned across the whole declarative region | `cpu.vhd` |
 | Generic declarations not colon-aligned | `test/system.vhd`, `test/tb_cpu.vhd` |
 | Abbreviated instance labels | `sub/two_stage_buffer.vhd` (`i_osb_first`, `i_osb_second`) |

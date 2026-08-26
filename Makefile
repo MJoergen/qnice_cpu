@@ -31,7 +31,6 @@ SOURCES += src/cpu_main/cpu_main.vhd
 
 SOURCES += src/cpu.vhd
 
-TEST_SOURCES += test/dp_mem.vhd
 TEST_SOURCES += test/wb_dp_mem.vhd
 TEST_SOURCES += test/test_monitor.vhd
 TEST_SOURCES += test/system.vhd

@@ -131,6 +131,14 @@ The main part of the implementation is the Dual-Port RAM module
 sub-module, but the write-before-read functionality must be handled in this
 module.
 
+That RAM has two ports: port A reads and port B reads and writes. The register
+file uses port A for the read and port B for the write, leaving `G_B_READ`
+false so port B's read half is never generated. It gets its *second* read port
+— source and destination operands are read in the same cycle — by instantiating
+a second copy of the RAM rather than from port B, which cannot help: port B's
+address is the write address. The same module, with `G_B_READ` set, is the
+testbench memory model; see its header for why it is shaped that way.
+
 Additionally, we must have extra circuitry to disable update of the output when
 `rd_en_i` is de-asserted.
 

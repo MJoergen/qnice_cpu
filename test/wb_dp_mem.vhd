@@ -6,10 +6,10 @@ use std.textio.all;
 -- A dual-port memory with two Wishbone Slave interfaces.
 --
 -- Port A is READ ONLY; port B reads and writes. That asymmetry comes from
--- dp_mem, which cannot have two write ports and still be both LRM-conformant
--- VHDL-2008 and inferrable as a RAM by Vivado -- see the header of
--- test/dp_mem.vhd. It costs nothing: port A carries the instruction bus,
--- which never writes.
+-- src/sub/dp_ram.vhd, which cannot have two write ports and still be both
+-- LRM-conformant VHDL-2008 and inferrable as a RAM by Vivado -- see its
+-- header. It costs nothing: port A carries the instruction bus, which never
+-- writes.
 
 entity wb_dp_mem is
    generic (
@@ -56,23 +56,28 @@ architecture synthesis of wb_dp_mem is
 
 begin
 
-   i_dp_mem : entity work.dp_mem
+   i_dp_ram : entity work.dp_ram
       generic map (
          G_INIT_FILE => G_INIT_FILE,
          G_RAM_STYLE => G_RAM_STYLE,
+         G_B_READ    => true,
          G_ADDR_SIZE => G_ADDR_SIZE,
          G_DATA_SIZE => G_DATA_SIZE
       )
       port map (
          clk_i       => clk_i,
          rst_i       => rst_i,
+         -- Wishbone port A reads only; port B reads and writes, which is
+         -- exactly the shape dp_ram offers. See the header.
          a_addr_i    => a_addr,
+         a_rd_en_i   => '1',
          a_rd_data_o => a_rd_data,
          b_addr_i    => b_addr,
+         b_rd_en_i   => '1',
+         b_rd_data_o => b_rd_data,
          b_wr_en_i   => b_wr_en,
-         b_wr_data_i => b_wr_data,
-         b_rd_data_o => b_rd_data
-      ); -- i_dp_mem
+         b_wr_data_i => b_wr_data
+      ); -- i_dp_ram
 
 
    -- Acknowledge

@@ -269,7 +269,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `c274efd-dirty`.
+Measured with Vivado 2022.2 on commit `828d6ed-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -286,39 +286,42 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  883 |     63400 | 1.39 |
-| Slice Registers |  582 |    126800 | 0.46 |
-| Slices          |  305 |     15850 | 1.92 |
+| Slice LUTs      |  887 |     63400 | 1.40 |
+| Slice Registers |  598 |    126800 | 0.47 |
+| Slices          |  303 |     15850 | 1.91 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.163 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.135 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[inst][15]` to
-`i_prepare/wr_stage_o_reg[alu_dst_val][14]`: 10 logic levels, with 68% of the
+The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][1]` to
+`i_prepare/wr_stage_o_reg[alu_src_val][2]`: 9 logic levels, with 81% of the
 delay in routing rather than logic.
 <!-- end -->
 
 **In the build measured above, the worst path is the one this section
-describes** — the Status Register loop, which the full listing confirms by
-routing through `i_write/res_sum[14]`, the ALU's adder. It is not always: some
-builds instead put a Block RAM clock-to-out path inside the register file on
-top, with zero logic levels, nothing to optimise and nothing this design
-controls.
+describes** — the Status Register loop. Both endpoints are `wr_stage_o` fields,
+and the full listing shows it leaving PREPARE, passing through the register
+file's forwarding (`src_val_d`) and DECODE (`wr_stage_o[src_val]`), and being
+latched again by PREPARE. It is not always: some builds instead put a Block RAM
+clock-to-out path inside the register file on top, with zero logic levels,
+nothing to optimise and nothing this design controls.
 
 Which of the two wins is not a durable property, and neither is the number
-attached to it. The loop is routing-dominated, this design's placement noise has
-been measured at up to 0.284 ns from edits nowhere near it, and the two paths
-sit well inside that of each other. The sharpest illustration on record is the
-build immediately before this one: it reported **+0.400 ns**, and the only
-difference between the two is that two testbench files and their entities were
-*renamed*. No logic changed at all, and the margin moved 0.237 ns. Earlier, a
-build differing only in how the register file's forwarding mux was written came
-out at +0.214 ns. Re-measure before concluding anything from a single slack
+attached to it, nor which leg of the loop the listing happens to run through --
+the build before this one entered the loop through the ALU's adder
+(`i_write/res_sum[14]`) instead. The loop is routing-dominated, this design's
+placement noise has been measured at up to 0.284 ns from edits nowhere near it,
+and the two paths sit well inside that of each other. The sharpest illustration
+on record: one build reported **+0.400 ns** and the next **+0.163 ns**, and the
+only difference between them was that two testbench files and their entities
+were *renamed*. No logic changed at all, and the margin moved 0.237 ns. Earlier,
+a build differing only in how the register file's forwarding mux was written
+came out at +0.214 ns. Re-measure before concluding anything from a single slack
 number, and never read one as a regression without a second build to back it up.
 
 **Read the instance names in these listings with care.** The shipping build uses
@@ -374,10 +377,10 @@ in [write.vhd](../src/cpu_main/write.vhd).
 
 Two things to know before trying to optimise it further:
 
-* **It is now routing-bound, not logic-bound.** Only about a third of the delay
-  is logic; the rest is interconnect, so further reductions in logic depth will
-  buy much less than the level count suggests. (The exact split moves with the
-  placement; the generated figure above is the one for the build measured here.)
+* **It is now routing-bound, not logic-bound.** Interconnect accounts for most
+  of the delay — between about two thirds and four fifths of it across the
+  builds measured, the generated figure above being this one — so further
+  reductions in logic depth will buy much less than the level count suggests.
   The largest single item is the very first hop: `alu_src_val` bit 0 has a
   fanout of about 75 — it feeds the adder, both barrel shifters' shift-amount
   decode, the comparators and every bitwise operation — and that one net costs
@@ -454,7 +457,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (929 vs 883 LUTs). That is expected:
+The two tables do not add up to each other (929 vs 887 LUTs). That is expected:
 the first is measured after place-and-route, where physical optimisation
 replicates logic to meet timing, while the second stops after synthesis. Slices
 are not listed per module because slices are shared between modules and are not

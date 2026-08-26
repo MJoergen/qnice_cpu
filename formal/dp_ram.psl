@@ -21,8 +21,8 @@ vunit i_dp_ram(dp_ram(synthesis))
    p_written : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if wr_en_i = '1' and wr_addr_i = c_addr then
-            f_data    <= wr_data_i;
+         if b_wr_en_i = '1' and b_addr_i = c_addr then
+            f_data    <= b_wr_data_i;
             f_written <= '1';
          end if;
       end if;
@@ -35,25 +35,32 @@ vunit i_dp_ram(dp_ram(synthesis))
 
    -- We can read back the last value written to any given address.
    f_read_back : assert always
-      {f_written = '1' and rd_addr_i = c_addr and wr_en_i = '0' and rd_en_i = '1'}
-      |=> {rd_data_o = f_data};
+      {f_written = '1' and a_addr_i = c_addr and b_wr_en_i = '0' and a_rd_en_i = '1'}
+      |=> {a_rd_data_o = f_data};
 
-   -- Output value only changes when rd_en_i is asserted.
-   f_stable : assert always {not rd_en_i} |=> {stable(rd_data_o)};
+   -- The same contract on read port B, which reads the array directly (it
+   -- shares the write's process and clock edge, so it has no staging register).
+   f_read_back_b : assert always
+      {f_written = '1' and b_addr_i = c_addr and b_wr_en_i = '0' and b_rd_en_i = '1'}
+      |=> {b_rd_data_o = f_data};
+
+   -- Output value only changes when the port's read enable is asserted.
+   f_stable_a : assert always {a_rd_en_i = '0'} |=> {stable(a_rd_data_o)};
+   f_stable_b : assert always {b_rd_en_i = '0'} |=> {stable(b_rd_data_o)};
 
 
    ----------------------------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    ----------------------------------------------
 
-   signal f_falling_rd_en   : std_logic;
-   signal f_falling_rd_addr : std_logic_vector(G_ADDR_SIZE-1 downto 0);
+   signal f_falling_a_rd_en   : std_logic;
+   signal f_falling_a_rd_addr : std_logic_vector(G_ADDR_SIZE-1 downto 0);
 
    p_falling : process (clk_i)
    begin
       if falling_edge(clk_i) then
-         f_falling_rd_en   <= rd_en_i;
-         f_falling_rd_addr <= rd_addr_i;
+         f_falling_a_rd_en   <= a_rd_en_i;
+         f_falling_a_rd_addr <= a_addr_i;
       end if;
    end process p_falling;
 
@@ -62,15 +69,15 @@ vunit i_dp_ram(dp_ram(synthesis))
    -- timing relay rather than an extra unit of read latency, so that both
    -- G_RAM_STYLE configurations expose the same rising-edge-sampled behaviour.
    assume always {not clk_i}
-      |-> {f_falling_rd_en = rd_en_i and f_falling_rd_addr = rd_addr_i};
+      |-> {f_falling_a_rd_en = a_rd_en_i and f_falling_a_rd_addr = a_addr_i};
 
 
    ----------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    ----------------------------------------------
 
-   -- Useful for debugging, to make sure that rd_en_i is able to toggle.
-   f_toggle : cover {rd_en_i = '1'; rd_en_i = '0'; rd_en_i = '1'};
+   -- Useful for debugging, to make sure that a_rd_en_i is able to toggle.
+   f_toggle : cover {a_rd_en_i = '1'; a_rd_en_i = '0'; a_rd_en_i = '1'};
 
 
    ----------------------------------------------
@@ -84,39 +91,40 @@ vunit i_dp_ram(dp_ram(synthesis))
    -- a write to c_addr updates dp_ram_r(c_addr) and f_data identically, writes
    -- to other addresses touch neither, and f_written never de-asserts.
    --
-   -- For G_RAM_STYLE = "distributed" this lemma is sufficient: rd_data_o is a
+   -- For G_RAM_STYLE = "distributed" this lemma is sufficient: *_rd_data_o is a
    -- direct rising-edge read of dp_ram_r, so f_read_back closes by k-induction.
-   -- For G_RAM_STYLE = "block" the read path additionally contains the
-   -- falling-edge register rd_data, which needs its own mirror invariant --
-   -- see f_rd_data below.
+   -- For G_RAM_STYLE = "block" each read path additionally contains a
+   -- falling-edge register (*_rd_data), which needs its own mirror invariant --
+   -- see f_rd_data below. Port B reads the array directly, so it needs none.
    f_mem_shadow : assert always
       {f_written = '1'} |-> {dp_ram_r(to_integer(c_addr)) = f_data};
 
-   -- Block config only: throughout the low phase of the clock, the falling-edge
-   -- staging register mirrors the memory word at the address it captured
+   -- Block config only, port A only: throughout the low phase of the
+   -- clock, the falling-edge staging register mirrors the memory word it captured
    -- (f_falling_rd_addr): the falling edge has just refreshed it, and no write
    -- can intervene before the next rising edge. Without this lemma, induction
-   -- may start in an unreachable state where rd_data holds a value that never
-   -- came out of the memory; the next rising edge then forwards that garbage
-   -- into rd_data_o exactly when f_read_back samples it (the classic induction
+   -- may start in an unreachable state where the staging register holds a value
+   -- that never came out of the memory; the next rising edge then forwards that
+   -- garbage into *_rd_data_o exactly when f_read_back samples it (the classic induction
    -- CEX for this design: clk_i parked low for the whole trace, one final
    -- rising edge, f_read_back fails).
    --
    -- The guard clk_i = '0' matters: during the high phase the mirror may
    -- legitimately be stale, namely when the rising edge that opened the phase
-   -- wrote the very address rd_data had captured (read-during-write collision;
+   -- wrote the very address the staging register had captured (a collision;
    -- the following falling edge resolves it). Restricting the lemma to the low
    -- phase makes it both true and inductive, and the low phase is exactly the
-   -- state the read path consumes: every rising edge loads rd_data_o out of a
-   -- low-phase state, so pinning rd_data there is sufficient for f_read_back.
+   -- state the read path consumes: every rising edge loads *_rd_data_o out of a
+   -- low-phase state, so pinning the staging register there is sufficient.
    --
    -- For G_RAM_STYLE = "distributed" the consequent folds to a constant true
-   -- (rd_data is unused in that config). The style test lives in the consequent
+   -- (the staging registers are unused in that config). The style test lives in the consequent
    -- rather than the antecedent so that the antecedent stays reachable in both
    -- configs, keeping the auto-generated precondition cover satisfied.
    f_rd_data : assert always
       {clk_i = '0'}
-      |-> {G_RAM_STYLE /= "block" or rd_data = dp_ram_r(to_integer(f_falling_rd_addr))};
+      |-> {G_RAM_STYLE /= "block" or a_rd_data = dp_ram_r(to_integer(f_falling_a_rd_addr))};
+
 
 } -- vunit i_dp_ram(dp_ram(synthesis))
 

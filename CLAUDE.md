@@ -14,7 +14,7 @@ Use 2008 constructs freely (e.g. `ieee.numeric_std_unsigned`, unconstrained reco
 No `ghdl` invocation passes `-frelaxed`: the design is conformant VHDL-2008, not
 conformant-plus-waivers, and it should stay that way. House style is written up in
 [CODING_STYLE.md](CODING_STYLE.md); the one rule with teeth beyond formatting is **no shared
-variables** — see `test/dp_mem.vhd` for why that constrains RAM inference.
+variables** — see `src/sub/dp_ram.vhd` for why that constrains RAM inference.
 
 Full architecture description: [doc/README.md](doc/README.md). Per-module design notes live next
 to the code: [src/fetch/README.md](src/fetch/README.md), [src/registers/README.md](src/registers/README.md),
@@ -131,7 +131,8 @@ stalls PREPARE while waiting on the Wishbone bus.
 
 Instruction and data memory are separate interfaces (Harvard-style) but backed by the same
 physical dual-port RAM, since a program must be loadable and then executable from the same memory.
-That RAM (`test/dp_mem.vhd`) has **two read ports but only one write port**, on the data side.
+That RAM is `src/sub/dp_ram.vhd`, the same module the register file uses, and it has **two
+read ports but only one write port**, on the data side.
 The instruction side never writes — the program arrives through `G_INIT_FILE` and self-modifying
 code stores over the data bus — and it cannot: Vivado will not infer a RAM from two write ports
 unless they sit in two processes over a `shared variable`, which VHDL-2008 does not allow. The
@@ -257,7 +258,7 @@ hold because of non-obvious interactions that BMC/induction catches but casual r
 | `one_stage_fifo.vhd` | 1 | **registered** (always ≥1 cycle) | combinational | only `ready` cuts through |
 | `two_stage_buffer.vhd` | 2 | combinational when empty | combinational | 2× chained `one_stage_buffer` |
 | `two_stage_fifo.vhd` | 2 | registered | combinational, gated by `rst_i` | hand-built, not chained |
-| `dp_ram.vhd` | — | registered, 1-cycle, gated by `rd_en_i` | n/a | read-first on same-address collision |
+| `dp_ram.vhd` | — | registered, 1-cycle, gated by `*_rd_en_i` | n/a | port A reads, port B reads+writes; read-first on same-address collision |
 | `pipe_concat.vhd` | 0 | fully combinational | fully combinational | pure join, no storage, `clk_i`/`rst_i` unused |
 
 Subtleties worth knowing before reusing or modifying any of these:
@@ -280,11 +281,23 @@ Subtleties worth knowing before reusing or modifying any of these:
   can be accepted during a flush), but `m_valid_o` is deliberately NOT gated by `rst_i` (an output
   handshake can still complete on the same cycle a flush is asserted). This means **the consumer
   must share the same `rst_i`**, or it will silently accept a word the flush is discarding upstream.
+- **`dp_ram` has two ports, each with one address**: port A reads, port B reads *and writes*, both
+  at `b_addr_i`. It serves both the register file (reads on A, writes on B, `G_B_READ` false) and
+  the testbench memory model (reads on both, writes on B, `G_B_READ` true). Only port B writes,
+  because a second writer cannot be inferred — see "no shared variables" above.
+  **One address per port is load-bearing**: giving the write an address of its own makes three
+  independent addresses, which does not fit a two-port primitive, and Vivado duplicates the array
+  (measured: 8 RAMB36 instead of 4 on the 8 kW memory). Tying two address ports to the same net at
+  the instantiation does *not* rescue it, because `make utilization` synthesises with
+  `-flatten_hierarchy none` and elaborates the module in isolation. `G_B_READ` exists for the same
+  reason: a caller's `b_rd_en_i => '0'` is invisible in that pass, so the dead read port gets built
+  and inflates the register file's row by 40 LUTs of phantom LUTRAM.
 - **`dp_ram` read/write collision is read-first**: a read and write to the same address in the same
   cycle returns the *old* value; the new value is visible from the next read. `G_RAM_STYLE="block"`
-  adds a falling-edge staging register to ease BRAM timing (requires a reasonably balanced clock
-  duty cycle) — `"distributed"` is a plain single rising-edge read register. Memory contents are
-  never reset by `rst_i` (unused, kept only for interface uniformity).
+  adds a falling-edge staging register per read port to ease BRAM timing (requires a reasonably
+  balanced clock duty cycle) — `"distributed"` is a plain single rising-edge read register.
+  `G_INIT_FILE` loads the array from a text file; memory contents are never reset by `rst_i`
+  (unused, kept only for interface uniformity).
 - **`pipe_concat` has `clk_i`/`rst_i` ports that do nothing** — it's stateless combinational logic;
   the ports exist only so it fits the same instantiation convention and formal-env uniformity as
   everything else.

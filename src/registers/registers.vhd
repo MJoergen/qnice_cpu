@@ -90,14 +90,18 @@ begin
          G_DATA_SIZE => 16
       )
       port map (
-         clk_i     => clk_i,
-         rst_i     => rst_i,
-         rd_en_i   => lower_rd_en,
-         rd_addr_i => lower_rd_addr_src,
-         rd_data_o => lower_rd_data_src,
-         wr_en_i   => lower_wr_en,
-         wr_addr_i => lower_wr_addr,
-         wr_data_i => lower_wr_data
+         clk_i       => clk_i,
+         rst_i       => rst_i,
+         -- Port A reads. Port B writes; its read half is unused, the register
+         -- file getting its second read port from a second copy of the RAM.
+         a_addr_i    => lower_rd_addr_src,
+         a_rd_en_i   => lower_rd_en,
+         a_rd_data_o => lower_rd_data_src,
+         b_addr_i    => lower_wr_addr,
+         b_rd_en_i   => '0',
+         b_rd_data_o => open,
+         b_wr_en_i   => lower_wr_en,
+         b_wr_data_i => lower_wr_data
       ); -- i_ram_lower_src
 
 
@@ -107,14 +111,18 @@ begin
          G_DATA_SIZE => 16
       )
       port map (
-         clk_i     => clk_i,
-         rst_i     => rst_i,
-         rd_en_i   => lower_rd_en,
-         rd_addr_i => lower_rd_addr_dst,
-         rd_data_o => lower_rd_data_dst,
-         wr_en_i   => lower_wr_en,
-         wr_addr_i => lower_wr_addr,
-         wr_data_i => lower_wr_data
+         clk_i       => clk_i,
+         rst_i       => rst_i,
+         -- Port A reads. Port B writes; its read half is unused, the register
+         -- file getting its second read port from a second copy of the RAM.
+         a_addr_i    => lower_rd_addr_dst,
+         a_rd_en_i   => lower_rd_en,
+         a_rd_data_o => lower_rd_data_dst,
+         b_addr_i    => lower_wr_addr,
+         b_rd_en_i   => '0',
+         b_rd_data_o => open,
+         b_wr_en_i   => lower_wr_en,
+         b_wr_data_i => lower_wr_data
       ); -- i_ram_lower_dst
 
 
@@ -136,14 +144,18 @@ begin
          G_DATA_SIZE => 16
       )
       port map (
-         clk_i     => clk_i,
-         rst_i     => rst_i,
-         rd_en_i   => upper_rd_en,
-         rd_addr_i => upper_rd_addr_src,
-         rd_data_o => upper_rd_data_src,
-         wr_en_i   => upper_wr_en,
-         wr_addr_i => upper_wr_addr,
-         wr_data_i => upper_wr_data
+         clk_i       => clk_i,
+         rst_i       => rst_i,
+         -- Port A reads. Port B writes; its read half is unused, the register
+         -- file getting its second read port from a second copy of the RAM.
+         a_addr_i    => upper_rd_addr_src,
+         a_rd_en_i   => upper_rd_en,
+         a_rd_data_o => upper_rd_data_src,
+         b_addr_i    => upper_wr_addr,
+         b_rd_en_i   => '0',
+         b_rd_data_o => open,
+         b_wr_en_i   => upper_wr_en,
+         b_wr_data_i => upper_wr_data
       ); -- i_ram_upper_src
 
 
@@ -154,14 +166,18 @@ begin
          G_DATA_SIZE => 16
       )
       port map (
-         clk_i     => clk_i,
-         rst_i     => rst_i,
-         rd_en_i   => upper_rd_en,
-         rd_addr_i => upper_rd_addr_dst,
-         rd_data_o => upper_rd_data_dst,
-         wr_en_i   => upper_wr_en,
-         wr_addr_i => upper_wr_addr,
-         wr_data_i => upper_wr_data
+         clk_i       => clk_i,
+         rst_i       => rst_i,
+         -- Port A reads. Port B writes; its read half is unused, the register
+         -- file getting its second read port from a second copy of the RAM.
+         a_addr_i    => upper_rd_addr_dst,
+         a_rd_en_i   => upper_rd_en,
+         a_rd_data_o => upper_rd_data_dst,
+         b_addr_i    => upper_wr_addr,
+         b_rd_en_i   => '0',
+         b_rd_data_o => open,
+         b_wr_en_i   => upper_wr_en,
+         b_wr_data_i => upper_wr_data
       ); -- i_ram_upper_dst
 
 

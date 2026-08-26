@@ -27,6 +27,12 @@
 ##                       that the harness can actually drive rd_en_i through its
 ##                       toggle sequence for each style.
 ##
+## Every task sets G_B_READ=true, so the module is verified in its fullest
+## configuration -- both read ports present. G_B_READ=false only deletes port
+## B's read (see dp_ram.vhd); it adds no logic and no state, so every property
+## here still holds, and f_stable_b holds trivially because b_rd_data_o then
+## never changes at all.
+##
 ## Run one task:   sby -f dp_ram.sby bmc_block
 ## Run everything: sby -f dp_ram.sby
 
@@ -51,8 +57,8 @@ multiclock on
 smtbmc
 
 [script]
-distributed: ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_RAM_STYLE=distributed dp_ram.vhd dp_ram.psl -e dp_ram
-block:       ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_RAM_STYLE=block       dp_ram.vhd dp_ram.psl -e dp_ram
+distributed: ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_B_READ=true -gG_RAM_STYLE=distributed dp_ram.vhd dp_ram.psl -e dp_ram
+block:       ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_B_READ=true -gG_RAM_STYLE=block       dp_ram.vhd dp_ram.psl -e dp_ram
 prep -top dp_ram
 
 [files]
