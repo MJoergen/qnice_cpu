@@ -265,6 +265,10 @@ Remaining ideas:
   [Register bank switch](../src/cpu_main/README.md#Register-bank-switch); and an
   interrupt would be a fourth driver of `fetch_valid_o`, a net whose timing
   history is documented above `is_crb` in the same file.
+  [interrupts.md](interrupts.md) works this up in full: what the ISA requires,
+  the one behavioural question to settle first, the test cases, and the order
+  the work should happen in. `EXC` turns out to be out of scope — it has never
+  been implemented in QNICE hardware, only in the assembler.
 
 
 ## Utilization
