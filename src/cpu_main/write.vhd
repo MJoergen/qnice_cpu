@@ -43,15 +43,15 @@ architecture synthesis of write is
    signal alu_res_flags : std_logic_vector(15 downto 0);
    signal update_reg    : std_logic;
 
-   signal mem_addr    : std_logic_vector(15 downto 0);
-   signal mem_data    : std_logic_vector(15 downto 0);
-   signal mem_valid   : std_logic;
+   signal mem_addr  : std_logic_vector(15 downto 0);
+   signal mem_data  : std_logic_vector(15 downto 0);
+   signal mem_valid : std_logic;
 
-   signal next_pc     : std_logic_vector(15 downto 0);
-   signal wr_r15      : std_logic;
-   signal is_crb      : std_logic;
-   signal smc_delta   : std_logic_vector(15 downto 0);
-   signal smc_hit     : std_logic;
+   signal next_pc   : std_logic_vector(15 downto 0);
+   signal wr_r15    : std_logic;
+   signal is_crb    : std_logic;
+   signal smc_delta : std_logic_vector(15 downto 0);
+   signal smc_hit   : std_logic;
 
 
 begin
@@ -160,8 +160,8 @@ begin
    ------------------------------------------------------------
 
    update_reg <= prep_stage_i.r14(to_integer(prep_stage_i.inst(R_JMP_COND))) xor prep_stage_i.inst(R_JMP_NEG)
-                 when prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP
-              else '1';
+                 when prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP else
+                 '1';
 
    p_reg : process (all)
    begin
@@ -420,8 +420,8 @@ begin
    -- pulse and stops feeding the pipeline, and the testbench uses it as the
    -- end-of-test event.
    halt_o <= inst_done_o when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
-                              prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_HALT
-             else '0';
+                              prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_HALT else
+             '0';
 
 end architecture synthesis;
 

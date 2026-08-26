@@ -74,10 +74,10 @@ end entity two_stage_fifo;
 architecture synthesis of two_stage_fifo is
 
    -- Input registers
-   signal s_data_r  : std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0');
+   signal s_data_r : std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0');
 
    -- Output registers
-   signal m_data_r  : std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0');
+   signal m_data_r : std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0');
 
    -- Control signals
    signal s_ready_r : std_logic := '1';

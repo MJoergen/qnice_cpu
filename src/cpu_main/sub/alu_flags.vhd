@@ -20,9 +20,9 @@ end entity alu_flags;
 
 architecture synthesis of alu_flags is
 
-   signal cmp_n    : std_logic;
-   signal cmp_v    : std_logic;
-   signal cmp_z    : std_logic;
+   signal cmp_n : std_logic;
+   signal cmp_v : std_logic;
+   signal cmp_z : std_logic;
 
    signal zero     : std_logic;
    signal carry    : std_logic;

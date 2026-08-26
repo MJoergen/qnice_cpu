@@ -67,9 +67,9 @@ architecture synthesis of registers is
    signal wr_addr_d   : std_logic_vector(3 downto 0);
    signal wr_val_d    : std_logic_vector(15 downto 0);
 
-   signal rd_en_d     : std_logic;
-   signal src_val_d   : std_logic_vector(15 downto 0);
-   signal dst_val_d   : std_logic_vector(15 downto 0);
+   signal rd_en_d   : std_logic;
+   signal src_val_d : std_logic_vector(15 downto 0);
+   signal dst_val_d : std_logic_vector(15 downto 0);
 
 begin
 

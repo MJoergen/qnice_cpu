@@ -119,10 +119,15 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
      signal tsf_req_in_valid  : std_logic;
      signal tsf_req_in_ready  : std_logic;
      signal tsf_req_fill      : natural range 0 to 2;
+     signal tsf_req_out_valid : std_logic;
 
-     signal tsb_src_in_valid  : std_logic;
-     signal tsb_src_in_ready  : std_logic;
+     signal tsb_src_in_valid : std_logic;
+     signal tsb_src_in_ready : std_logic;
+     signal tsb_src_fill     : natural range 0 to 2;
   ```
+
+  The second group is one column narrower than the first, because its own widest name is one
+  character shorter. Widening it to match would be the mistake this rule exists to prevent.
 
 * Port modes are written `in ` / `out` with **a single alignment space after `in`**:
 
@@ -141,6 +146,15 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
      alu_src_val <= seq_stage.immediate when seq_stage.src_imm = '1'                    else
                     mem_src_data_i      when seq_stage.microcodes(C_MEM_WAIT_SRC) = '1' else
                     src_val_pc;
+  ```
+
+  A condition too long for one line wraps under itself, and `else` still ends the last line of it:
+
+  ```vhdl
+     immediate_src <= has_src_operand when
+                      fetch_data_i(R_SRC_REG)  = C_REG_PC and
+                      fetch_data_i(R_SRC_MODE) = C_MODE_POST else
+                      '0';
   ```
 
 * One statement per line. The exception is a deliberate *table* — see the opcode/flag matrix in
@@ -300,9 +314,13 @@ and the rest. Those stay this document's job, and a reviewer's.
 `vsg.yml` deliberately overrides only what this document actually says. Everything else is left at
 VSG's shipped defaults, so the tool will also flag things no rule here mentions.
 
-**`make lint` is not clean yet** — see the deviations below. Treat it as a guide while editing a
+**`make lint` is not clean yet**, but everything still failing is a VSG default on a point this
+document has never ruled on — blank lines around `case` alternatives and subprogram bodies,
+parenthesis placement in a multi-line function call, `report` continuation alignment, and so on.
+Every rule stated here that VSG can check, it checks clean. Treat lint as a guide while editing a
 file rather than as a gate: it is not wired into `make test` or CI. Run it on the file you touched
-and leave that file no worse than you found it.
+and leave that file no worse than you found it. To settle one of those open points, write the rule
+down here first and map it in `vsg.yml`, then fix the code.
 
 When a *single construct in a single file* deliberately breaks a rule, suppress it there with
 VSG's own markers rather than weakening `vsg.yml` for the whole repo:
@@ -321,16 +339,7 @@ this. Reach for a `vsg.yml` entry only when the deviation is a repo-wide convent
 
 ## Known deviations
 
-Deviations from the rules above. Fix them when convenient; low-risk, cosmetic work like this is
-best done a file at a time. If you introduce one (or find one), list it here so it isn't lost.
-
-| Deviation | Files |
-|---|---|
-| Section 3: colons aligned *across* blank-line-separated groups in a declarative region, rather than within each group (VSG `architecture_026`, 28 sites) | `cpu_main.vhd`, `write.vhd`, `prepare.vhd`, `alu_flags.vhd`, `memory.vhd`, `registers.vhd`, `two_stage_fifo.vhd`, `test/system.vhd` |
-| Section 3: a `when ... else` chain with `else` starting the line instead of ending the previous one (VSG `when_001`, 4 sites) | `decode.vhd`, `write.vhd` |
-
-Separately, `make lint` reports a few hundred violations of VSG defaults on points this document
-does not cover — blank lines around `case` alternatives and subprogram bodies, parenthesis
-placement in a multi-line function call, `report` continuation alignment, and so on. Those are not
-listed here: each one is a question this document has not answered yet. Answer it here first (and
-map it in `vsg.yml`), then fix the code.
+None currently — the VHDL in this repository is consistent with the rules above, and `make lint`
+confirms it for the subset VSG can check (see [section 8](#8-linting) for what it cannot). If you
+introduce one (or find one), list it here as `| Deviation | Files |` so it isn't lost, and fix it
+when convenient; low-risk, cosmetic work like this is best done a file at a time.

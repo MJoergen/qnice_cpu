@@ -46,8 +46,8 @@ architecture synthesis of prepare is
    signal alu_dst_val : std_logic_vector(15 downto 0);
 
    -- Operand register values with the Program Counter substituted for R15.
-   signal src_val_pc  : std_logic_vector(15 downto 0);
-   signal dst_val_pc  : std_logic_vector(15 downto 0);
+   signal src_val_pc : std_logic_vector(15 downto 0);
+   signal dst_val_pc : std_logic_vector(15 downto 0);
 
 begin
 

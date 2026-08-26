@@ -194,6 +194,17 @@ rule:
   conditional_waveforms_001:
     allow_single_line: 'yes'
 
+  # The other half of that rule -- "and align the conditions" -- needs the
+  # padding spaces before `when` and before `else` that the worked example
+  # in Section 3 shows. conditional_waveforms_100 and _102 take a fixed
+  # `number_of_spaces` (default 1) and cannot express an alignment column,
+  # so they would flag that example itself. Disabled; the alignment is left
+  # to the author, as Section 3 intends.
+  conditional_waveforms_100:
+    disable: true
+  conditional_waveforms_102:
+    disable: true
+
   # CODING_STYLE.md's "aligned within each blank-line-separated group, not
   # across the whole declarative region" rule (Section 3) is written for
   # signal/constant/variable declarations (architecture_026, which already

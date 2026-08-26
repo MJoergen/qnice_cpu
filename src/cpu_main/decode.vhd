@@ -115,14 +115,14 @@ begin
    -- Special case when src = @PC++
    immediate_src <= has_src_operand when
                     fetch_data_i(R_SRC_REG)  = C_REG_PC and
-                    fetch_data_i(R_SRC_MODE) = C_MODE_POST
-               else '0';
+                    fetch_data_i(R_SRC_MODE) = C_MODE_POST else
+                    '0';
 
    -- Special case when dst = @PC++
    immediate_dst <= has_dst_operand when
                     fetch_data_i(R_DST_REG)  = C_REG_PC and
-                    fetch_data_i(R_DST_MODE) = C_MODE_POST
-               else '0';
+                    fetch_data_i(R_DST_MODE) = C_MODE_POST else
+                    '0';
 
    reads_from_dst <= C_READS_FROM_DST (to_integer(fetch_data_i(R_OPCODE)));
    writes_to_dst  <= C_WRITES_TO_DST  (to_integer(fetch_data_i(R_OPCODE)));

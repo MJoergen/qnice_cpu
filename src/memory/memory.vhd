@@ -93,12 +93,12 @@ architecture synthesis of memory is
    signal tsf_req_out_ready : std_logic;
    signal tsf_req_out_data  : std_logic_vector(2 downto 0);
 
-   signal tsb_src_in_valid  : std_logic;
-   signal tsb_src_in_ready  : std_logic;
-   signal tsb_src_fill      : natural range 0 to 2;
-   signal tsb_dst_in_valid  : std_logic;
-   signal tsb_dst_in_ready  : std_logic;
-   signal tsb_dst_fill      : natural range 0 to 2;
+   signal tsb_src_in_valid : std_logic;
+   signal tsb_src_in_ready : std_logic;
+   signal tsb_src_fill     : natural range 0 to 2;
+   signal tsb_dst_in_valid : std_logic;
+   signal tsb_dst_in_ready : std_logic;
+   signal tsb_dst_fill     : natural range 0 to 2;
 
 begin
 

@@ -36,7 +36,7 @@ architecture synthesis of system is
    signal wbd_ack     : std_logic;
    signal wbd_data_rd : std_logic_vector(15 downto 0);
 
-   signal halt        : std_logic;
+   signal halt : std_logic;
 
 begin
 

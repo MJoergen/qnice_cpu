@@ -74,9 +74,9 @@ architecture synthesis of cpu_main is
    signal dec2prep_stage : t_stage;
 
    -- PREPARE to WRITE
-   signal prep2wr_valid  : std_logic;
-   signal prep2wr_ready  : std_logic;
-   signal prep2wr_stage  : t_stage;
+   signal prep2wr_valid : std_logic;
+   signal prep2wr_ready : std_logic;
+   signal prep2wr_stage : t_stage;
 
 begin
 
