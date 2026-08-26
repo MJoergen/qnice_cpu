@@ -26,6 +26,13 @@ repository: `doc/int-device.md` for the bus protocol,
 and `vhdl/qnice_cpu.vhd` plus `vhdl/register_file.vhd` for what the reference
 CPU actually does, which is not in every respect what the slides say.
 
+DECISION: When external evidence is contradicting, use the following priority:
+1. Ground truth is ISA (documented in doc/intro/qnice_intro.tex)
+2. For questions not answered in the ISA document, the definitive source is then
+   doc/int-device.md.
+3. If there are any discrepencies between any of these external sources, then
+   list them clearly, and document the implemented choice.
+
 ### Bus protocol
 
 Two active-low lines: `INT_N` in, `IGRANT_N` out. Devices form a daisy chain in
@@ -43,6 +50,15 @@ which position is priority — the closer to the CPU, the higher.
 There is no way to abort a request. Once a device has asked, the CPU will
 eventually grant, and the device must have a valid ISR address to supply even if
 the interrupt has since been masked in software.
+
+DECISION: Port names are to be lower case (snake case?) following the
+CODING_STYLE.md. This means "int_n_i" and "igrant_n_o".
+
+DECISION: Make a timing diagram (similar to src/cpu_main/timing.tex) that shows
+the relationship between the important signals (e.g. int_n_i, igrant_n_o, wbd_data_i).
+Particularly important is whether changes are registered (i.e. delayed until
+next clock cycle) or combinatorial.  The current design already allows for data
+input to be registered.
 
 ### Programmer's model
 
@@ -98,6 +114,8 @@ registers.
 The cost is real, though: upstream software that assumes a private `R8`-`R12`
 inside an ISR would break. Decide this before starting, because retrofitting
 shadow registers into a `dp_ram`-backed file later is a rewrite, not a patch.
+
+DECISION: I follow your advice; only R14 and R15 are saved.
 
 ## How it fits this pipeline
 
@@ -205,6 +223,17 @@ The reference halts on both.
   interrupt would land at a different instruction after any pipeline change,
   churning the golden files on unrelated commits. **Done when** all existing
   tests still pass unchanged.
+
+  DECISION: Add the feature that the interrupt will be triggered a number of
+  cycles AFTER the write. The delay could perhaps just be the value written to
+  this magic address. This makes is possible to fine tune when an interrupt is
+  asserted, and test the edge cases og e.g. asserted while an INT instruction is
+  somewhere in the pipeline.
+
+  DECISION: Write the seven test cases mentioned in "Happy path" above as well
+  as the edge cases I added, and the rogue RTI and rogue INT. Basically, I want
+  all the test cases written up front for careful review.
+
 * **T2. `src/interrupt/interrupt.vhd`.** The daisy-chain FSM: request in,
   `IGRANT_N` out, ISR address out over valid/ready. Plus
   `formal/interrupt.{psl,sby,gtkw}`. **Done when** `sby` passes bmc, cover and
@@ -220,6 +249,10 @@ The reference halts on both.
 * **T5. `INT <dst op>`.** Latch `R14` and `next_pc`, set the in-ISR flag,
   redirect through the JMP microcode path. Direct mode is the happy path;
   indirect modes need a memory read first. Rogue `INT` halts.
+
+  DECISION: Make it so that test cases 1, 2, and 3 above (in the happy path) can
+  be verified as working by this point in the development process.
+
 * **T6. Hardware grant.** Consume T2's output at `inst_done_o`, take `next_pc`
   as the return address, add the fourth term to `fetch_valid_o`.
 * **T7. Top-level ports.** `int_n_i` and `igrant_n_o` on
@@ -229,6 +262,9 @@ The reference halts on both.
 
 * **T8. Test programs.** The seven cases above plus the two rogue cases.
   Regenerate the golden files and read the diff carefully.
+
+  DECISION: This is moved to T1 above.
+
 * **T9. Formal.** Extend [cpu_main.psl](../formal/cpu_main.psl): no grant while
   an ISR is active; `RTI` restores both registers; a grant asserts
   `fetch_valid_o`; the saved PC equals `next_pc`. Model them on the existing
@@ -253,3 +289,4 @@ The reference halts on both.
   Icache-to-DECODE handshake off when a `HALT` is handed to DECODE, and clears
   that gate on a flush. An interrupt grant is a new flush source, so check it
   cannot un-gate a `HALT` that has already been accepted.
+
