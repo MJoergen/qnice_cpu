@@ -76,6 +76,7 @@ begin
    -- Concatenate payloads: s1 in the MSBs, s0 in the LSBs.
    m_data_o <= s1_data_i & s0_data_i;
 
+
    -- Join handshake: offer an output beat only when both inputs are valid, and
    -- consume each input only on the cycle the output beat is accepted.
    m_valid_o  <=               s0_valid_i and s1_valid_i;  -- both inputs present

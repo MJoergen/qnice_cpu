@@ -111,6 +111,7 @@ begin
    has_src_operand <= C_HAS_SRC_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
    has_dst_operand <= C_HAS_DST_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
 
+
    -- Special case when src = @PC++
    immediate_src <= has_src_operand when
                     fetch_data_i(R_SRC_REG)  = C_REG_PC and
@@ -137,6 +138,7 @@ begin
    microcode_addr(C_WRITE_DST) <= writes_to_dst;
    microcode_addr(C_MEM_SRC)   <= src_memory;
    microcode_addr(C_MEM_DST)   <= dst_memory;
+
 
    i_microcode : entity work.microcode
       port map (

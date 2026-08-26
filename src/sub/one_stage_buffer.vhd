@@ -92,6 +92,7 @@ begin
    -- told "not ready" for as long as rst_i is asserted.
    s_ready_s <= (m_ready_i or not m_valid_r) and not rst_i;
 
+
    p_buffer : process (clk_i)
    begin
       if rising_edge(clk_i) then

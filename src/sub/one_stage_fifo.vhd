@@ -67,6 +67,7 @@ begin
    --   ever needing a second storage element.
    s_ready_s <= m_ready_i or not m_valid_r;
 
+
    p_fifo : process (clk_i)
    begin
       if rising_edge(clk_i) then

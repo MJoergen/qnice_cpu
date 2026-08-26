@@ -146,6 +146,7 @@ begin
    wb_ack_any    <= wb_cyc_o and wb_ack_i;
    dc_accept     <= dc_valid_o and dc_ready_i;
 
+
    -- Only an acknowledgement that is not owed to an abandoned request carries
    -- an instruction word. Everything downstream of this -- the data buffer,
    -- and therefore the address/data pairing -- sees the gated version.

@@ -130,6 +130,7 @@ begin
 
    icache_rst <= rst_i or wr2fetch_valid;
 
+
    i_icache : entity work.icache
       generic map (
          G_ADDR_SIZE => 16,
@@ -164,6 +165,7 @@ begin
    icache2decode_valid_gated          <= icache2decode_valid          and not halt_fetched;
    icache2decode_ready_gated          <= icache2decode_ready          and not halt_fetched;
    icache2decode_double_consume_gated <= icache2decode_double_consume and not halt_fetched;
+
 
    -- NOTE: the set condition deliberately uses the UNGATED valid and ready,
    -- even though the handshake it is detecting is the gated one. The two agree
@@ -253,6 +255,7 @@ begin
          end if;
       end if;
    end process p_halt;
+
 
    halt_o <= halt or halt_d;
 

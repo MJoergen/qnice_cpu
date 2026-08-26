@@ -157,6 +157,7 @@ begin
    -- discards at the clock edge.
    s_ready_o <= s_ready_r and not rst_i;
 
+
    m_valid_o <= m_valid_r;
    m_data_o  <= m_data_r;
 

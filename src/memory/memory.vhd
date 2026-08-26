@@ -146,6 +146,7 @@ begin
 
    tsf_req_in_valid <= mreq_valid_i and mreq_ready_o;
 
+
    -- This is the type-tagging FIFO described in the header: it exists purely
    -- to recover, on each anonymous wb_ack_i, WHICH kind of request (WRITE /
    -- READ_SRC / READ_DST) is being completed -- see tsf_req_out_ready and

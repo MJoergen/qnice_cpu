@@ -159,6 +159,30 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
 
   Use them only in files large enough to need navigation aids.
 
+* **Two blank lines separate top-level items** in an architecture's concurrent statement region
+  (the part after `begin`) — comments, signal assignments, processes, instantiations, and section
+  separators are each their own item:
+
+  ```vhdl
+     i_fetch : entity work.fetch
+        port map (
+           ...
+        ); -- i_fetch
+
+
+     icache_rst <= rst_i or wr2fetch_valid;
+
+
+     i_icache : entity work.icache
+  ```
+
+  The exception is the blank line **immediately inside** a section separator, between its closing
+  dashes and the content that follows — that one stays a single blank line, per the rule above. A
+  single blank line is also used everywhere outside this region: inside a process, function, or
+  procedure body, and in a declarative part. The blank line immediately after `begin` and
+  immediately before `end architecture` is likewise a single blank line, not two — there is no
+  preceding or following item to separate it from.
+
 ## 4. Coding idioms
 
 * **Direct entity instantiation** (`entity work.foo`) everywhere. No component declarations,

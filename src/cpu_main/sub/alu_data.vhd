@@ -104,7 +104,9 @@ begin
    -- selecting between just those two leaves the adder facing a single 2:1 mux.
    -- See doc/README.md, "The critical path".
 
+
    res_sum <= std_logic_vector(("0" & unsigned(dst_data_i)) + unsigned(addend) + unsigned'('0'&carry));
+
 
    is_sum  <= '1' when unsigned(opcode_i) = C_OPCODE_ADD or
                        unsigned(opcode_i) = C_OPCODE_ADDC or
@@ -164,6 +166,7 @@ begin
       end case;
 -- vsg_on case_005 case_012 case_201
    end process p_res_other;
+
 
    res_data <= res_sum when is_sum = '1' else
                res_other;

@@ -36,6 +36,7 @@ begin
    carry    <= res_data_i(16);
    negative <= res_data_i(15);
 
+
    -- Overflow is true if adding/subtracting two negative numbers yields a positive
    -- number or if adding/subtracting two positive numbers yields a negative number
    overflow <= (not src_data_i(15) and not dst_data_i(15) and     res_data_i(15)) or

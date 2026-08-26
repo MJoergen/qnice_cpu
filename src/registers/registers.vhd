@@ -84,6 +84,7 @@ begin
    lower_wr_data     <= wr_val_i;
    lower_wr_en       <= wr_en_i and not wr_reg_i(3);
 
+
    i_ram_lower_src : entity work.dp_ram
       generic map (
          G_ADDR_SIZE => G_REGISTER_BANK_WIDTH+3,
@@ -136,6 +137,7 @@ begin
    upper_wr_en       <= wr_en_i and wr_reg_i(3);
    upper_wr_addr     <= wr_reg_i(2 downto 0);
    upper_wr_data     <= wr_val_i;
+
 
    i_ram_upper_src : entity work.dp_ram
       generic map (
@@ -223,6 +225,7 @@ begin
       end if;
    end process p_wbr;
 
+
    p_rden_keep : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -265,6 +268,7 @@ begin
    -- only reach the case where this term and the src_val_d term below already
    -- agree by construction. f_undisturbed_src/f_undisturbed_dst were added to
    -- close that hole and stay behind as the lasting result of the experiment.
+
 
    -- The wr_sr_val_i term forwards a write made through the dedicated SR port,
    -- mirroring the wr_val_i term that forwards the ordinary port. Without it,

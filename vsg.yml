@@ -33,6 +33,13 @@
 #     subtraction. Since width expressions like `G_DATA_SIZE-1` vastly
 #     outnumber ordinary arithmetic in this codebase, whitespace_011 is
 #     disabled below rather than left to fire on nearly every declaration.
+#   - "Two blank lines separate top-level items in an architecture's
+#     concurrent statement region" (Section 3): whitespace_200 only checks a
+#     MAXIMUM number of consecutive blank lines file-wide (raised to 2 below
+#     so this rule's double blank lines pass); it cannot separately REQUIRE 2
+#     at a top-level item boundary while still allowing 1 everywhere else
+#     (inside a process, in a declarative part). A stray single blank line
+#     between two top-level items will not be caught.
 #
 # "One statement per line. The exception is a deliberate table -- see the
 # opcode/flag matrix in alu_flags.vhd" (Section 3) is handled by the local
@@ -203,3 +210,12 @@ rule:
   instantiation_010:
     blank_line_ends_group: 'no'
     comment_line_ends_group: 'no'
+
+  # "Two blank lines separate top-level items in an architecture's concurrent
+  # statement region" (Section 3) -- vsg's default caps consecutive blank
+  # lines at 1 file-wide; raised to 2 so the double blank line this rule
+  # requires isn't itself flagged as a violation. See "Known gaps" above:
+  # whitespace_200 can only cap a MAXIMUM, not require this MINIMUM at those
+  # specific boundaries while leaving every other blank-line spot at 1.
+  whitespace_200:
+    blank_lines_allowed: 2

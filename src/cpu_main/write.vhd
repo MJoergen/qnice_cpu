@@ -58,6 +58,7 @@ begin
 
    prep_ready_o <= mem_req_ready_i when or(mem_req_op_o) = '1' else '1';
 
+
    -- NOTE: prep_stage_i.r14 is used directly, with no bypass of this stage's own
    -- Status Register writes. There used to be one (a p_bypass process holding a
    -- one-cycle-delayed copy of everything written to the Register module, and a
@@ -215,6 +216,7 @@ begin
 
    wr_r15 <= and(reg_addr_o) and reg_we_o;
 
+
    fetch_addr_o  <= reg_val_o when wr_r15 = '1' else
                     next_pc;
 
@@ -279,6 +281,7 @@ begin
    -- compares the value landing in R14 against prep_stage_i.r14, which the RTL
    -- here never does. Narrow the term below and that property objects.
 
+
    ------------------------------------------------------------
    -- Self-modifying code
    ------------------------------------------------------------
@@ -342,6 +345,7 @@ begin
    -- flush that was not needed - which is also why R15 as a store pointer is
    -- simply forced to hit rather than handled: dst_val is the register file's
    -- stale R15 copy in that case, so the subtraction would be meaningless.
+
 
    smc_delta <= prep_stage_i.dst_val - prep_stage_i.addr;
    smc_hit   <= '1' when smc_delta(15 downto 5) = "00000000000" or

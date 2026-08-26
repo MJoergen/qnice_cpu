@@ -32,6 +32,7 @@ begin
       wait for 10 ns; -- 100 MHz
    end process p_clk;
 
+
    p_rstn : process
    begin
       rstn <= '0';
@@ -40,6 +41,7 @@ begin
       rstn <= '1';
       wait;
    end process p_rstn;
+
 
    -- The run is ended by i_test_monitor inside i_system, which turns the test
    -- program's own verdict into an exit code. This watchdog only covers the
@@ -53,6 +55,7 @@ begin
       stop(1);
       wait;
    end process p_watchdog;
+
 
    i_system : entity work.system
       generic map (

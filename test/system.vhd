@@ -42,6 +42,7 @@ begin
 
    led_o <= wbd_addr;
 
+
    i_cpu : entity work.cpu
       generic map (
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,

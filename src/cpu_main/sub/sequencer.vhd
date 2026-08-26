@@ -85,6 +85,7 @@ begin
       end if;
    end process p_index;
 
+
    -- Combinatorial output, to avoid inserting latency into the pipeline.
    --
    -- The full input stage is forwarded first (this also carries any fields

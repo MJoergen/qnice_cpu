@@ -139,6 +139,7 @@ begin
    m_addr_o   <= m_addr(G_ADDR_SIZE-1 downto 0);
    m_data_o   <= m_data;
 
+
    -- NOTE ON ASSIGNMENT ORDERING
    -- In the count=1 and count=2 branches below, the output-side block and the
    -- input-side block may both assign m_valid/m_double/m_addr/m_data in the
