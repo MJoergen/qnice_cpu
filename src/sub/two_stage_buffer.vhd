@@ -2,8 +2,8 @@
 -- It can accept two writes before blocking, i.e. a FIFO of depth two.
 --
 -- This is built by chaining two one_stage_buffer instances: the first
--- ("i_osb_first") interfaces to the external upstream (s_valid_i/s_ready_o/
--- s_data_i), and the second ("i_osb_second") interfaces to the external
+-- ("i_one_stage_buffer_first") interfaces to the external upstream (s_valid_i/s_ready_o/
+-- s_data_i), and the second ("i_one_stage_buffer_second") interfaces to the external
 -- downstream (m_valid_o/m_ready_i/m_data_o). Data may cut through both
 -- stages combinatorially in the same cycle when both are empty and the
 -- downstream is ready -- see one_stage_buffer's header for the timing
@@ -24,7 +24,6 @@
 
 library ieee;
    use ieee.std_logic_1164.all;
-   use ieee.numeric_std_unsigned.all;
 
 entity two_stage_buffer is
    generic (
@@ -61,12 +60,12 @@ architecture synthesis of two_stage_buffer is
 
 begin
 
-   s_fill_o <= 0 when not int_afull else
-               1 when not s_afull else
+   s_fill_o <= 0 when int_afull = '0' else
+               1 when s_afull = '0' else
                2;
 
    -- First stage: accepts data from the external upstream interface.
-   i_osb_first : entity work.one_stage_buffer
+   i_one_stage_buffer_first : entity work.one_stage_buffer
       generic map (
          G_DATA_SIZE => G_DATA_SIZE
       )
@@ -80,12 +79,12 @@ begin
          m_valid_o => int_valid,
          m_ready_i => int_ready,
          m_data_o  => int_data
-      ); -- i_osb_first
+      ); -- i_one_stage_buffer_first
 
    -- Second stage: drives the external downstream interface. May accept
    -- and immediately forward (cut through) data from the first stage
    -- combinatorially within the same cycle when it is itself empty.
-   i_osb_second : entity work.one_stage_buffer
+   i_one_stage_buffer_second : entity work.one_stage_buffer
       generic map (
          G_DATA_SIZE => G_DATA_SIZE
       )
@@ -99,7 +98,7 @@ begin
          m_valid_o => m_valid_o,
          m_ready_i => m_ready_i,
          m_data_o  => m_data_o
-      ); -- i_osb_second
+      ); -- i_one_stage_buffer_second
 
 end architecture synthesis;
 

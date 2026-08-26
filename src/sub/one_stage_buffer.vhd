@@ -53,7 +53,6 @@
 
 library ieee;
    use ieee.std_logic_1164.all;
-   use ieee.numeric_std.all;
 
 entity one_stage_buffer is
    generic (
@@ -131,7 +130,7 @@ begin
       end if;
    end process p_buffer;
 
-   -- pragma translate_off
+-- pragma synthesis_off
    -- Simulation-only check: upstream must hold s_valid_i asserted and keep
    -- s_data_i stable until it is actually accepted (s_ready_s='1'). Has no
    -- effect on synthesis; exists purely to catch upstream protocol
@@ -147,7 +146,7 @@ begin
          end if;
       end if;
    end process p_check_upstream_stability;
-   -- pragma translate_on
+-- pragma synthesis_on
 
    -- Connect output signals.
    -- m_valid_o combines the registered "buffer occupied" state with a

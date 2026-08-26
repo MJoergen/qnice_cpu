@@ -1,6 +1,4 @@
--- -----------------------------------------------------------------------------
 -- pipe_concat - Concatenate (join) two elastic pipelines into one
--- -----------------------------------------------------------------------------
 --
 -- THEORY OF OPERATION
 --   This is a purely combinational "join" primitive: it merges two independent
@@ -45,7 +43,6 @@
 -- GENERICS
 --   G_DATA0_SIZE : width in bits of input stream 0 (placed in the LSBs of m_data)
 --   G_DATA1_SIZE : width in bits of input stream 1 (placed in the MSBs of m_data)
--- -----------------------------------------------------------------------------
 
 library ieee;
    use ieee.std_logic_1164.all;
@@ -56,20 +53,19 @@ entity pipe_concat is
       G_DATA1_SIZE : positive := 8                      -- s1 payload width (MSBs)
    );
    port (
-      clk_i      : in    std_logic;                     -- unused: formal env only
-      rst_i      : in    std_logic;                     -- unused: formal env only
+      clk_i      : in  std_logic;                       -- unused: formal env only
+      rst_i      : in  std_logic;                       -- unused: formal env only
       -- Input stream 0 (occupies output LSBs)
-      s0_valid_i : in    std_logic;
-      s0_ready_o : out   std_logic;
-      s0_data_i  : in    std_logic_vector(G_DATA0_SIZE - 1 downto 0);
-      -- Input stream 1 (occupies output MSBs)
-      s1_valid_i : in    std_logic;
-      s1_ready_o : out   std_logic;
-      s1_data_i  : in    std_logic_vector(G_DATA1_SIZE - 1 downto 0);
+      s0_valid_i : in  std_logic;
+      s0_ready_o : out std_logic;
+      s0_data_i  : in  std_logic_vector(G_DATA0_SIZE-1 downto 0);
+      s1_valid_i : in  std_logic;
+      s1_ready_o : out std_logic;
+      s1_data_i  : in  std_logic_vector(G_DATA1_SIZE-1 downto 0);
       -- Output stream (concatenated payload, s1 in MSBs, s0 in LSBs)
-      m_valid_o  : out   std_logic;
-      m_ready_i  : in    std_logic;
-      m_data_o   : out   std_logic_vector(G_DATA0_SIZE + G_DATA1_SIZE - 1 downto 0)
+      m_valid_o  : out std_logic;
+      m_ready_i  : in  std_logic;
+      m_data_o   : out std_logic_vector(G_DATA0_SIZE + G_DATA1_SIZE-1 downto 0)
    );
 end entity pipe_concat;
 
@@ -87,4 +83,3 @@ begin
    s1_ready_o <= m_ready_i and s0_valid_i;                 -- s1 taken iff beat xfers
 
 end architecture synthesis;
-

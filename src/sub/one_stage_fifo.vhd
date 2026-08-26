@@ -35,7 +35,6 @@
 
 library ieee;
    use ieee.std_logic_1164.all;
-   use ieee.numeric_std.all;
 
 entity one_stage_fifo is
    generic (
@@ -96,7 +95,7 @@ begin
       end if;
    end process p_fifo;
 
-   -- pragma translate_off
+-- pragma synthesis_off
    -- Simulation-only check: upstream must hold s_valid_i asserted and keep
    -- s_data_i stable until it is actually accepted (s_ready_s='1'). This
    -- has no effect on synthesis; it exists purely to catch upstream
@@ -112,7 +111,7 @@ begin
          end if;
       end if;
    end process p_check_upstream_stability;
-   -- pragma translate_on
+-- pragma synthesis_on
 
    -- Connect output signals
    s_ready_o <= s_ready_s;
@@ -120,3 +119,4 @@ begin
    m_data_o  <= m_data_r;
 
 end architecture synthesis;
+
