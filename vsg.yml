@@ -33,14 +33,13 @@
 #     subtraction. Since width expressions like `G_DATA_SIZE-1` vastly
 #     outnumber ordinary arithmetic in this codebase, whitespace_011 is
 #     disabled below rather than left to fire on nearly every declaration.
-#   - "One statement per line. The exception is a deliberate table -- see
-#     the opcode/flag matrix in alu_flags.vhd" (Section 3): sequential_007
-#     enforces "one statement per line" everywhere, which is correct almost
-#     everywhere and stays enabled. alu_flags.vhd's table already carries a
-#     local `vsg_off`/`vsg_on` marker for case_005/case_012/case_201 (the
-#     "when ... =>" side of that same table); sequential_007 itself is not
-#     in that marker yet, so it still reports violations there that are not
-#     real deviations -- a natural follow-up, using the same marker.
+#
+# "One statement per line. The exception is a deliberate table -- see the
+# opcode/flag matrix in alu_flags.vhd" (Section 3) is handled by the local
+# `vsg_off`/`vsg_on` marker in alu_flags.vhd itself (sequential_007, plus
+# case_005/case_012/case_201 for the same table's "when ... =>" side), not
+# a global override here -- sequential_007 stays enabled everywhere else,
+# where it is correct.
 
 rule:
 

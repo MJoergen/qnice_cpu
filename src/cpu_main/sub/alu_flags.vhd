@@ -56,7 +56,7 @@ begin
 
 -- Deliberate one-line-per-opcode table: the alignment is the point (see
 -- CODING_STYLE.md's "one statement per line" exception for this file).
--- vsg_off case_005 case_012 case_201
+-- vsg_off case_005 case_012 case_201 sequential_007
       case to_integer(unsigned(opcode_i)) is
          when C_OPCODE_MOVE =>                           sr_o(C_SR_N) <= negative; sr_o(C_SR_Z) <= zero;
          when C_OPCODE_ADD  => sr_o(C_SR_V) <= overflow; sr_o(C_SR_N) <= negative; sr_o(C_SR_Z) <= zero; sr_o(C_SR_C) <= carry;
@@ -81,7 +81,7 @@ begin
          when C_OPCODE_JMP  => null; -- No status bits are changed
          when others    => null;
       end case;
--- vsg_on case_005 case_012 case_201
+-- vsg_on case_005 case_012 case_201 sequential_007
    end process p_sr;
 
 end architecture synthesis;
