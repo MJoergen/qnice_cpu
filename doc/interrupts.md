@@ -179,15 +179,26 @@ which position is priority — the closer to the CPU, the higher.
 4. The CPU samples the address and releases `IGRANT_N`, and the device releases
    the bus.
 
-DECISION: on step 4 the device must release the bus **combinationally** — the CPU
-starts fetching on the next cycle. This is a constraint this design adds, not one
-it inherits: neither `int-device.md` nor the slides state any cycle budget, and
-the reference CPU is more relaxed, spending a whole state between sampling the
-address and fetching (`cs_int_jmp_isr`, whose comment reads "IGRANT_N goes back
-to high, new PC and CpuAddr is being clocked in"). A conforming device satisfies
-the tighter rule anyway — the reference device drives and releases `data_out`
-combinationally off `grant_n_in`, in `fsm_output_decode` in `vhdl/timer.vhd` —
-but it is a decision of ours, and T2b's diagram is where it gets pinned down.
+The cycle-level version of those four steps — which signal moves on which edge,
+and which are registered — is the T2b diagram and its walkthrough in
+[src/interrupt/README.md](../src/interrupt/README.md). The handshake costs three
+cycles between the commit and the redirect.
+
+DECISION (revised at T2b): the device must hold `isr_addr_i` for as long as
+`igrant_n_o` is low, and may release it any cycle at or after the one in which it
+sees `igrant_n_o` go high. It does **not** have to release combinationally.
+
+An earlier draft of this note did require a combinational release, on the
+assumption that the CPU would use `isr_addr_i` directly. Drawing the diagram
+showed it does not: the address is captured into a register on the last granted
+cycle, so the bus turnaround afterwards cannot be observed. The weaker rule is
+also what upstream already satisfies — `fsm_output_decode` in `vhdl/timer.vhd`
+holds `data_out` until it sees `grant_n_in` high — so requiring more would have
+made a conforming device non-conforming here for no gain. Neither
+`int-device.md` nor the slides state any cycle budget in the first place, and the
+reference CPU is more relaxed still, spending a whole state between sampling the
+address and fetching (`cs_int_jmp_isr`, commented "IGRANT_N goes back to high,
+new PC and CpuAddr is being clocked in").
 
 DECISION: the ISR address arrives on a **port of its own**, `isr_addr_i`, not on
 the data Wishbone. The daisy-chain data phase is not a Wishbone transaction —
@@ -211,6 +222,15 @@ isr_addr_i).
 Particularly important is whether changes are registered (i.e. delayed until
 next clock cycle) or combinatorial.  The current design already allows for data
 input to be registered.
+
+**DONE — see [src/interrupt/README.md](../src/interrupt/README.md).** The diagram
+is [src/interrupt/timing.tex](../src/interrupt/timing.tex), rendered by
+`make timing`, and the module README next to it carries the cycle-by-cycle
+walkthrough and the contract as five obligations on the device and five on the
+CPU. Everything on the CPU side of the boundary is registered; the two
+exceptions, `start_i` and the device's drive of `isr_addr_i`, are named as such.
+Read that page before writing `interrupt.vhd` — the diagram is the specification
+now, since it was drawn ahead of the implementation rather than off a simulation.
 
 ### Programmer's model
 
@@ -454,22 +474,46 @@ The reference halts on both.
   crisp definition of done: name the programs that graduate.
 
 * **T2. `src/interrupt/interrupt.vhd`.** The daisy-chain FSM: `int_n_i` in,
-  `igrant_n_o` out, `isr_addr_i` sampled, ISR address out over valid/ready. Plus
-  `formal/interrupt.{psl,sby,gtkw}`. **Done when** `sby` passes bmc, cover and
-  prove.
-* **T2b. Protocol timing diagram.** The diagram called for above: `int_n_i`,
-  `igrant_n_o`, `isr_addr_i` and the grant handshake, showing for each signal
-  whether it is registered or combinational. Hand-written `.tex` rendered to
-  `.png`, as `src/cpu_main/timing.tex` is. Note `make timing` currently renders
-  exactly one diagram from one hard-coded path, so that rule needs generalising,
-  and both the `.tex` and the generated `.png` get committed. **Done when** the
-  diagram matches T2's implementation, not merely the prose above it — draw it
-  after T2 works, or expect to redraw it.
+  `igrant_n_o` out, `isr_addr_i` sampled, ISR address out to WRITE. Plus
+  `formal/interrupt.{psl,sby,gtkw}`. **The specification is
+  [src/interrupt/README.md](../src/interrupt/README.md)**, written at T2b: read
+  the port table, the ten-obligation contract and the walkthrough before writing
+  any VHDL, and take the device's five obligations as PSL assumptions and the
+  CPU's five as assertions. **Done when** `sby` passes bmc, cover and prove, and
+  the diagram still matches.
+* **T2b. Protocol timing diagram. DONE, ahead of T2.** Drawn first rather than
+  last, because the bus protocol was the part of this feature the upstream
+  sources disagreed about most, so it is worth pinning down before any code
+  commits to a reading of it. The diagram is
+  [src/interrupt/timing.tex](../src/interrupt/timing.tex) and the prose around it
+  is [src/interrupt/README.md](../src/interrupt/README.md); `make timing` renders
+  the `.png`, and both are committed. The `timing` rule is now a pattern rule
+  over a `TIMINGS` list, and the shared LaTeX macros moved to `doc/timing.sty`
+  (`src/cpu_main/timing.png` re-renders byte-identical after that move).
+
+  It changed three things in this plan, all recorded where they belong: the
+  combinational bus release is no longer required (see
+  [Bus protocol](#bus-protocol)), `int_wait` appeared as a new obligation on
+  WRITE (T3), and the redirect turns out to happen at the module's `done_o`
+  rather than at `inst_done_o` (T6).
+
+  **Still to do:** the diagram is a specification, not a recording. Redraw it
+  from a GHDL simulation once T2 runs, as `src/cpu_main/timing.tex` is read off
+  `test/prog_waveform.asm`, and treat any disagreement as a bug in whichever of
+  the two is easier to defend.
 
 ### Phase 2 — CPU core
 
 * **T3. Interrupt state.** The in-ISR flag and the saved `R14`/`R15`, in WRITE.
-  Grant gated on `inst_done_o and not int_active`.
+  The commit pulse is `inst_done_o and pending_o and not int_active`.
+
+  Plus `int_wait`, which T2b turned up: between the commit and the redirect the
+  saved PC is already fixed, but DECODE and PREPARE still hold the instructions
+  that follow it, and if one of them retired in that window `RTI` would replay
+  it. So WRITE holds its ready to PREPARE low for those cycles. It is ordinary
+  back-pressure, not new machinery, and it is *not* the same mechanism as
+  `p_halt_fetched` in `cpu.vhd` — gating the Icache feed does not help here,
+  because the instructions in question are already past it.
 * **T4. `RTI`.** Restore `R15` through the ordinary write port and `R14` through
   the SR port in one cycle; clear the in-ISR flag. The write to `R15` already
   drives the flush. Rogue `RTI` halts.
@@ -482,9 +526,19 @@ The reference halts on both.
   from `TESTS_PENDING` to `TESTS` on this commit — they need only `INT R0` and
   `RTI`, so they do not depend on T6 or T7.
 
-* **T6. Hardware grant.** Consume T2's output at `inst_done_o`, take `next_pc`
-  as the return address, add the fourth term to `fetch_valid_o` — measured free
-  by T0. Graduates test cases 4, 5 and 7 from `TESTS_PENDING`.
+* **T6. Hardware grant.** Commit at `inst_done_o`, taking `next_pc` as the return
+  address, and redirect three cycles later at the module's `done_o`. T2b split
+  those two apart: the earlier one-line version of this task had the redirect
+  happening at `inst_done_o` too, which cannot work, because the ISR address does
+  not exist yet at the commit point — the grant handshake is what fetches it, and
+  the grant may not be issued before the commit.
+
+  So the fourth term on `fetch_valid_o` is `done_o` alone, not
+  `inst_done_o and done_o`. That is one input fewer than the topology T0 measured
+  as free, so T0's headroom result stands as an upper bound rather than needing a
+  re-run — but re-measure at T12 regardless, as T0 already says.
+
+  Graduates test cases 4, 5 and 7 from `TESTS_PENDING`.
 * **T7. Top-level ports.** `int_n_i`, `igrant_n_o` and `isr_addr_i` on
   [cpu.vhd](../src/cpu.vhd) and `system.vhd`.
 

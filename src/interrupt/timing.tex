@@ -1,0 +1,36 @@
+% Timing diagram of the interrupt daisy-chain protocol: one hardware interrupt
+% taken to completion, followed by a second request that arrives while the ISR
+% is still running and is therefore made to wait.
+%
+% This diagram is the SPECIFICATION of the protocol, not a recording of it --
+% src/interrupt/interrupt.vhd (task T2) does not exist yet.  Redraw it against
+% a real GHDL simulation once it does, exactly as src/cpu_main/timing.tex is
+% read off test/prog_waveform.asm.  See doc/interrupts.md for the prose.
+
+\documentclass{standalone}
+\usepackage{timing}
+
+\begin{document}
+% Drawing convention, the same one src/cpu_main/timing.tex uses: handshake bits
+% are always drawn with their true value; a bus is greyed out ("x") in every
+% cycle in which its owner is not driving it.
+%
+% Every signal below is either a pin (the top three) or a register output, with
+% one deliberate exception: start_i is combinational, and isr_addr_i is driven
+% combinationally by the device.  Both are called out in doc/interrupts.md.
+\begin{wave}{12}{13}
+ \nextwave{int\_n\_i}                 \bit{1}{1} \bit{0}{4} \bit{1}{3} \bit{0}{5}
+ \nextwave{igrant\_n\_o}              \bit{1}{4} \bit{0}{2} \bit{1}{7}
+ \nextwave{isr\_addr\_i}              \unknown[x]{4} \known{ISR}{2} \unknown[x]{7}
+ \nextwave{interrupt/state}           \known{IDLE}{4} \known{GRANT}{2} \known{DONE}{1} \known{IDLE}{6}
+ \nextwave{interrupt/pending\_o}      \bit{0}{2} \bit{1}{2} \bit{0}{5} \bit{1}{4}
+ \nextwave{interrupt/start\_i}        \bit{0}{3} \bit{1}{1} \bit{0}{9}
+ \nextwave{interrupt/done\_o}         \bit{0}{6} \bit{1}{1} \bit{0}{6}
+ \nextwave{interrupt/addr\_o}         \unknown[x]{6} \known{ISR}{7}
+ \nextwave{WRITE/inst\_done\_o}       \bit{0}{3} \bit{1}{1} \bit{0}{5} \bit{1}{1} \bit{0}{1} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/int\_active}         \bit{0}{4} \bit{1}{8} \bit{0}{1}
+ \nextwave{WRITE/int\_wait}           \bit{0}{4} \bit{1}{3} \bit{0}{6}
+ \nextwave{WRITE/fetch\_valid\_o}     \bit{0}{6} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1}
+\end{wave}
+
+\end{document}

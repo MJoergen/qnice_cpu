@@ -35,7 +35,7 @@ make sim TEST=prog_interleave         # run a different test program (test/<name
 make sim REGISTER_BANK_WIDTH=8        # override register bank address width (default 8)
 make system.bit                       # Vivado synthesis + bitstream (needs Vivado at $XILINX_DIR)
 make utilization                      # refresh the measured numbers in doc/README.md (needs Vivado)
-make timing                           # re-render src/cpu_main/timing.png from timing.tex (needs pdflatex)
+make timing                           # re-render every timing diagram (.tex -> .png; needs pdflatex)
 make synth                            # Yosys synthesis (ghdl -a, then yosys -m ghdl synth_xilinx)
 make formal                           # run all formal verification (delegates to formal/Makefile)
 make lint                             # check every VHDL file against CODING_STYLE.md (needs vsg)

@@ -89,7 +89,7 @@ help:
 	@echo "  make system.bit : Run synthesis using Vivado"
 	@echo "  make utilization: Refresh the utilization numbers in doc/README.md (needs Vivado)"
 	@echo "  make synth      : Run synthesis using yosys"
-	@echo "  make timing     : Re-render src/cpu_main/timing.png (needs pdflatex)"
+	@echo "  make timing     : Re-render every timing diagram to .png (needs pdflatex)"
 	@echo "  make formal     : Run formal verification"
 	@echo "  make lint       : Run VSG style-guide linting on all source files"
 	@echo "  make clean      : Remove all generated files"
@@ -176,15 +176,18 @@ $(ROM): $(ASM)
 # test/prog_waveform.asm -- so this target only renders it, it does not derive
 # it. If you change the pipeline, re-read the values from a fresh simulation
 # before running this.
-TIMING = src/cpu_main/timing
+# Every hand-written timing diagram in the tree.  Each is a standalone LaTeX
+# document that pulls in the shared macros from doc/timing.sty; both the .tex
+# and the rendered .png are committed.
+TIMINGS = src/cpu_main/timing src/interrupt/timing
 
 .PHONY: timing
-timing: $(TIMING).png
+timing: $(addsuffix .png,$(TIMINGS))
 
-$(TIMING).png: $(TIMING).tex
-	pdflatex -interaction=nonstopmode -halt-on-error -output-directory=$(dir $@) $<
-	pdftoppm -r 150 -png -singlefile $(TIMING).pdf $(TIMING)
-	rm -f $(TIMING).pdf $(TIMING).aux $(TIMING).log
+%.png: %.tex doc/timing.sty
+	TEXINPUTS=doc: pdflatex -interaction=nonstopmode -halt-on-error -output-directory=$(dir $@) $<
+	pdftoppm -r 150 -png -singlefile $*.pdf $*
+	rm -f $*.pdf $*.aux $*.log
 
 
 ################################################
