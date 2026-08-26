@@ -10,13 +10,6 @@
 # Usage:  vsg -c vsg.yml -f <files...>
 #
 # Known gaps (vsg has no matching option, or its model doesn't fit):
-#   - "Colons aligned within each blank-line-separated group" (CODING_STYLE.md
-#     section 3): vsg's alignment rules (port_014/port/generic column
-#     alignment, etc.) align across the WHOLE port/generic list, not
-#     per-group, so every per-group-aligned declaration list in this repo
-#     will report a violation here that is not a real deviation. Left at
-#     vsg's default rather than disabled outright, since whole-region
-#     alignment is a valid, readable fallback vsg can actually check for.
 #   - Section separator comments (60 dashes), instantiation closing label
 #     comments ("); -- i_foo"), header comment structure (THEORY OF
 #     OPERATION/INTERFACE CONTRACTS/RESET), em-dash comment spacing, and
@@ -183,3 +176,22 @@ rule:
   length_001:
     length: 100
     severity: Warning
+
+  # CODING_STYLE.md's "aligned within each blank-line-separated group, not
+  # across the whole declarative region" rule (Section 3) is written for
+  # signal/constant/variable declarations (architecture_026, which already
+  # defaults to per-group and needs no override here). Entity port/generic
+  # clauses and instantiation generic/port maps are NOT that rule: every
+  # multi-group port clause in this repo (decode.vhd, write.vhd, cpu.vhd,
+  # ...) aligns across blank lines and comments to the width of the WHOLE
+  # clause, with zero exceptions -- confirmed by scripting a survey of every
+  # such clause rather than by eyeballing a couple of files. entity_017 and
+  # instantiation_010 default to per-group (like architecture_026), so they
+  # were flagging that whole-clause alignment as wrong; this restores their
+  # match to what the code actually, consistently does.
+  entity_017:
+    blank_line_ends_group: 'no'
+    comment_line_ends_group: 'no'
+  instantiation_010:
+    blank_line_ends_group: 'no'
+    comment_line_ends_group: 'no'

@@ -79,11 +79,11 @@ library ieee;
 
 entity dp_ram is
    generic (
-      G_INIT_FILE  : string  := "";
-      G_RAM_STYLE  : string  := "block"; -- "block" or "distributed"
-      G_B_READ     : boolean := false;   -- enable port B's read half
-      G_ADDR_SIZE  : positive;
-      G_DATA_SIZE  : positive
+      G_INIT_FILE : string  := "";
+      G_RAM_STYLE : string  := "block"; -- "block" or "distributed"
+      G_B_READ    : boolean := false;   -- enable port B's read half
+      G_ADDR_SIZE : positive;
+      G_DATA_SIZE : positive
    );
    port (
       clk_i       : in  std_logic;

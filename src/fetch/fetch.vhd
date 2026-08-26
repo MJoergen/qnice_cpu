@@ -332,16 +332,16 @@ begin
          G_DATA1_SIZE => 16
       )
       port map (
-         clk_i      => clk_i,
-         rst_i      => rst_i or dc_valid_i,
-         s1_valid_i => tsf_out_addr_valid,
-         s1_ready_o => tsf_out_addr_ready,
-         s1_data_i  => tsf_out_addr_data,
-         s0_valid_i => tsb_out_data_valid,
-         s0_ready_o => tsb_out_data_ready,
-         s0_data_i  => tsb_out_data_data,
-         m_valid_o  => dc_valid_o,
-         m_ready_i  => dc_ready_i,
+         clk_i                  => clk_i,
+         rst_i                  => rst_i or dc_valid_i,
+         s1_valid_i             => tsf_out_addr_valid,
+         s1_ready_o             => tsf_out_addr_ready,
+         s1_data_i              => tsf_out_addr_data,
+         s0_valid_i             => tsb_out_data_valid,
+         s0_ready_o             => tsb_out_data_ready,
+         s0_data_i              => tsb_out_data_data,
+         m_valid_o              => dc_valid_o,
+         m_ready_i              => dc_ready_i,
          m_data_o(31 downto 16) => dc_addr_o,
          m_data_o(15 downto 0)  => dc_data_o
       ); -- i_pipe_concat

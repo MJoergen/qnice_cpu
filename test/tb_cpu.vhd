@@ -57,9 +57,9 @@ begin
    i_system : entity work.system
       generic map (
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
-         G_ROM => G_ROM,
-         G_WRITES_FILE => G_WRITES_FILE,
-         G_STATS_FILE => G_STATS_FILE
+         G_ROM                 => G_ROM,
+         G_WRITES_FILE         => G_WRITES_FILE,
+         G_STATS_FILE          => G_STATS_FILE
       )
       port map (
          clk_i  => clk,

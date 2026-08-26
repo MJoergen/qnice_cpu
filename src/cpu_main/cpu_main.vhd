@@ -112,20 +112,20 @@ begin
 
    i_prepare : entity work.prepare
       port map (
-         clk_i            => clk_i,
-         rst_i            => rst_i or fetch_valid_o,
-         dec_valid_i      => dec2prep_valid,
-         dec_ready_o      => dec2prep_ready,
-         dec_stage_i      => dec2prep_stage,
-         mem_src_valid_i  => mem_src_valid_i,
-         mem_src_ready_o  => mem_src_ready_o,
-         mem_src_data_i   => mem_src_data_i,
-         mem_dst_valid_i  => mem_dst_valid_i,
-         mem_dst_ready_o  => mem_dst_ready_o,
-         mem_dst_data_i   => mem_dst_data_i,
-         wr_valid_o       => prep2wr_valid,
-         wr_ready_i       => prep2wr_ready,
-         wr_stage_o       => prep2wr_stage
+         clk_i           => clk_i,
+         rst_i           => rst_i or fetch_valid_o,
+         dec_valid_i     => dec2prep_valid,
+         dec_ready_o     => dec2prep_ready,
+         dec_stage_i     => dec2prep_stage,
+         mem_src_valid_i => mem_src_valid_i,
+         mem_src_ready_o => mem_src_ready_o,
+         mem_src_data_i  => mem_src_data_i,
+         mem_dst_valid_i => mem_dst_valid_i,
+         mem_dst_ready_o => mem_dst_ready_o,
+         mem_dst_data_i  => mem_dst_data_i,
+         wr_valid_o      => prep2wr_valid,
+         wr_ready_i      => prep2wr_ready,
+         wr_stage_o      => prep2wr_stage
       ); -- i_prepare
 
 
