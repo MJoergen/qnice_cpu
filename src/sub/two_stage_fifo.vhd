@@ -98,7 +98,7 @@ begin
    begin
       if rising_edge(clk_i) then
          if s_ready_r = '1' then
-            s_data_r  <= s_data_i;
+            s_data_r <= s_data_i;
          end if;
       end if;
    end process p_s_data;
@@ -135,7 +135,7 @@ begin
             end if;
          else
             if m_ready_i = '1' then
-               m_data_r  <= s_data_r;
+               m_data_r <= s_data_r;
             end if;
          end if;
 

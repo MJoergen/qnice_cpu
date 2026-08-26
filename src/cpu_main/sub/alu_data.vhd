@@ -37,7 +37,7 @@ begin
       variable shift : natural range 0 to 16;
    begin
       -- Prepare for shift
-      tmp(32)           := sr_i(C_SR_C);  -- Old value of C
+      tmp(32)           := sr_i(C_SR_C);                   -- Old value of C
       tmp(31 downto 16) := dst_data_i;
       tmp(15 downto 0)  := (15 downto 0 => sr_i(C_SR_X));  -- Fill with X
 
@@ -67,7 +67,7 @@ begin
       -- Prepare for shift
       tmp(32 downto 17) := (32 downto 17 => sr_i(C_SR_C));  -- Fill with C
       tmp(16 downto 1)  := dst_data_i;
-      tmp(0)            := sr_i(C_SR_X);  -- Old value of X
+      tmp(0)            := sr_i(C_SR_X);                    -- Old value of X
 
       -- See the note in p_shift_left about the constrained shift amount.
       if unsigned(src_data_i) <= 16 then
@@ -83,10 +83,10 @@ begin
 
    addend <= "1" & not src_data_i when unsigned(opcode_i) = C_OPCODE_SUB or unsigned(opcode_i) = C_OPCODE_SUBC else
              "0" & src_data_i;
-   carry <= sr_i(C_SR_C) when unsigned(opcode_i) = C_OPCODE_ADDC else
-            not sr_i(C_SR_C) when unsigned(opcode_i) = C_OPCODE_SUBC else
-            '1' when unsigned(opcode_i) = C_OPCODE_SUB else
-            '0';
+   carry  <= sr_i(C_SR_C) when unsigned(opcode_i) = C_OPCODE_ADDC else
+             not sr_i(C_SR_C) when unsigned(opcode_i) = C_OPCODE_SUBC else
+             '1' when unsigned(opcode_i) = C_OPCODE_SUB else
+             '0';
 
    -- The result mux is deliberately split in two, rather than written as one
    -- case over every opcode.
@@ -105,14 +105,14 @@ begin
    -- See doc/README.md, "The critical path".
 
 
-   res_sum <= std_logic_vector(("0" & unsigned(dst_data_i)) + unsigned(addend) + unsigned'('0'&carry));
+   res_sum <= std_logic_vector(("0" & unsigned(dst_data_i)) + unsigned(addend) + unsigned'('0' & carry));
 
 
-   is_sum  <= '1' when unsigned(opcode_i) = C_OPCODE_ADD or
-                       unsigned(opcode_i) = C_OPCODE_ADDC or
-                       unsigned(opcode_i) = C_OPCODE_SUB or
-                       unsigned(opcode_i) = C_OPCODE_SUBC else
-              '0';
+   is_sum <= '1' when unsigned(opcode_i) = C_OPCODE_ADD or
+                      unsigned(opcode_i) = C_OPCODE_ADDC or
+                      unsigned(opcode_i) = C_OPCODE_SUB or
+                      unsigned(opcode_i) = C_OPCODE_SUBC else
+             '0';
 
    p_res_other : process (src_data_i, dst_data_i, opcode_i, sr_i, res_shl, res_shr)
    begin

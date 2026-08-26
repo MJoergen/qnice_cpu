@@ -39,8 +39,12 @@ begin
 
    -- Overflow is true if adding/subtracting two negative numbers yields a positive
    -- number or if adding/subtracting two positive numbers yields a negative number
+   -- Deliberate two-row alignment: the `not`s line up so the two cases read as
+   -- one table. whitespace_005 wants the padding after the open paren removed.
+-- vsg_off whitespace_005
    overflow <= (not src_data_i(15) and not dst_data_i(15) and     res_data_i(15)) or
                (    src_data_i(15) and     dst_data_i(15) and not res_data_i(15));
+-- vsg_on whitespace_005
 
    cmp_n <= '1' when unsigned(src_data_i) > unsigned(dst_data_i) else
             '0';

@@ -97,6 +97,7 @@ begin
    begin
       m_valid_o <= s_valid_i;
       m_stage_o <= s_stage_i;
+
       m_stage_o.microcodes(C_UCODE_BITS - 1 downto 0) <=
          s_stage_i.microcodes((index + 1) * C_UCODE_BITS - 1 downto index * C_UCODE_BITS);
    end process p_output;

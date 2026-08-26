@@ -179,7 +179,7 @@ begin
             else
                reg_val_o <= prep_stage_i.src_val - 1;
             end if;
-            reg_we_o   <= '1';
+            reg_we_o <= '1';
          end if;
 
          if prep_stage_i.microcodes(C_REG_MOD_DST) = '1' and
@@ -190,7 +190,7 @@ begin
             else
                reg_val_o <= prep_stage_i.dst_val - 1;
             end if;
-            reg_we_o   <= '1';
+            reg_we_o <= '1';
          end if;
 
          -- Handle ordinary register writes here.
@@ -217,8 +217,8 @@ begin
    wr_r15 <= and(reg_addr_o) and reg_we_o;
 
 
-   fetch_addr_o  <= reg_val_o when wr_r15 = '1' else
-                    next_pc;
+   fetch_addr_o <= reg_val_o when wr_r15 = '1' else
+                   next_pc;
 
 
    ------------------------------------------------------------
@@ -382,10 +382,10 @@ begin
    -- Update memory
    ------------------------------------------------------------
 
-   mem_addr  <= prep_stage_i.src_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' and prep_stage_i.src_mode = C_MODE_PRE else
-                prep_stage_i.src_val   when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' else
-                prep_stage_i.dst_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '0' and prep_stage_i.dst_mode = C_MODE_PRE else
-                prep_stage_i.dst_val;
+   mem_addr <= prep_stage_i.src_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' and prep_stage_i.src_mode = C_MODE_PRE else
+               prep_stage_i.src_val   when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' else
+               prep_stage_i.dst_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '0' and prep_stage_i.dst_mode = C_MODE_PRE else
+               prep_stage_i.dst_val;
    -- The address of the instruction following this one: the return address that
    -- ASUB/RSUB pushes, and the address a bank switch re-fetches from.
    next_pc   <= prep_stage_i.addr + 2 when (prep_stage_i.src_imm = '1' or prep_stage_i.dst_imm = '1') else

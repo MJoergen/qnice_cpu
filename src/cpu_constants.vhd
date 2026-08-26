@@ -3,18 +3,21 @@ library ieee;
 
 package cpu_constants is
 
-   -- Instruction format is as follows
-   subtype R_IMMEDIATE   is natural range 31 downto 16;
-   subtype R_INSTRUCTION is natural range 15 downto  0;
-   subtype R_OPCODE      is natural range 15 downto 12;
-   subtype R_SRC_REG     is natural range 11 downto  8;
-   subtype R_SRC_MODE    is natural range  7 downto  6;
-   subtype R_DST_REG     is natural range  5 downto  2;
-   subtype R_DST_MODE    is natural range  1 downto  0;
-   subtype R_JMP_MODE    is natural range  5 downto  4;
-   constant R_JMP_NEG    : integer := 3;
-   subtype R_JMP_COND    is natural range  2 downto  0;
-   subtype R_CTRL_CMD    is natural range 11 downto  6;
+   -- Instruction format is as follows. Deliberate table: the `is`/`:` column
+   -- is the point, so the two rules that would compact it away are off here.
+-- vsg_off subtype_101 package_400
+   subtype  R_IMMEDIATE   is natural range 31 downto 16;
+   subtype  R_INSTRUCTION is natural range 15 downto  0;
+   subtype  R_OPCODE      is natural range 15 downto 12;
+   subtype  R_SRC_REG     is natural range 11 downto  8;
+   subtype  R_SRC_MODE    is natural range  7 downto  6;
+   subtype  R_DST_REG     is natural range  5 downto  2;
+   subtype  R_DST_MODE    is natural range  1 downto  0;
+   subtype  R_JMP_MODE    is natural range  5 downto  4;
+   constant R_JMP_NEG     : integer := 3;
+   subtype  R_JMP_COND    is natural range  2 downto  0;
+   subtype  R_CTRL_CMD    is natural range 11 downto  6;
+-- vsg_on subtype_101 package_400
 
    -- Decode status bits
    constant C_SR_V : integer := 5;
@@ -49,7 +52,7 @@ package cpu_constants is
    constant C_CTRL_INCRB : integer := 3;
    constant C_CTRL_DECRB : integer := 4;
    -- Not decoded anywhere yet; see p_unimplemented in cpu_main/write.vhd.
-   constant C_CTRL_EXC   : integer := 5;
+   constant C_CTRL_EXC : integer := 5;
 
    -- Addressing modes
    constant C_MODE_REG  : integer := 0;   -- R
@@ -69,10 +72,10 @@ package cpu_constants is
    constant C_JMP_RSUB : integer := 3;
 
    -- Microcode address
-   constant C_READ_DST    : integer := 3;   -- reads_from_dst
-   constant C_WRITE_DST   : integer := 2;   -- writes_to_dst
-   constant C_MEM_SRC     : integer := 1;   -- src_memory
-   constant C_MEM_DST     : integer := 0;   -- dst_memory
+   constant C_READ_DST  : integer := 3;   -- reads_from_dst
+   constant C_WRITE_DST : integer := 2;   -- writes_to_dst
+   constant C_MEM_SRC   : integer := 1;   -- src_memory
+   constant C_MEM_DST   : integer := 0;   -- dst_memory
 
    -- Microcode value
    constant C_LAST         : integer := 11;
@@ -85,7 +88,7 @@ package cpu_constants is
    constant C_MEM_READ_DST : integer := 1;   -- memory to destination
    constant C_MEM_WRITE    : integer := 0;   -- write to memory
 
-   constant C_UCODE_BITS   : positive := 12;
+   constant C_UCODE_BITS : positive := 12;
 
    constant C_VAL_LAST         : std_logic_vector(11 downto 0) := (C_LAST         => '1', others => '0');
    constant C_VAL_REG_MOD_SRC  : std_logic_vector(11 downto 0) := (C_REG_MOD_SRC  => '1', others => '0');
@@ -248,27 +251,27 @@ package body cpu_constants is
       if to_integer(inst(R_OPCODE)) = C_OPCODE_CTRL then
          if to_integer(inst(R_CTRL_CMD)) = C_CTRL_INT then
             report to_hstring(pc) & " " &
-               "(" & to_hstring(inst) & ") " &
-               ctrl_str(inst(R_CTRL_CMD)) & " " &
-               reg_str(inst(R_DST_REG), inst(R_DST_MODE), operand);
+                   "(" & to_hstring(inst) & ") " &
+                   ctrl_str(inst(R_CTRL_CMD)) & " " &
+                   reg_str(inst(R_DST_REG), inst(R_DST_MODE), operand);
          else
             report to_hstring(pc) & " " &
-               "(" & to_hstring(inst) & ") " &
-               ctrl_str(inst(R_CTRL_CMD));
+                   "(" & to_hstring(inst) & ") " &
+                   ctrl_str(inst(R_CTRL_CMD));
          end if;
       elsif to_integer(inst(R_OPCODE)) = C_OPCODE_JMP then
          report to_hstring(pc) & " " &
-               "(" & to_hstring(inst) & ") " &
-               mode_str(inst(R_JMP_MODE)) & " " &
-               reg_str(inst(R_SRC_REG), inst(R_SRC_MODE), operand) & ", " &
-               neg_str(inst(R_JMP_NEG)) &
-               cond_str(inst(R_JMP_COND));
+                "(" & to_hstring(inst) & ") " &
+                mode_str(inst(R_JMP_MODE)) & " " &
+                reg_str(inst(R_SRC_REG), inst(R_SRC_MODE), operand) & ", " &
+                neg_str(inst(R_JMP_NEG)) &
+                cond_str(inst(R_JMP_COND));
       else
          report to_hstring(pc) & " " &
-               "(" & to_hstring(inst) & ") " &
-               inst_str(inst(R_OPCODE)) & " " &
-               reg_str(inst(R_SRC_REG), inst(R_SRC_MODE), operand) & ", " &
-               reg_str(inst(R_DST_REG), inst(R_DST_MODE), operand);
+                "(" & to_hstring(inst) & ") " &
+                inst_str(inst(R_OPCODE)) & " " &
+                reg_str(inst(R_SRC_REG), inst(R_SRC_MODE), operand) & ", " &
+                reg_str(inst(R_DST_REG), inst(R_DST_MODE), operand);
       end if;
 
    end procedure disassemble;

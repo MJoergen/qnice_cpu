@@ -110,7 +110,7 @@ begin
          -- for the following cycle even though m_valid_r itself doesn't
          -- change this cycle.
          if s_ready_s = '1' and s_valid_i = '1' then
-            m_data_r  <= s_data_i;
+            m_data_r <= s_data_i;
          end if;
 
          -- Downstream wasn't ready this cycle, but data was accepted:

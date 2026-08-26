@@ -79,8 +79,10 @@ begin
 
    -- Join handshake: offer an output beat only when both inputs are valid, and
    -- consume each input only on the cycle the output beat is accepted.
+-- vsg_off concurrent_002
    m_valid_o  <=               s0_valid_i and s1_valid_i;  -- both inputs present
    s0_ready_o <= m_ready_i                and s1_valid_i;  -- s0 taken iff beat xfers
    s1_ready_o <= m_ready_i and s0_valid_i;                 -- s1 taken iff beat xfers
+-- vsg_on concurrent_002
 
 end architecture synthesis;

@@ -83,16 +83,16 @@ begin
 
    mem_src_ready_o <= seq_valid and seq_stage.microcodes(C_MEM_WAIT_SRC) and not wait_for_mem_dst;
    mem_dst_ready_o <= seq_valid and seq_stage.microcodes(C_MEM_WAIT_DST) and not wait_for_mem_src;
-   seq_ready <= wr_ready_i and not (wait_for_mem_req or wait_for_mem_src or wait_for_mem_dst);
+   seq_ready       <= wr_ready_i and not (wait_for_mem_req or wait_for_mem_src or wait_for_mem_dst);
 
 
    ------------------------------------------------------------
    -- ALU
    ------------------------------------------------------------
 
-   alu_oper    <= seq_stage.inst(R_OPCODE);
-   alu_ctrl    <= seq_stage.inst(R_CTRL_CMD);
-   alu_flags   <= seq_stage.r14;
+   alu_oper  <= seq_stage.inst(R_OPCODE);
+   alu_ctrl  <= seq_stage.inst(R_CTRL_CMD);
+   alu_flags <= seq_stage.r14;
    -- Reading R15 as an ordinary operand.
    --
    -- The working Program Counter lives in the FETCH stage; the register file's

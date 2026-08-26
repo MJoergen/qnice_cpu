@@ -12,8 +12,8 @@
 # A handful of files carry inline `-- vsg_off <rule_id>...` / `-- vsg_on
 # <rule_id>...` markers (vsg's own local-suppression syntax) around a
 # specific deliberate table, rather than a global override here -- see
-# cpu_constants.vhd, decode.vhd, microcode.vhd, alu_data.vhd and
-# alu_flags.vhd. Prefer that over a config change when the deviation is
+# cpu_constants.vhd, decode.vhd, microcode.vhd, alu_data.vhd, alu_flags.vhd
+# and pipe_concat.vhd. Prefer that over a config change when the deviation is
 # local to one construct in one file; reach for a `rule:` entry below only
 # when the same deviation is a repo-wide convention.
 #
@@ -51,9 +51,10 @@
 #     at a top-level item boundary while still allowing 1 everywhere else
 #     (inside a process, in a declarative part). A stray single blank line
 #     between two top-level items will not be caught.
-#   - Blank lines around an `if` statement (vsg's if_030/if_031): the house
-#     style leaves this to judgement, and vsg offers only "always" or
-#     "never" -- see the note next to those two rules below.
+#   - Blank lines at a syntactic boundary (vsg's if_030/if_031 and the whole
+#     *_20x family): Section 3 leaves these to the author's judgement, and
+#     vsg offers only "always" or "never" for each. Disabled below, in two
+#     blocks with the reasoning written out.
 #
 # "One statement per line. The exception is a deliberate table -- see the
 # opcode/flag matrix in alu_flags.vhd" (Section 3) is handled by the local
@@ -224,6 +225,106 @@ rule:
     blank_line_ends_group: 'no'
     comment_line_ends_group: 'no'
 
+  # "A trailing comment on a run of consecutive declarations or statements is
+  # aligned into a column" (Section 3). vsg's default (compact_alignment: yes)
+  # collapses every one of them to a single space; 'no' is the alignment this
+  # repo actually uses, and with it these four rules pass everywhere as-is.
+  # process_035 is the same rule inside a process body, where vsg's default
+  # spans the whole body -- one long comment then drags every other comment
+  # out to column 130. Breaking the groups at blank lines and comments, as
+  # the other four already do, gives the local alignment the code uses.
+  entity_020:
+    compact_alignment: 'no'
+  architecture_027:
+    compact_alignment: 'no'
+  package_401:
+    compact_alignment: 'no'
+  concurrent_008:
+    compact_alignment: 'no'
+  process_035:
+    blank_line_ends_group: 'yes'
+    comment_line_ends_group: 'yes'
+
+  # "The `:=` of an initializer is not aligned" (Section 3): it follows one
+  # space after the type mark, wherever that lands. These two rules want it
+  # aligned down a whole port clause or declarative part, which drags a
+  # `std_logic := '0'` out past a `std_logic_vector(G_DATA_SIZE-1 downto 0)`
+  # on the line above.
+  declarative_part_400:
+    disable: true
+  entity_018:
+    disable: true
+
+  # "A continuation line is indented to a readable column, and the 100-column
+  # target wins over aligning it under the opening parenthesis" (Section 3).
+  # These four rules all insist on the parenthesis column, which in decode.vhd
+  # and sequencer.vhd starts past column 60 and would push the wrapped text
+  # well past 100. sequential_008 is the same conflict from the other side: it
+  # wants a 130-character line unwrapped onto one line.
+  sequential_004:
+    disable: true
+  concurrent_009:
+    disable: true
+  function_008:
+    disable: true
+  sequential_008:
+    disable: true
+
+  # "Blank lines group related statements, and are placed by the author"
+  # (Section 3). None of these boundaries takes a blank line in this repo:
+  # around a subprogram body's declarative part and `begin`, around a `case`
+  # or one of its alternatives, around a loop, between two subtype
+  # declarations of the same table, below an instantiation, or just inside an
+  # `if`. Left enabled, they turn dp_ram.vhd's 12-line init_from_file into 20
+  # lines with a blank line inside a 5-line loop. This is the same judgement
+  # as if_030/if_031 below, applied to every other construct; process_022 and
+  # process_023 are configured, not disabled, because the process `begin`
+  # boundary IS ruled on in Section 4.
+  subtype_201:
+    disable: true
+  subtype_202:
+    disable: true
+  subprogram_body_201:
+    disable: true
+  subprogram_body_202:
+    disable: true
+  subprogram_body_203:
+    disable: true
+  subprogram_body_204:
+    disable: true
+  case_007:
+    disable: true
+  case_009:
+    disable: true
+  case_010:
+    disable: true
+  case_200:
+    disable: true
+  process_011:
+    disable: true
+  process_026:
+    disable: true
+  process_027:
+    disable: true
+  loop_statement_200:
+    disable: true
+  loop_statement_201:
+    disable: true
+  loop_statement_202:
+    disable: true
+  loop_statement_203:
+    disable: true
+  function_006:
+    disable: true
+  procedure_200:
+    disable: true
+  instantiation_019:
+    disable: true
+  if_006:
+    disable: true
+  if_008:
+    disable: true
+
   # "Two blank lines separate top-level items in an architecture's concurrent
   # statement region" (Section 3) -- vsg's default caps consecutive blank
   # lines at 1 file-wide; raised to 2 so the double blank line this rule
@@ -253,6 +354,21 @@ rule:
   # not `if (x = '1') then`. vsg's default is the opposite.
   if_002:
     parenthesis: remove
+
+  # "A subprogram header is written compactly" (Section 4): no space between
+  # the name and its `(`, and the parenthesis does not get a line of its own.
+  # vsg's defaults want `function ctrl_str (` and then each parameter on its
+  # own line between parentheses hanging at the margin.
+  function_019:
+    disable: true
+  procedure_013:
+    disable: true
+  constant_016:
+    disable: true
+  function_100:
+    disable: true
+  procedure_100:
+    disable: true
 
   # This repo's canonical synchronous-reset example (Section 4) puts the
   # `if rising_edge(clk_i) then` directly under `begin`, with no blank line

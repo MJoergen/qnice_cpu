@@ -157,8 +157,8 @@ begin
                if s_valid_i = '1' and s_ready_o = '1' then
                   m_addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
                   m_data(G_DATA_SIZE-1 downto 0) <= s_data_i;
-                  m_valid                          <= '1';
-                  m_double                         <= '0';
+                  m_valid                        <= '1';
+                  m_double                       <= '0';
                end if;
 
             when 1 =>
@@ -176,15 +176,15 @@ begin
                      -- new word takes its place in slot 0.
                      m_addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
                      m_data(G_DATA_SIZE-1 downto 0) <= s_data_i;
-                     m_valid                          <= '1';
-                     m_double                         <= '0';
+                     m_valid                        <= '1';
+                     m_double                       <= '0';
                   else
                      -- Nothing leaves; the new word fills slot 1 and both
                      -- words are then offered together.
                      m_addr(2 * G_ADDR_SIZE-1 downto G_ADDR_SIZE) <= s_addr_i;
                      m_data(2 * G_DATA_SIZE-1 downto G_DATA_SIZE) <= s_data_i;
-                     m_valid                                        <= '1';
-                     m_double                                       <= '1';
+                     m_valid                                      <= '1';
+                     m_double                                     <= '1';
                   end if;
                end if;
 
@@ -205,8 +205,8 @@ begin
                      -- slot 1 shifts down and becomes the next instruction.
                      m_addr(G_ADDR_SIZE-1 downto 0) <= m_addr(2 * G_ADDR_SIZE-1 downto G_ADDR_SIZE);
                      m_data(G_DATA_SIZE-1 downto 0) <= m_data(2 * G_DATA_SIZE-1 downto G_DATA_SIZE);
-                     m_valid                          <= '1';
-                     m_double                         <= '0';
+                     m_valid                        <= '1';
+                     m_double                       <= '0';
                   end if;
                end if;
 
@@ -217,15 +217,15 @@ begin
                      -- Two out, one in: the arriving word lands in slot 0.
                      m_addr(G_ADDR_SIZE-1 downto 0) <= s_addr_i;
                      m_data(G_DATA_SIZE-1 downto 0) <= s_data_i;
-                     m_valid                          <= '1';
-                     m_double                         <= '0';
+                     m_valid                        <= '1';
+                     m_double                       <= '0';
                   else
                      -- One out, one in: slot 1 shifted down above, and the
                      -- arriving word refills slot 1.
                      m_addr(2 * G_ADDR_SIZE-1 downto G_ADDR_SIZE) <= s_addr_i;
                      m_data(2 * G_DATA_SIZE-1 downto G_DATA_SIZE) <= s_data_i;
-                     m_valid                                        <= '1';
-                     m_double                                       <= '1';
+                     m_valid                                      <= '1';
+                     m_double                                     <= '1';
                   end if;
                end if;
 

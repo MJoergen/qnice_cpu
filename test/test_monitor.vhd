@@ -176,9 +176,9 @@ begin
          file_close(sf);
 
          report "Statistics: " & integer'image(cycles) & " cycles, " &
-            integer'image(wbi_reqs) & " instruction and " &
-            integer'image(wbd_reqs) & " data memory requests, " &
-            integer'image(both_reqs) & " of them simultaneous";
+                integer'image(wbi_reqs) & " instruction and " &
+                integer'image(wbd_reqs) & " data memory requests, " &
+                integer'image(both_reqs) & " of them simultaneous";
       end procedure write_stats;
 
    begin
@@ -211,8 +211,8 @@ begin
 
       if not status_valid then
          report "TEST FAILED: HALT reached without a test status write to 0x" &
-            to_hstring(G_STATUS_ADDR) & ". " &
-            "Look at the address of the last disassembled HALT to see where.";
+                to_hstring(G_STATUS_ADDR) & ". " &
+                "Look at the address of the last disassembled HALT to see where.";
          stop(1);
       elsif status = X"0000" then
          report "TEST PASSED";

@@ -173,7 +173,7 @@ begin
       variable pending_v     : natural range 0 to 3;
       -- Set when the bus cycle has to be torn down rather than redirected,
       -- which suppresses the request that would otherwise be issued below.
-      variable cancel_v      : boolean;
+      variable cancel_v : boolean;
    begin
       if rising_edge(clk_i) then
          cyc_v         := wb_cyc_o;

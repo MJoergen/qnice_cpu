@@ -136,6 +136,18 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
         s_ready_o : out std_logic;
   ```
 
+* **A trailing comment on a run of consecutive declarations or statements is aligned into a
+  column**, wide enough for the longest line in the run:
+
+  ```vhdl
+     signal wb_req_accept : std_logic;   -- Request accepted by the slave
+     signal wb_ack_any    : std_logic;   -- Any acknowledgement from the slave
+  ```
+
+  The run ends at a blank line or a full-line comment, so one very long statement elsewhere in the
+  same process never drags the whole file's comment column to the right.
+* The `:=` of an initializer is **not** aligned — one space after the type mark, wherever that
+  lands. Only the `:` is aligned (see above), not what follows it.
 * Bit-string literals use an **uppercase base specifier**: `X"1FFF"`, not `x"1fff"`. The digits
   are uppercase too.
 * No spaces around `-` in a width expression: `std_logic_vector(G_DATA_SIZE-1 downto 0)`.
@@ -157,8 +169,18 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
                       '0';
   ```
 
+  A continuation is indented to whatever column reads best — usually under the expression it
+  continues, but **the 100-column target wins**: where aligning under the opening parenthesis
+  would start the wrapped text past column 60, indent instead. `decode.vhd`'s microcode
+  assignments and `sequencer.vhd`'s slice assignment are both of that kind.
+
 * One statement per line. The exception is a deliberate *table* — see the opcode/flag matrix in
   `alu_flags.vhd`, where the alignment is the point.
+* **Blank lines group related statements, and are placed by the author.** None of these
+  boundaries takes a blank line of its own: between a subprogram's declarative part and its
+  `begin`, around a `case` or one of its alternatives, around a loop, between two subtype
+  declarations of the same table, below an instantiation, or just inside an `if`. A blank line
+  goes where it separates one idea from the next, and nowhere else.
 * Instantiations always close with a label comment:
 
   ```vhdl
@@ -205,6 +227,15 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
 * **Direct entity instantiation** (`entity work.foo`) everywhere. No component declarations,
   no configurations, and no architecture identifier on the instantiation
   (`entity work.foo`, not `entity work.foo(synthesis)`).
+* **Subprogram headers are compact**: no space between the name and its `(`, and the parenthesis
+  never gets a line of its own.
+
+  ```vhdl
+     function reg_str(reg  : std_logic_vector;
+                      mode : std_logic_vector;
+                      oper : std_logic_vector) return string is
+  ```
+
 * A process header is written `process (clk_i)`, without the optional `is`. An `if` condition is
   not parenthesized: `if halt_i = '1' then`, not `if (halt_i = '1') then`.
 * **Synchronous, active-high reset**, sampled inside `if rising_edge(clk_i) then`, and written as
@@ -314,13 +345,15 @@ and the rest. Those stay this document's job, and a reviewer's.
 `vsg.yml` deliberately overrides only what this document actually says. Everything else is left at
 VSG's shipped defaults, so the tool will also flag things no rule here mentions.
 
-**`make lint` is not clean yet**, but everything still failing is a VSG default on a point this
-document has never ruled on — blank lines around `case` alternatives and subprogram bodies,
-parenthesis placement in a multi-line function call, `report` continuation alignment, and so on.
-Every rule stated here that VSG can check, it checks clean. Treat lint as a guide while editing a
-file rather than as a gate: it is not wired into `make test` or CI. Run it on the file you touched
-and leave that file no worse than you found it. To settle one of those open points, write the rule
-down here first and map it in `vsg.yml`, then fix the code.
+**`make lint` is clean** — zero errors. What remains is 42 `length_001` warnings, which are the
+100-column *target* of section 3 doing exactly what it is supposed to: advising, not failing. Keep
+it that way. It is not wired into `make test` or CI, so it does not enforce itself; run it on the
+file you touched before committing.
+
+Every rule VSG applies to this repo is now either stated in this document or deliberately turned
+off in `vsg.yml` with the reason written next to it. If you find yourself wanting to change a
+`vsg.yml` rule, that is a sign this document has an unanswered question: write the rule down here
+first, map it in `vsg.yml`, then fix the code.
 
 When a *single construct in a single file* deliberately breaks a rule, suppress it there with
 VSG's own markers rather than weakening `vsg.yml` for the whole repo:
@@ -334,8 +367,10 @@ VSG's own markers rather than weakening `vsg.yml` for the whole repo:
 ```
 
 Written at column 0, like the pragma guards in section 5, and preceded by a comment saying *why*.
-`cpu_constants.vhd`, `decode.vhd`, `microcode.vhd`, `alu_data.vhd` and `alu_flags.vhd` all use
-this. Reach for a `vsg.yml` entry only when the deviation is a repo-wide convention.
+`cpu_constants.vhd`, `decode.vhd`, `microcode.vhd`, `alu_data.vhd`, `alu_flags.vhd` and
+`pipe_concat.vhd` all use this — for an instruction-format table, an opcode matrix, an aligned
+two-row boolean expression, a handshake written as a matrix. Reach for a `vsg.yml` entry only when
+the deviation is a repo-wide convention.
 
 ## Known deviations
 

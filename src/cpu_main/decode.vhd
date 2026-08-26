@@ -41,7 +41,7 @@ architecture synthesis of decode is
 -- Deliberate compact tables: each maps an opcode straight to a single bit,
 -- with "others" as the fall-through. vsg's constant_012 wants every
 -- association reindented to the open-paren column (66+ spaces deep here).
--- vsg_off constant_012
+-- vsg_off constant_012 constant_400 element_association_100
    constant C_HAS_SRC_OPERAND : std_logic_vector(15 downto 0) := (
       C_OPCODE_CTRL => '0',
       others        => '1');
@@ -63,7 +63,7 @@ architecture synthesis of decode is
       C_OPCODE_CTRL => '0',
       C_OPCODE_JMP  => '0',
       others        => '1');
--- vsg_on constant_012
+-- vsg_on constant_012 constant_400 element_association_100
 
 
    signal has_src_operand : std_logic; -- Does the instruction have a source operand?
@@ -86,8 +86,8 @@ begin
    ------------------------------------------------------------
 
    fetch_double_o <= immediate_src or immediate_dst;
-   fetch_ready_o <= '0' when fetch_double_o and not fetch_double_i else -- Wait for immediate value
-                    prep_ready_i;
+   fetch_ready_o  <= '0' when fetch_double_o and not fetch_double_i else -- Wait for immediate value
+                     prep_ready_i;
 
 
    ------------------------------------------------------------
@@ -112,7 +112,9 @@ begin
    has_dst_operand <= C_HAS_DST_OPERAND(to_integer(fetch_data_i(R_OPCODE)));
 
 
-   -- Special case when src = @PC++
+   -- Special case when src = @PC++. The two conditions of each chain align
+   -- their `=` signs, which whitespace_100 would compact away.
+-- vsg_off whitespace_100
    immediate_src <= has_src_operand when
                     fetch_data_i(R_SRC_REG)  = C_REG_PC and
                     fetch_data_i(R_SRC_MODE) = C_MODE_POST else
@@ -123,6 +125,7 @@ begin
                     fetch_data_i(R_DST_REG)  = C_REG_PC and
                     fetch_data_i(R_DST_MODE) = C_MODE_POST else
                     '0';
+-- vsg_on whitespace_100
 
    reads_from_dst <= C_READS_FROM_DST (to_integer(fetch_data_i(R_OPCODE)));
    writes_to_dst  <= C_WRITES_TO_DST  (to_integer(fetch_data_i(R_OPCODE)));
@@ -161,7 +164,7 @@ begin
 
          -- Ready to send new data to next stage
          if fetch_valid_i and fetch_ready_o then
-            prep_valid_o <= '1';
+            prep_valid_o            <= '1';
             prep_stage_o.microcodes <= microcode_value;
             prep_stage_o.addr       <= fetch_addr_i;
             prep_stage_o.immediate  <= fetch_data_i(R_IMMEDIATE);
