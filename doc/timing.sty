@@ -14,6 +14,11 @@
 
 \newcounter{wavenum}
 
+% Horizontal scale of the wave environment, in cm per clock cycle.  Redefine it
+% (\renewcommand) before \begin{wave} to widen a diagram whose bus labels do
+% not fit in a one-cycle box; node text is not scaled with it, only geometry.
+\newcommand{\wavescale}{1}
+
 \setlength{\unitlength}{1cm}
 % advance clock one cycle, not to be called directly
 \newcommand*{\clki}{\
@@ -67,7 +72,7 @@
 
 % \begin{wave}[clkname]{num_waves}{clock_cycles}
 \newenvironment{wave}[3][clk]{
-  \begin{tikzpicture}[draw=black, yscale=.7,xscale=1]
+  \begin{tikzpicture}[draw=black, yscale=.7,xscale=\wavescale]
     \tikzstyle{time}=[coordinate]
     \setlength{\unitlength}{1cm}
     \def\wavewidth{#3}

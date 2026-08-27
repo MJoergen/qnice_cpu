@@ -173,16 +173,44 @@ which position is priority — the closer to the CPU, the higher.
 2. When the CPU can service it, it saves `R14` and `R15` and *then* pulls
    `IGRANT_N` low. The ISA document states that ordering explicitly — "it will
    save `R14` and `R15` and then signals the device by pulling `/IGRANT` low" —
-   so the save is not merely concurrent with the grant. The device then drives
-   the address of its ISR onto the data bus.
-3. The device pulls `INT_N` high once that address is valid.
-4. The CPU samples the address and releases `IGRANT_N`, and the device releases
-   the bus.
+   so the save is not merely concurrent with the grant. The device drives the
+   address of its ISR onto the bus in that same cycle.
+3. The CPU samples the address at the end of that cycle and releases `IGRANT_N`.
+4. The device releases the bus and pulls `INT_N` high.
 
 The cycle-level version of those four steps — which signal moves on which edge,
 and which are registered — is the T2b diagram and its walkthrough in
-[src/interrupt/README.md](../src/interrupt/README.md). The handshake costs three
+[src/interrupt/README.md](../src/interrupt/README.md). The handshake costs two
 cycles between the commit and the redirect.
+
+DECISION (revised after T2b): the grant lasts **exactly one cycle**, and the
+address is sampled at the end of it. Read the two pins as an inverted AXI-style
+handshake — `VALID` is `INT_N` low, `READY` is `IGRANT_N` low — and the transfer
+is the one cycle in which both are low. The CPU never waits inside the grant,
+because it only grants when a request is already asserted and held.
+
+That is one cycle faster than the first draft of this note, which had the CPU
+wait for `INT_N` to go high as the device's data-valid signal, exactly as
+`cs_int_wait_isr` in `vhdl/qnice_cpu.vhd` does. It is also **tighter than the
+upstream prose**: `int-device.md` and `doc/intro/interrupt_timing.jpg` both put
+the data after the grant and let a device take any number of cycles to produce
+it. The reference *device* nonetheless satisfies the tighter rule already —
+`fsm_output_decode` in `vhdl/timer.vhd` drives `data_out <= reg_int` in the very
+cycle it sees `grant_n_in = '0'`, still holding `int_n_out` low, and raises
+`int_n_out` only in the following state `s_provide_isr`. A device that *registers*
+its address output is conforming upstream and would break here. That divergence,
+the timing cost of the now single-cycle capture path, and the one thing it buys
+in return (an early release of `INT_N` becomes a detectable violation instead of
+an undetectable one) are written up in
+[src/interrupt/README.md](../src/interrupt/README.md).
+
+What does **not** work, and was considered: having the device present the address
+from the moment it asserts `INT_N`, so that the address lines are literally an
+AXI data channel. The address lines are shared by the whole chain, and a
+requesting device de-couples only its right neighbour's *grant*, not its request
+— so devices further right are free to request during a transaction, and would
+drive the bus at the same time as the granted device. The grant is what resolves
+who owns the bus, so the data cannot precede it.
 
 DECISION (revised at T2b): the device must hold `isr_addr_i` for as long as
 `igrant_n_o` is low, and may release it any cycle at or after the one in which it
@@ -190,8 +218,8 @@ sees `igrant_n_o` go high. It does **not** have to release combinationally.
 
 An earlier draft of this note did require a combinational release, on the
 assumption that the CPU would use `isr_addr_i` directly. Drawing the diagram
-showed it does not: the address is captured into a register on the last granted
-cycle, so the bus turnaround afterwards cannot be observed. The weaker rule is
+showed it does not: the address is captured into a register at the end of the
+granted cycle, so the bus turnaround afterwards cannot be observed. The weaker rule is
 also what upstream already satisfies — `fsm_output_decode` in `vhdl/timer.vhd`
 holds `data_out` until it sees `grant_n_in` high — so requiring more would have
 made a conforming device non-conforming here for no gain. Neither
@@ -497,6 +525,12 @@ The reference halts on both.
   WRITE (T3), and the redirect turns out to happen at the module's `done_o`
   rather than at `inst_done_o` (T6).
 
+  A fourth followed on review of the drawing: the grant was shortened from two
+  cycles to one, dropping the wait for `INT_N` to rise and taking the address at
+  the end of the granted cycle instead. That is a cycle off the interrupt
+  response and a contract on devices slightly tighter than upstream's prose —
+  both argued in [Bus protocol](#bus-protocol) above.
+
   **Still to do:** the diagram is a specification, not a recording. Redraw it
   from a GHDL simulation once T2 runs, as `src/cpu_main/timing.tex` is read off
   `test/prog_waveform.asm`, and treat any disagreement as a bug in whichever of
@@ -527,7 +561,7 @@ The reference halts on both.
   `RTI`, so they do not depend on T6 or T7.
 
 * **T6. Hardware grant.** Commit at `inst_done_o`, taking `next_pc` as the return
-  address, and redirect three cycles later at the module's `done_o`. T2b split
+  address, and redirect two cycles later at the module's `done_o`. T2b split
   those two apart: the earlier one-line version of this task had the redirect
   happening at `inst_done_o` too, which cannot work, because the ISR address does
   not exist yet at the commit point — the grant handshake is what fetches it, and

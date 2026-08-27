@@ -10,6 +10,9 @@
 \documentclass{standalone}
 \usepackage{timing}
 
+% GRANT lasts a single cycle and does not fit in a default-width box.
+\renewcommand{\wavescale}{1.7}
+
 \begin{document}
 % Drawing convention, the same one src/cpu_main/timing.tex uses: handshake bits
 % are always drawn with their true value; a bus is greyed out ("x") in every
@@ -17,20 +20,24 @@
 %
 % Every signal below is either a pin (the top three) or a register output, with
 % one deliberate exception: start_i is combinational, and isr_addr_i is driven
-% combinationally by the device.  Both are called out in doc/interrupts.md.
-\begin{wave}{12}{13}
- \nextwave{int\_n\_i}                 \bit{1}{1} \bit{0}{4} \bit{1}{3} \bit{0}{5}
- \nextwave{igrant\_n\_o}              \bit{1}{4} \bit{0}{2} \bit{1}{7}
- \nextwave{isr\_addr\_i}              \unknown[x]{4} \known{ISR}{2} \unknown[x]{7}
- \nextwave{interrupt/state}           \known{IDLE}{4} \known{GRANT}{2} \known{DONE}{1} \known{IDLE}{6}
- \nextwave{interrupt/pending\_o}      \bit{0}{2} \bit{1}{2} \bit{0}{5} \bit{1}{4}
- \nextwave{interrupt/start\_i}        \bit{0}{3} \bit{1}{1} \bit{0}{9}
- \nextwave{interrupt/done\_o}         \bit{0}{6} \bit{1}{1} \bit{0}{6}
- \nextwave{interrupt/addr\_o}         \unknown[x]{6} \known{ISR}{7}
- \nextwave{WRITE/inst\_done\_o}       \bit{0}{3} \bit{1}{1} \bit{0}{5} \bit{1}{1} \bit{0}{1} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/int\_active}         \bit{0}{4} \bit{1}{8} \bit{0}{1}
- \nextwave{WRITE/int\_wait}           \bit{0}{4} \bit{1}{3} \bit{0}{6}
- \nextwave{WRITE/fetch\_valid\_o}     \bit{0}{6} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1}
+% combinationally by the device in the one cycle it is granted.  Both are called
+% out in doc/interrupts.md.
+%
+% The transfer happens in the single cycle t=4, where int_n_i and igrant_n_o are
+% both low: read as VALID and READY of an (inverted) AXI-style handshake.
+\begin{wave}{12}{12}
+ \nextwave{int\_n\_i}                 \bit{1}{1} \bit{0}{4} \bit{1}{2} \bit{0}{5}
+ \nextwave{igrant\_n\_o}              \bit{1}{4} \bit{0}{1} \bit{1}{7}
+ \nextwave{isr\_addr\_i}              \unknown[x]{4} \known{ISR}{1} \unknown[x]{7}
+ \nextwave{interrupt/state}           \known{IDLE}{4} \known{GRANT}{1} \known{IDLE}{7}
+ \nextwave{interrupt/pending\_o}      \bit{0}{2} \bit{1}{2} \bit{0}{4} \bit{1}{4}
+ \nextwave{interrupt/start\_i}        \bit{0}{3} \bit{1}{1} \bit{0}{8}
+ \nextwave{interrupt/done\_o}         \bit{0}{5} \bit{1}{1} \bit{0}{6}
+ \nextwave{interrupt/addr\_o}         \unknown[x]{5} \known{ISR}{7}
+ \nextwave{WRITE/inst\_done\_o}       \bit{0}{3} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/int\_active}         \bit{0}{4} \bit{1}{7} \bit{0}{1}
+ \nextwave{WRITE/int\_wait}           \bit{0}{4} \bit{1}{2} \bit{0}{6}
+ \nextwave{WRITE/fetch\_valid\_o}     \bit{0}{5} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1}
 \end{wave}
 
 \end{document}
