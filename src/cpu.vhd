@@ -33,6 +33,8 @@ entity cpu is
       wbd_ack_i   : in  std_logic;
       wbd_data_i  : in  std_logic_vector(15 downto 0);
 
+      inst_done_o : out std_logic;
+
       -- Asserted from the moment a HALT instruction retires until the next reset
       halt_o      : out std_logic
    );
@@ -234,6 +236,7 @@ begin
          reg_we_o        => wr2reg_we,
          reg_addr_o      => wr2reg_addr,
          reg_val_o       => wr2reg_val,
+         inst_done_o     => inst_done_o,
          halt_o          => halt
       ); -- i_cpu_main
 
