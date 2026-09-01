@@ -17,6 +17,37 @@ vunit i_memory(memory(synthesis))
    f_tsb_dst_in_overflow : assert always {tsb_dst_in_valid and not rst_i} |-> {tsb_dst_in_ready};
    f_tsf_req_in_overflow : assert always {tsf_req_in_valid and not rst_i} |-> {tsf_req_in_ready};
 
+   -- Stronger form of f_tsf_req_in_overflow, and the reason it is still worth
+   -- stating separately: tsf_req_in_valid is now gated by "not
+   -- wb_ack_zero_lat", so a zero-latency ACK deliberately accepts a request
+   -- WITHOUT pushing it. That gate must never be the only thing standing
+   -- between an accepted request and a full FIFO -- if the FIFO were full at
+   -- that moment, the design would be relying on the suppression for
+   -- correctness rather than as an optimisation, and any change to the
+   -- zero-latency condition would silently drop a request. So assert against
+   -- the raw acceptance condition, not the gated push.
+   f_tsf_req_accept_ready : assert always {mreq_valid_i and mreq_ready_o and not rst_i} |-> {tsf_req_in_ready};
+
+   -- The invariant the zero-latency bypass rests on (see memory.vhd at
+   -- wb_ack_op): an empty type-tracking FIFO implies an empty Wishbone
+   -- request buffer, so anything being issued while the FIFO is empty is
+   -- cutting through from mreq_op_i and cannot be a request staged earlier.
+   f_wb_req_buf_empty : assert always {not rst_i and not tsf_req_out_valid} |-> {not wb_req_afull};
+
+   -- The direct consequence that the push-suppression relies on: a
+   -- zero-latency ACK always coincides with the acceptance of the very
+   -- request it answers. If this failed, "and not wb_ack_zero_lat" would be
+   -- cancelling a push that belongs to some other request.
+   f_zero_lat_ack_is_pushed : assert always {wb_ack_zero_lat} |-> {mreq_valid_i and mreq_ready_o};
+
+   -- wb_ack_zero_lat does not itself test that a request is being handed to
+   -- the slave this cycle -- that term costs the design its entire timing
+   -- margin, see the TIMING note in memory.vhd. This is the property that
+   -- makes leaving it out safe rather than lucky: with the FIFO empty,
+   -- nothing is outstanding, so the slave contract leaves an in-flight
+   -- request as the only thing an ACK can belong to.
+   f_zero_lat_ack_is_issue : assert always {wb_ack_zero_lat} |-> {wb_stb_o and not wb_stall_i};
+
 
    ------------------------------------------------
    -- PROPERTIES OF THE WISHBONE MASTER INTERFACE
@@ -112,8 +143,16 @@ vunit i_memory(memory(synthesis))
    -- Require reset at startup.
    f_reset : assume {rst_i};
 
-   -- WISHBONE SLAVE: No ACKs without a request
-   f_wb_slave_ack_idle : assume always {f_wb_req_count = 0} |-> {not wb_ack_i};
+   -- WISHBONE SLAVE: No ACKs without a request.
+   --
+   -- Note f_wb_req_count is registered, so it does not yet count a request
+   -- being accepted by the slave in THIS cycle. The second conjunct is what
+   -- admits a zero-latency ACK -- the slave answering in the same cycle it
+   -- takes the request. Dropping it restores the old "at least one cycle of
+   -- latency" contract, and with it makes every zero-latency cover below
+   -- unreachable, which is the quickest way to tell the two apart.
+   f_wb_slave_ack_idle : assume always
+     {f_wb_req_count = 0 and not (wb_cyc_o = '1' and wb_stb_o = '1' and wb_stall_i = '0')} |-> {not wb_ack_i};
 
    -- WISHBONE SLAVE: Only stall for at most 3 clock cycles. This is an artifical constraint.
    f_wb_slave_stall_delay_max : assume always {f_wb_stall_delay <= 3};
@@ -151,6 +190,31 @@ vunit i_memory(memory(synthesis))
                           mreq_valid_i = '1' and mreq_ready_o = '1' and mreq_op_i = "100";
                           mreq_valid_i = '1' and mreq_ready_o = '1' and mreq_op_i = "010";
                           mreq_valid_i = '1' and mreq_ready_o = '1' and mreq_op_i = "001"};
+
+   -- ZERO-LATENCY ACK reachability. These matter more than the usual cover:
+   -- the assumption above is what admits the case at all, so without them a
+   -- passing bmc would say nothing about whether the bypass is ever exercised
+   -- -- exactly the failure mode described for f_cover_stale_ack in
+   -- src/fetch/README.md.
+   f_cover_zero_lat_src : cover {wb_ack_zero_lat = '1' and tsb_src_in_valid = '1'};
+   f_cover_zero_lat_dst : cover {wb_ack_zero_lat = '1' and tsb_dst_in_valid = '1'};
+
+   -- ...and that a response taken through the bypass actually reaches PREPARE
+   -- rather than being dropped, in the case where it has to be stored first
+   -- (msrc_ready_i low in the ACK cycle).
+   f_cover_zero_lat_out : cover {wb_ack_zero_lat = '1' and tsb_src_in_valid = '1' and msrc_ready_i = '0';
+                                 msrc_valid_o = '1'};
+
+   -- Mixed latencies: a zero-latency ACK, and then later an ordinary ACK
+   -- matched through the FIFO head. This is what would catch the bypass
+   -- leaving a stale FIFO entry behind and shifting every later ACK out of
+   -- step. The two cannot be adjacent cycles, which is worth knowing rather
+   -- than tightening: a zero-latency ACK suppresses its own push, so the
+   -- cycle after one the FIFO is necessarily still empty and no head-matched
+   -- ACK is possible. Hence the true[*] gap.
+   f_cover_zero_lat_mixed : cover {wb_ack_zero_lat = '1';
+                                   true[*];
+                                   wb_ack_i = '1' and tsf_req_out_valid = '1' and wb_ack_zero_lat = '0'};
 
 
    ----------------------------------------------

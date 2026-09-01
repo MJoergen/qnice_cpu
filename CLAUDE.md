@@ -343,6 +343,19 @@ depends entirely on the Wishbone slave acking in issue order (stated in the modu
 here since `wbd_*` (see `cpu.vhd`) connects to a single, non-reordering physical memory, but would
 silently misattribute data against a slave that completed requests out of order.
 
+**Zero-latency ACKs** — a slave answering in the same cycle it accepts — are supported, but only on
+the data bus; FETCH has not been checked against one. That FIFO's output is registered, so the
+same-cycle case is handled by `wb_ack_zero_lat`, which takes the op-type from `mreq_op_i` and
+suppresses the push instead of pushing-then-popping. Two things there are load-bearing and cheap to
+undo. `mreq_accept` must read the response buffers' *registered* `tsb_*_fill`, not
+`msrc_valid_o`/`mdst_valid_o` — those cut through from `wb_ack_i`, and against a combinational slave
+that is a real combinational loop (yosys `check -assert` on a flattened zero-latency harness finds
+it). And `wb_ack_zero_lat` must NOT be conjoined with `wb_stb_o and not wb_stall_i`, however much
+more obviously correct that reads: it is redundant (`f_zero_lat_ack_is_issue`) and it drags DECODE's
+microcodes through the Sequencer onto the front of the response path and on into the Icache reset —
+measured at WNS +0.135 ns → −2.172 ns. `bmc` does not defend any of this: with the bypass forced off
+the asserts still pass and only the `f_cover_zero_lat_*` covers go red.
+
 Formal status (`formal/memory.psl`): `bmc`/`cover` (depth 10) pass. K-induction (`prove`, not
 currently in `formal/memory.sby`'s task list) is **partially closed**: the three buffer/FIFO
 overflow-safety properties that blocked the original attempt now prove inductively, via a

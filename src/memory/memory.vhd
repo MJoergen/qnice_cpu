@@ -1,8 +1,19 @@
 -- This module multiplexes one request channel and two readback channels into a
 -- single Wishbone Master interface. The Wishbone slave is expected to follow:
 -- * Requests are ack'ed in the same order.
--- * Responses (ACKs) return at least one clock cycle later. No zero-latency
---   ACKs.
+-- * An ACK may return in the SAME clock cycle in which the slave accepts the
+--   request (wb_stb_o='1' and wb_stall_i='0'), but never earlier, and never
+--   while nothing is outstanding. Zero-latency ACKs ARE supported; see
+--   wb_ack_zero_lat below for the bookkeeping that makes them work.
+-- * The slave must not derive wb_ack_i or wb_data_i combinationally from
+--   anything that this module in turn derives from wb_ack_i. In practice a
+--   zero-latency slave computes wb_ack_i from wb_cyc_o/wb_stb_o/wb_stall_i
+--   alone. This module holds up its end of that bargain by keeping
+--   wb_cyc_o, wb_stb_o and the request payload free of any combinational
+--   path from wb_ack_i -- which is precisely why mreq_accept below is
+--   written against the buffers' REGISTERED occupancy counts and not
+--   against msrc_valid_o/mdst_valid_o. Reintroducing those two signals
+--   there closes a combinational loop through a zero-latency slave.
 -- * A reset (or equivalently a mid-transaction rst_i pulse, which drops
 --   wb_cyc_o and so aborts any in-flight Wishbone cycle -- see wb_cyc_o
 --   below) is not followed by a stray wb_ack_i for the aborted request. This
@@ -86,6 +97,11 @@ architecture synthesis of memory is
    signal mreq_valid  : std_logic;
    signal mreq_ready  : std_logic;
 
+   signal wb_req_afull    : std_logic;
+   signal wb_ack_zero_lat : std_logic;
+   signal wb_ack_op       : std_logic_vector(2 downto 0);
+   signal wb_ack_op_valid : std_logic;
+
    signal tsf_req_in_valid  : std_logic;
    signal tsf_req_in_ready  : std_logic;
    signal tsf_req_fill      : natural range 0 to 2;
@@ -108,21 +124,35 @@ begin
    ------------------------------------------------------------
 
    -- Accept request, EXCEPT when any one of:
-   -- * SRC read data is presented, but not yet accepted
-   -- * DST read data is presented, but not yet accepted
-   mreq_accept <= '0' when (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i) = '1' else
-                  '0' when (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i) = '1' else
+   -- * SRC read data is already stored, but not being consumed this cycle
+   -- * DST read data is already stored, but not being consumed this cycle
+   --
+   -- The test is deliberately written against tsb_*_fill (the buffers'
+   -- registered occupancy) rather than against msrc_valid_o/mdst_valid_o.
+   -- Those two outputs cut through combinationally from tsb_*_in_valid, hence
+   -- from wb_ack_i -- and mreq_accept feeds mreq_valid, hence wb_stb_o. With
+   -- a slave whose ACK is a combinational function of STB, that is a genuine
+   -- combinational loop (exactly the case one_stage_buffer's header warns
+   -- about). Reading the registered fill instead breaks it, at the price of
+   -- being marginally more permissive: in the one cycle a response cuts
+   -- through the buffer unconsumed, fill is still 0 and a further request is
+   -- accepted. That is safe -- see the "total outstanding per channel never
+   -- exceeds 2" argument in src/memory/README.md, and f_src_total_max /
+   -- f_dst_total_max in formal/memory.psl which state it.
+   mreq_accept <= '0' when mreq_op_i(C_MEM_READ_SRC) = '1' and tsb_src_fill /= 0 and msrc_ready_i = '0' else
+                  '0' when mreq_op_i(C_MEM_READ_DST) = '1' and tsb_dst_fill /= 0 and mdst_ready_i = '0' else
                   tsf_req_in_ready;
 
    -- Block incoming Memory request until ready
    --
    -- NOTE ON mreq_valid'S STABILITY: mreq_accept (and hence mreq_valid) can
    -- legitimately drop from '1' to '0' across a clock edge even while
-   -- mreq_valid_i stays asserted throughout -- e.g. if msrc_valid_o newly
-   -- asserts with msrc_ready_i='0' in the very cycle i_one_stage_buffer_wb
-   -- becomes ready. This looks like it violates that buffer's own "s_valid_i
-   -- must stay stable until accepted" contract (formally confirmed reachable
-   -- by BMC), but it is NOT a functional bug:
+   -- mreq_valid_i stays asserted throughout -- e.g. if a SRC response lands
+   -- in i_two_stage_buffer_src (raising tsb_src_fill) with msrc_ready_i='0'
+   -- in the very cycle i_one_stage_buffer_wb becomes ready. This looks like
+   -- it violates that buffer's own "s_valid_i must stay stable until
+   -- accepted" contract (formally confirmed reachable by BMC), but it is NOT
+   -- a functional bug:
    -- * mreq_ready_o = mreq_ready and mreq_accept, so WRITE is never told
    --   "accepted" while mreq_accept='0' -- it keeps holding mreq_valid_i and
    --   the payload stable per its own contract (see header), so no data is
@@ -141,10 +171,63 @@ begin
 
 
    ------------------------------------------------------------
+   -- Attribute each ACK to the request it completes
+   ------------------------------------------------------------
+
+   -- ZERO-LATENCY ACK. The slave is permitted to answer a request in the very
+   -- cycle it accepts it (see the header). i_two_stage_fifo_mem is no help
+   -- there: its output is REGISTERED, so the entry pushed for that request is
+   -- not visible on tsf_req_out_valid/tsf_req_out_data until the next cycle.
+   -- An empty FIFO at the moment of an ACK is exactly the signature of that
+   -- case -- with nothing else outstanding, the ACK can only belong to the
+   -- request going out right now.
+   --
+   -- Without this term the module fails in two ways at once: the response is
+   -- dropped (tsb_*_in_valid below need a type, and the FIFO has none to
+   -- give), and the un-popped entry then shifts every later ACK one request
+   -- out of step, silently misrouting SRC data to DST and back.
+   --
+   -- TIMING -- do NOT add a "wb_stb_o and not wb_stall_i" term here, however
+   -- much more self-evidently correct it reads. It is redundant: an empty
+   -- FIFO means nothing is outstanding, so by the slave contract an ACK can
+   -- only belong to a request being issued right now (asserted, not merely
+   -- believed -- f_zero_lat_ack_is_issue in formal/memory.psl). And it is
+   -- expensive, because it puts wb_stb_o into the cone of msrc_valid_o /
+   -- mdst_valid_o, which PREPARE consumes combinationally. wb_stb_o comes
+   -- from mreq_valid_i, i.e. from the Sequencer, i.e. from DECODE's
+   -- registered microcodes -- so the term splices the whole request-issue
+   -- path onto the front of the response path, and the join runs on into
+   -- fetch_valid_o and the Icache's reset pin. Measured: WNS +0.135 ns ->
+   -- -2.172 ns, 11 logic levels, on a path this module is otherwise nowhere
+   -- near. As written, every operand here (wb_ack_i, tsf_req_out_valid, and
+   -- mreq_op_i below, which is PREPARE's registered wr_stage_o) comes
+   -- straight off a flip-flop.
+   wb_ack_zero_lat <= wb_ack_i and not tsf_req_out_valid;
+
+   -- ...and in that case the request being issued is cutting straight through
+   -- i_one_stage_buffer_wb from the mreq_* inputs, so its op-type is simply
+   -- mreq_op_i. The buffer cannot instead be holding a request staged in an
+   -- earlier cycle here: it and the type-tracking FIFO are pushed by the
+   -- identical condition (mreq_ready_o -- see the "cannot desync" note at
+   -- mreq_valid above), and a FIFO entry is popped only by its own ACK. So a
+   -- staged request always still has a FIFO entry, i.e. tsf_req_out_valid='0'
+   -- implies the request buffer is empty. That cross-signal invariant is what
+   -- the otherwise-unused wb_req_afull exists to expose, so that formal can
+   -- check it rather than leaving it as an unstated assumption -- see
+   -- f_wb_req_buf_empty and f_zero_lat_ack_is_pushed in formal/memory.psl.
+   wb_ack_op       <= mreq_op_i when wb_ack_zero_lat = '1' else tsf_req_out_data;
+   wb_ack_op_valid <= (wb_ack_i and tsf_req_out_valid) or wb_ack_zero_lat;
+
+
+   ------------------------------------------------------------
    -- Store the incoming memory request
    ------------------------------------------------------------
 
-   tsf_req_in_valid <= mreq_valid_i and mreq_ready_o;
+   -- The request accepted this cycle is recorded in the type-tracking FIFO --
+   -- unless the slave has already answered it in this same cycle, in which
+   -- case there is nothing left to track and pushing it would leave behind a
+   -- stale entry that every subsequent ACK would then be matched against.
+   tsf_req_in_valid <= mreq_valid_i and mreq_ready_o and not wb_ack_zero_lat;
 
 
    -- This is the type-tagging FIFO described in the header: it exists purely
@@ -174,6 +257,10 @@ begin
    -- additionally protects against ever popping on a stray ack that arrives
    -- while nothing is genuinely outstanding (e.g. right after a
    -- reset/abort) -- see the reset/abort note in the header.
+   --
+   -- No special case is needed for a zero-latency ACK: there the FIFO is
+   -- empty, so this pop is a no-op (two_stage_fifo ignores m_ready_i while
+   -- m_valid_r='0'), and the matching push has been suppressed above instead.
    tsf_req_out_ready <= wb_cyc_o and wb_ack_i;
 
 
@@ -190,6 +277,7 @@ begin
          rst_i               => rst_i,
          s_valid_i           => mreq_valid,
          s_ready_o           => mreq_ready,
+         s_afull_o           => wb_req_afull,
          s_data_i(C_WB_WE)   => mreq_op_i(C_MEM_WRITE),
          s_data_i(R_WB_DATA) => mreq_data_i,
          s_data_i(R_WB_ADDR) => mreq_addr_i,
@@ -217,13 +305,12 @@ begin
    ------------------------------------------------------------
 
    -- wb_data_i itself doesn't say which read it belongs to -- this reads the
-   -- type recovered above (tsf_req_out_data, the FIFO head) to decide the ack
-   -- just received is for a READ_SRC and should be routed here. A WRITE ack
-   -- (tsf_req_out_data(C_MEM_READ_SRC)='0') correctly produces neither this
-   -- nor the DST valid below, and wb_data_i is simply ignored for it.
-   tsb_src_in_valid <= '1' when wb_ack_i = '1' and tsf_req_out_valid = '1' and
-                                tsf_req_out_data(C_MEM_READ_SRC) = '1' else
-                       '0';
+   -- type recovered above (wb_ack_op: the FIFO head, or mreq_op_i on a
+   -- zero-latency ACK) to decide the ack just received is for a READ_SRC and
+   -- should be routed here. A WRITE ack (wb_ack_op(C_MEM_READ_SRC)='0')
+   -- correctly produces neither this nor the DST valid below, and wb_data_i
+   -- is simply ignored for it.
+   tsb_src_in_valid <= wb_ack_op_valid and wb_ack_op(C_MEM_READ_SRC);
 
    -- Two-word FIFO with zero-latency forwarding
    i_two_stage_buffer_src : entity work.two_stage_buffer
@@ -248,9 +335,7 @@ begin
    ------------------------------------------------------------
 
    -- Mirror of tsb_src_in_valid above, for READ_DST.
-   tsb_dst_in_valid <= '1' when wb_ack_i = '1' and tsf_req_out_valid = '1' and
-                                tsf_req_out_data(C_MEM_READ_DST) = '1' else
-                       '0';
+   tsb_dst_in_valid <= wb_ack_op_valid and wb_ack_op(C_MEM_READ_DST);
 
    -- Two-word FIFO with zero-latency forwarding
    i_two_stage_buffer_dst : entity work.two_stage_buffer

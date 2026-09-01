@@ -116,9 +116,14 @@ apart:
   accepted on any clock edge where `wb_stb_o` is high and `wb_stall_i` is low.
   This only means the slave has taken the request -- it does *not* mean the
   transaction is finished.
-* **Request completed.** The slave later pulses `wb_ack_i`, once per accepted
+* **Request completed.** The slave pulses `wb_ack_i`, once per accepted
   request. For a read it drives the result onto `wb_data_i` in that same cycle.
-  **Writes are acknowledged too**, with no meaningful data.
+  **Writes are acknowledged too**, with no meaningful data. The pulse usually
+  comes a cycle or more after the request is accepted, but it may also come in
+  the *same* cycle -- the Memory module handles zero-latency slaves, see
+  [Zero-latency ACKs](../src/memory/README.md#Zero-latency-ACKs). Nothing in
+  this repo is one: `test/wb_dp_mem.vhd` is backed by `dp_ram`, whose read port
+  is registered.
 
 Because acknowledgements are just pulses carrying no identifying information,
 and because several requests may be outstanding at once, the master has to
@@ -127,7 +132,10 @@ inside the [Memory module](../src/memory/README.md) does: it records the type of
 every accepted-but-unacknowledged request, and matches each `wb_ack_i` against
 the oldest one to decide whether the returned data belongs to the source operand
 buffer, the destination operand buffer, or nowhere at all (a write). This relies
-on the slave acknowledging in issue order.
+on the slave acknowledging in issue order. Note the FETCH unit keeps its own,
+separate bookkeeping for the instruction bus (`wb_stale` in
+[fetch/README.md](../src/fetch/README.md#Redirect)), and unlike the Memory
+module it has **not** been checked against a zero-latency slave.
 
 ## Interleaving
 Analyzing the timing of a QNICE assembly program is not simple, due to the
@@ -273,7 +281,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `63b55a4`.
+Measured with Vivado 2022.2 on commit `9be5751-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -290,21 +298,21 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  887 |     63400 | 1.40 |
+| Slice LUTs      |  873 |     63400 | 1.38 |
 | Slice Registers |  598 |    126800 | 0.47 |
-| Slices          |  303 |     15850 | 1.91 |
+| Slices          |  286 |     15850 | 1.80 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.135 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.150 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][1]` to
-`i_prepare/wr_stage_o_reg[alu_src_val][2]`: 9 logic levels, with 81% of the
-delay in routing rather than logic.
+The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_dst_val][5]` to
+`i_prepare/wr_stage_o_reg[dst_val][5]`: 10 logic levels, with 72% of the delay
+in routing rather than logic.
 <!-- end -->
 
 **In the build measured above, the worst path is the one this section
@@ -440,9 +448,9 @@ written:
 | PREPARE         |   81 | 131 |
 | WRITE           |  463 |   0 |
 | Registers       |  166 | 142 |
-| Memory          |   57 |  74 |
+| Memory          |   60 |  74 |
 | Glue            |    8 |   1 |
-| **CPU total**   |  929 | 580 |
+| **CPU total**   |  932 | 580 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
@@ -461,7 +469,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (929 vs 887 LUTs). That is expected:
+The two tables do not add up to each other (932 vs 873 LUTs). That is expected:
 the first is measured after place-and-route, where physical optimisation
 replicates logic to meet timing, while the second stops after synthesis. Slices
 are not listed per module because slices are shared between modules and are not
