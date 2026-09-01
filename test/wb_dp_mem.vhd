@@ -25,22 +25,30 @@
 -- src/fetch/README.md#Zero-latency-ACKs. Run the whole simulation in that mode
 -- with "make test READ_REG=false".
 --
--- It is a SIMULATION configuration, not a synthesis one. dp_ram's port B read
--- becomes asynchronous, and an asynchronous read cannot come out of a Block
--- RAM, so with G_RAM_STYLE = "block" the array stops mapping to BRAM -- see
--- the comment at gen_b_reg in src/sub/dp_ram.vhd.
+-- The mode stays synthesisable, and in particular the memory stays a Block RAM.
+-- That is not free of charge and it is not automatic: dp_ram has to move port
+-- B's WRITE to the falling edge along with its read, or the port wants two
+-- clocks at once and Vivado drops the whole array into LUTRAM. The argument is
+-- at gen_b_block in src/sub/dp_ram.vhd.
 --
 -- Measured, Vivado 2022.2, synthesis only, -flatten_hierarchy none, this 8Kx16
 -- instance (the i_wb_dp_mem row of "make utilization"'s per-module table):
 --
---   G_READ_REG        true      false
---   RAMB36               4          0
---   LUTRAMs              0      4,096
---   Logic LUTs           3        615
+--   G_READ_REG                true    false    false, read staged but
+--                                              write left on rising edge
+--   RAMB36                       4        4                           0
+--   LUTRAMs                      0        0                       4,096
+--   Logic LUTs                   3        2                         615
+--   FFs                         18        0                          16
+--   system total LUTs          908      977                       5,643
 --
--- The whole array moves out of 4 Block RAMs and into 4,096 LUTRAMs, taking the
--- device total from 936 to 5,643 LUTs. That is the cost of the mode, and the
--- reason it is opt-in and defaulted off rather than simply always on.
+-- The third column is the trap, not a supported configuration -- it is what
+-- staging only the read gets you. The second is this module as it stands.
+--
+-- The system total still rises by ~70 LUTs, but note that is inside i_cpu, not
+-- here: a combinational ACK lengthens the paths the CPU has to close, so
+-- timing-driven synthesis restructures it. No combinational loop is involved
+-- in either configuration -- "make -C formal loopcheck" is what says so.
 
 library ieee;
    use ieee.std_logic_1164.all;

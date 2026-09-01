@@ -320,10 +320,14 @@ with the instruction- and data-request counts unchanged. Per program the range
 is −0.4% (`prog_flags`, almost all ALU work) to −18.5% (`prog_interleave`, which
 is dominated by memory operands).
 
-Note this is a **simulation** configuration. An asynchronous read cannot come
-out of a Block RAM, so synthesising it moves the whole array into LUTRAM — the
-measured numbers are in [`wb_dp_mem.vhd`](wb_dp_mem.vhd)'s header. Nothing
-synthesised in this repo sets it.
+The mode is synthesisable, and the memory stays a Block RAM — but only because
+`dp_ram` moves port B's *write* to the falling edge along with its read. Stage
+only the read and the port wants two clocks at once, which Vivado cannot build:
+it reports `[Synth 8-6849] Infeasible attribute ram_style = "block"` and drops
+the 8Kx16 array into 4096 LUTRAMs. The measured comparison, including that
+wrong turn, is in [`wb_dp_mem.vhd`](wb_dp_mem.vhd)'s header. Nothing
+synthesised in this repo sets `READ_REG=false` regardless; the default is what
+the shipping bitstream is built from.
 
 ### What the numbers say about the Harvard split
 

@@ -367,9 +367,11 @@ silently misattribute data against a slave that completed requests out of order.
 buses, and `make test READ_REG=false` runs the whole suite against one: `test/wb_dp_mem.vhd` then
 drives both ACKs combinationally and passes `G_READ_REG` down to `dp_ram`, which drops both read
 output registers. Both halves must move together, or the ACK announces data that has not arrived.
-Simulation only — an asynchronous read cannot come out of a Block RAM, so synthesising it moves the
-8Kx16 array from 4 RAMB36 into 4096 LUTRAMs. Measured on `prog.asm`: 15070 cycles to 13511,
--10.3%, with a byte-identical writes log. FETCH needs no special case for one (its Wishbone outputs are all registered, so no
+It stays synthesisable and the memory stays a Block RAM, but only because `dp_ram` moves port B's
+**write** to the falling edge along with its read: stage only the read and the port wants two clocks
+at once, which Vivado refuses (`[Synth 8-6849] Infeasible attribute ram_style = "block"`) and the
+8Kx16 array falls into 4096 LUTRAMs. Measured on `prog.asm`: 15070 cycles to 13511, -10.3%, with a
+byte-identical writes log. FETCH needs no special case for one (its Wishbone outputs are all registered, so no
 combinational loop is possible, and its address/data pairing is order-based rather than
 timing-based); the Memory module does. That FIFO's output is registered, so the
 same-cycle case is handled by `wb_ack_zero_lat`, which takes the op-type from `mreq_op_i` and

@@ -15,18 +15,52 @@ vunit i_dp_ram(dp_ram(synthesis))
    attribute anyconst : boolean;
    attribute anyconst of c_addr : signal is true;
 
+   -- THE SHADOW HAS TO BE CLOCKED ON THE SAME EDGE AS THE ARRAY, which is not
+   -- the same edge in every configuration. dp_ram writes dp_ram_r on the
+   -- rising edge everywhere except G_READ_REG=false + "block", where the write
+   -- moves to the falling edge so that port B keeps a single clock and the
+   -- array stays mappable to a Block RAM (see dp_ram.vhd). A rising-edge
+   -- shadow against a falling-edge array disagrees for half of every cycle,
+   -- and f_mem_shadow fails on it -- correctly, since the mirror really is
+   -- wrong there.
+   --
+   -- Both edges are maintained and the right one is selected, rather than
+   -- writing one process with a clock-edge choice inside it: GHDL's
+   -- synth-for-formal flow does not recognise "(A and falling_edge(clk)) or
+   -- (B and rising_edge(clk))" as a clocked process and infers a latch on
+   -- dp_ram_r's mirror instead.
    signal f_data    : std_logic_vector(G_DATA_SIZE-1 downto 0);
-   signal f_written : std_logic := '0';
+   signal f_written : std_logic;
 
-   p_written : process (clk_i)
+   signal f_data_rising     : std_logic_vector(G_DATA_SIZE-1 downto 0);
+   signal f_written_rising  : std_logic := '0';
+   signal f_data_falling    : std_logic_vector(G_DATA_SIZE-1 downto 0);
+   signal f_written_falling : std_logic := '0';
+
+   p_written_rising : process (clk_i)
    begin
       if rising_edge(clk_i) then
          if b_wr_en_i = '1' and b_addr_i = c_addr then
-            f_data    <= b_wr_data_i;
-            f_written <= '1';
+            f_data_rising    <= b_wr_data_i;
+            f_written_rising <= '1';
          end if;
       end if;
-   end process p_written;
+   end process p_written_rising;
+
+   p_written_falling : process (clk_i)
+   begin
+      if falling_edge(clk_i) then
+         if b_wr_en_i = '1' and b_addr_i = c_addr then
+            f_data_falling    <= b_wr_data_i;
+            f_written_falling <= '1';
+         end if;
+      end if;
+   end process p_written_falling;
+
+   f_data    <= f_data_falling    when G_READ_REG = false and G_RAM_STYLE = "block" else
+                f_data_rising;
+   f_written <= f_written_falling when G_READ_REG = false and G_RAM_STYLE = "block" else
+                f_written_rising;
 
 
    ----------------------------------------------
@@ -57,13 +91,10 @@ vunit i_dp_ram(dp_ram(synthesis))
       {f_written = '1' and b_addr_i = c_addr and b_wr_en_i = '0' and b_rd_en_i = '1'}
       |=> {not G_READ_REG or b_rd_data_o = f_data};
 
-   -- Port B with G_READ_REG = false. Simpler than port A: it has no staging
-   -- register in either style, so dropping the output register leaves a plain
-   -- asynchronous read and the same-cycle form holds for "block" and
-   -- "distributed" alike -- no separate low-phase property needed.
-   f_read_back_b_async : assert always
-      {f_written = '1' and b_addr_i = c_addr and b_wr_en_i = '0' and b_rd_en_i = '1'}
-      |-> {G_READ_REG or b_rd_data_o = f_data};
+   -- Port B with G_READ_REG = false, DISTRIBUTED style: a plain asynchronous
+   -- read, so the same-cycle form holds. The block style is not covered here,
+   -- for the same reason port A's is not -- it now has a falling-edge stage of
+   -- its own, so it needs the low-phase property further down.
 
    -- Output value only changes when the port's read enable is asserted.
    -- Port A holds only while it has an output register to hold in; with
@@ -88,12 +119,20 @@ vunit i_dp_ram(dp_ram(synthesis))
 
    signal f_falling_a_rd_en   : std_logic;
    signal f_falling_a_rd_addr : std_logic_vector(G_ADDR_SIZE-1 downto 0);
+   signal f_falling_b_rd_en   : std_logic;
+   signal f_falling_b_rd_addr : std_logic_vector(G_ADDR_SIZE-1 downto 0);
+   signal f_falling_b_wr_en   : std_logic;
+   signal f_falling_b_wr_data : std_logic_vector(G_DATA_SIZE-1 downto 0);
 
    p_falling : process (clk_i)
    begin
       if falling_edge(clk_i) then
          f_falling_a_rd_en   <= a_rd_en_i;
          f_falling_a_rd_addr <= a_addr_i;
+         f_falling_b_rd_en   <= b_rd_en_i;
+         f_falling_b_rd_addr <= b_addr_i;
+         f_falling_b_wr_en   <= b_wr_en_i;
+         f_falling_b_wr_data <= b_wr_data_i;
       end if;
    end process p_falling;
 
@@ -101,8 +140,15 @@ vunit i_dp_ram(dp_ram(synthesis))
    -- cycle. This makes the block-RAM falling-edge read register a within-cycle
    -- timing relay rather than an extra unit of read latency, so that both
    -- G_RAM_STYLE configurations expose the same rising-edge-sampled behaviour.
+   -- The WRITE inputs are included for the same reason as the read inputs, and
+   -- it matters more once the array is written on the falling edge: without
+   -- this the environment could pulse b_wr_en_i only during the high phase,
+   -- which the falling-edge write never sees, and the read-back properties
+   -- would be reasoning about a write that did not happen.
    assume always {not clk_i}
-      |-> {f_falling_a_rd_en = a_rd_en_i and f_falling_a_rd_addr = a_addr_i};
+      |-> {f_falling_a_rd_en = a_rd_en_i and f_falling_a_rd_addr = a_addr_i
+           and f_falling_b_rd_en = b_rd_en_i and f_falling_b_rd_addr = b_addr_i
+           and f_falling_b_wr_en = b_wr_en_i and f_falling_b_wr_data = b_wr_data_i};
 
 
    -- Port A without it, BLOCK style: within the cycle, but only after the
@@ -125,6 +171,18 @@ vunit i_dp_ram(dp_ram(synthesis))
       {clk_i = '0' and f_written = '1' and f_falling_a_rd_addr = c_addr
        and b_wr_en_i = '0' and f_falling_a_rd_en = '1'}
       |-> {G_READ_REG or G_RAM_STYLE /= "block" or a_rd_data_o = f_data};
+
+   -- The port B mirror of the two properties above: same-cycle for the
+   -- asynchronous (distributed) read, low-phase for the block read, which now
+   -- has a falling-edge stage exactly like port A's.
+   f_read_back_b_async : assert always
+      {f_written = '1' and b_addr_i = c_addr and b_wr_en_i = '0' and b_rd_en_i = '1'}
+      |-> {G_READ_REG or G_RAM_STYLE /= "distributed" or b_rd_data_o = f_data};
+
+   f_read_back_b_async_block : assert always
+      {clk_i = '0' and f_written = '1' and f_falling_b_rd_addr = c_addr
+       and b_wr_en_i = '0' and f_falling_b_rd_en = '1'}
+      |-> {G_READ_REG or G_RAM_STYLE /= "block" or b_rd_data_o = f_data};
 
 
    ----------------------------------------------
@@ -151,6 +209,9 @@ vunit i_dp_ram(dp_ram(synthesis))
    -- For G_RAM_STYLE = "block" each read path additionally contains a
    -- falling-edge register (*_rd_data), which needs its own mirror invariant --
    -- see f_rd_data below. Port B reads the array directly, so it needs none.
+   -- No phase escape is needed: f_written / f_data are selected above to track
+   -- whichever clock edge the array is actually written on, so the mirror is
+   -- exact in every configuration.
    f_mem_shadow : assert always
       {f_written = '1'} |-> {dp_ram_r(to_integer(c_addr)) = f_data};
 
@@ -176,9 +237,22 @@ vunit i_dp_ram(dp_ram(synthesis))
    -- (the staging registers are unused in that config). The style test lives in the consequent
    -- rather than the antecedent so that the antecedent stays reachable in both
    -- configs, keeping the auto-generated precondition cover satisfied.
+   --
+   -- The last escape covers a collision that only exists when G_READ_REG is
+   -- false: there the array is written on the FALLING edge, i.e. the very edge
+   -- this staging register captures on. Read-first means a_rd_data takes the
+   -- pre-edge word while dp_ram_r takes the new one, so the two legitimately
+   -- differ for the rest of the low phase whenever that write targeted the
+   -- address this register had just captured. Port B has one address for both
+   -- its read and its write, so the write's address at that edge is
+   -- f_falling_b_rd_addr. This is the same collision the high-phase paragraph
+   -- above describes, moved to the other edge along with the write.
    f_rd_data : assert always
       {clk_i = '0'}
-      |-> {G_RAM_STYLE /= "block" or a_rd_data = dp_ram_r(to_integer(f_falling_a_rd_addr))};
+      |-> {G_RAM_STYLE /= "block"
+           or a_rd_data = dp_ram_r(to_integer(f_falling_a_rd_addr))
+           or (G_READ_REG = false and f_falling_b_wr_en = '1'
+               and f_falling_b_rd_addr = f_falling_a_rd_addr)};
 
 
 } -- vunit i_dp_ram(dp_ram(synthesis))
