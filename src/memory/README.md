@@ -66,16 +66,28 @@ at 2 by its depth) or when a word is being consumed on the same edge (which leav
 unchanged). It is this argument, not the instantaneous `m*_valid_o`, that `mreq_accept` has to
 preserve.
 
-**Back-pressure (`mreq_accept`)**: a new request is accepted except when a previously-completed
-SRC or DST response is already *stored* in its buffer and not being consumed by PREPARE this cycle
-(`tsb_*_fill /= 0` and `m*_ready_i='0'`) — this is what bounds outstanding responses to what the
-depth-2 buffers can hold. Note it reads the buffers' registered occupancy rather than
-`msrc_valid_o`/`mdst_valid_o`: those cut through combinationally from `wb_ack_i`, and `mreq_accept`
-feeds `wb_stb_o`, so against a slave whose ack is a combinational function of STB the obvious
-version is a combinational loop. The registered form is very slightly more permissive — in the one
-cycle a response cuts through unconsumed, `fill` is still 0 and a further request is accepted — and
-that is safe, because the invariant it has to preserve is the per-channel total below, not the
-buffer's instantaneous occupancy.
+**Back-pressure (`mreq_accept`)**: a new request is accepted except when a previously-completed SRC
+or DST response is already *stored* in its buffer (`tsb_*_fill /= 0`) — this is what bounds
+outstanding responses to what the depth-2 buffers can hold.
+
+**Every term in it is registered, and that is load-bearing.** `mreq_accept` feeds `wb_stb_o`, so
+against a slave whose ack is a combinational function of STB, anything here that depends on
+`wb_ack_i` — however indirectly — is a combinational loop. Two refinements were tried and are
+wrong:
+
+* `msrc_valid_o`/`mdst_valid_o` cut through combinationally from `wb_ack_i`. That loop closes
+  inside this module, and is the case `one_stage_buffer`'s header warns about.
+* `msrc_ready_i`/`mdst_ready_i`, as a "…and not being consumed this cycle" refinement, closes
+  **outside** it. Standalone, this module is loop-free for any behaviour of those two inputs — which
+  is exactly why checking it in isolation gives a false clean bill of health. In the assembled CPU
+  they come from PREPARE, whose `wait_for_mem_dst` makes SRC-ready depend on DST-valid, and
+  DST-valid depends on `wb_ack_i` through `i_two_stage_buffer_dst`. Six loops, measured, and
+  neither the test suite nor `memory.psl` notices any of them —
+  [`formal/zero_latency_loop.vhd`](../../formal/zero_latency_loop.vhd) exists for this.
+
+The refinement also bought nothing: removing it left the cycle count of all nine test programs
+bit-identical, in both `READ_REG` modes. Accepting only into an empty buffer is the conservative
+choice and is what preserves the per-channel bound below.
 `mreq_ready_o` is the AND of this accept condition and the WB-request buffer's own readiness
 (`mreq_ready`); `mreq_valid` (fed into `i_one_stage_buffer_wb`) is gated by the same accept
 condition. A consequence worth knowing before touching this logic: `mreq_valid` can legitimately

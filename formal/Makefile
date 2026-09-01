@@ -23,7 +23,7 @@ DUTS += cpu_main
 # re-ran at all, even after their sources changed.
 STAMPS = $(addsuffix .stamp,$(DUTS))
 
-all: $(STAMPS)
+all: $(STAMPS) loopcheck
 
 # Every file a job reads, taken from that job's own [files] section, so the
 # prerequisites cannot drift out of step with the job description.
@@ -40,6 +40,20 @@ $(foreach d,$(DUTS),$(eval $(d).stamp: $(d).sby $(call sby_files,$(d))))
 	rm -f $@
 	sby --yosys "yosys -m ghdl" -f $*.sby
 	@touch $@
+
+# Combinational-loop check for the zero-latency-slave configuration. Not an sby
+# job: there is no property to state, only the question of whether the
+# elaborated netlist contains a combinational cycle, which "check -assert"
+# answers directly. It must be run on the whole CPU and cannot be decomposed --
+# the full argument, and the loop it exists to catch, are in
+# zero_latency_loop.vhd's header. "prep -flatten" is load-bearing: without it
+# "check" cannot see a cycle that crosses module boundaries.
+LOOP_SOURCES = $(addprefix ../,$(shell sed -n 's/^SOURCES += //p' ../Makefile))
+
+.PHONY: loopcheck
+loopcheck: zero_latency_loop.vhd $(LOOP_SOURCES)
+	yosys -m ghdl -p "ghdl --std=08 $(LOOP_SOURCES) zero_latency_loop.vhd \
+	   -e zero_latency_loop; prep -top zero_latency_loop -flatten; check -assert"
 
 clean:
 	rm -rf $(STAMPS)

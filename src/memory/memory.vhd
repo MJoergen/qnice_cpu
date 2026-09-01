@@ -11,9 +11,10 @@
 --   alone. This module holds up its end of that bargain by keeping
 --   wb_cyc_o, wb_stb_o and the request payload free of any combinational
 --   path from wb_ack_i -- which is precisely why mreq_accept below is
---   written against the buffers' REGISTERED occupancy counts and not
---   against msrc_valid_o/mdst_valid_o. Reintroducing those two signals
---   there closes a combinational loop through a zero-latency slave.
+--   written against REGISTERED state only. Note that this obligation cannot
+--   be discharged by reading this file: a term here that depends on
+--   msrc_ready_i or mdst_ready_i closes a loop through PREPARE, outside the
+--   module entirely. formal/zero_latency_loop.vhd is what checks it.
 -- * A reset (or equivalently a mid-transaction rst_i pulse, which drops
 --   wb_cyc_o and so aborts any in-flight Wishbone cycle -- see wb_cyc_o
 --   below) is not followed by a stray wb_ack_i for the aborted request. This
@@ -124,23 +125,40 @@ begin
    ------------------------------------------------------------
 
    -- Accept request, EXCEPT when any one of:
-   -- * SRC read data is already stored, but not being consumed this cycle
-   -- * DST read data is already stored, but not being consumed this cycle
+   -- * SRC read data is already stored
+   -- * DST read data is already stored
    --
-   -- The test is deliberately written against tsb_*_fill (the buffers'
-   -- registered occupancy) rather than against msrc_valid_o/mdst_valid_o.
-   -- Those two outputs cut through combinationally from tsb_*_in_valid, hence
-   -- from wb_ack_i -- and mreq_accept feeds mreq_valid, hence wb_stb_o. With
-   -- a slave whose ACK is a combinational function of STB, that is a genuine
-   -- combinational loop (exactly the case one_stage_buffer's header warns
-   -- about). Reading the registered fill instead breaks it, at the price of
-   -- being marginally more permissive: in the one cycle a response cuts
-   -- through the buffer unconsumed, fill is still 0 and a further request is
-   -- accepted. That is safe -- see the "total outstanding per channel never
+   -- EVERY TERM HERE IS REGISTERED, AND THAT IS THE WHOLE POINT. mreq_accept
+   -- feeds mreq_valid, hence wb_stb_o; against a slave whose ACK is a
+   -- combinational function of STB, anything here that depends on wb_ack_i --
+   -- however indirectly -- is a combinational loop. tsb_*_fill come from the
+   -- buffers' own m_valid_r registers, so they cannot.
+   --
+   -- Two things were tried here and are wrong. Neither is caught by any test
+   -- or by any property in formal/memory.psl -- both are caught only by
+   -- formal/zero_latency_loop.vhd, and its header explains why nothing else
+   -- can be:
+   --
+   -- * msrc_valid_o / mdst_valid_o. These cut through combinationally from
+   --   tsb_*_in_valid, hence straight from wb_ack_i. This is the loop
+   --   one_stage_buffer's header warns about, and it closes inside this file.
+   --
+   -- * msrc_ready_i / mdst_ready_i, as a "...and not being consumed this
+   --   cycle" refinement. This one closes OUTSIDE this file and so looks
+   --   harmless from in here: standalone, this module is loop-free for any
+   --   behaviour of those two inputs. In the assembled CPU they come from
+   --   PREPARE, whose wait_for_mem_dst makes SRC-ready depend on DST-valid,
+   --   and DST-valid depends on wb_ack_i through the buffer above. Six loops,
+   --   measured. It also bought nothing: removing the refinement left the
+   --   cycle count of all nine test programs bit-identical, in both READ_REG
+   --   modes.
+   --
+   -- Accepting only into an EMPTY buffer is the conservative choice and is
+   -- what keeps the bound -- see the "total outstanding per channel never
    -- exceeds 2" argument in src/memory/README.md, and f_src_total_max /
    -- f_dst_total_max in formal/memory.psl which state it.
-   mreq_accept <= '0' when mreq_op_i(C_MEM_READ_SRC) = '1' and tsb_src_fill /= 0 and msrc_ready_i = '0' else
-                  '0' when mreq_op_i(C_MEM_READ_DST) = '1' and tsb_dst_fill /= 0 and mdst_ready_i = '0' else
+   mreq_accept <= '0' when mreq_op_i(C_MEM_READ_SRC) = '1' and tsb_src_fill /= 0 else
+                  '0' when mreq_op_i(C_MEM_READ_DST) = '1' and tsb_dst_fill /= 0 else
                   tsf_req_in_ready;
 
    -- Block incoming Memory request until ready

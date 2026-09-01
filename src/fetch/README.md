@@ -135,8 +135,12 @@ that for free, and both are easy to give away by accident:
   `wb_stb_o` and `wb_addr_o` are all registers written by `p_wishbone`, so a
   slave whose `ACK` is a combinational function of `STB` closes no loop. Memory
   had such a path — through `mreq_accept` — and had to be reworked to remove it.
-  Checked, not assumed: elaborating `fetch` against a genuinely combinational
-  slave and running yosys `prep -flatten; check -assert` reports no logic loop.
+  Checked, not assumed — but check it on the **whole CPU**, not on `fetch` alone:
+  a module can be loop-free for every behaviour of its free inputs and still
+  close a loop once the pipeline drives them, which is exactly what happened to
+  Memory. [`formal/zero_latency_loop.vhd`](../../formal/zero_latency_loop.vhd)
+  runs that check on the assembled CPU (`make -C formal loopcheck`) and reports
+  no logic loop; none of the six it once found were on the instruction bus.
 * **The address/data pairing is order-based, not timing-based.**
   `i_two_stage_fifo_addr` is pushed once per request in issue order,
   `i_two_stage_buffer_data` once per response in the same order, and

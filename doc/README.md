@@ -285,7 +285,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `cb2f04e-dirty`.
+Measured with Vivado 2022.2 on commit `6e89526-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -302,21 +302,21 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  871 |     63400 | 1.37 |
+| Slice LUTs      |  917 |     63400 | 1.45 |
 | Slice Registers |  598 |    126800 | 0.47 |
-| Slices          |  280 |     15850 | 1.77 |
+| Slices          |  301 |     15850 | 1.90 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.086 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.211 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][1]` to
-`i_prepare/wr_stage_o_reg[alu_src_val][3]`: 10 logic levels, with 79% of the
-delay in routing rather than logic.
+The worst setup path runs from `i_prepare/wr_stage_o_reg[r14][2]` to
+`i_prepare/wr_stage_o_reg[r14][5]`: 8 logic levels, with 82% of the delay in
+routing rather than logic.
 <!-- end -->
 
 **In the build measured above, the worst path is the one this section
@@ -446,22 +446,22 @@ written:
 
 | Module          | LUTs | FFs |
 | --------------- | ---- | --- |
-| FETCH           |   60 |  92 |
-| CACHE (icache)  |   40 |  66 |
-| DECODE          |   54 |  74 |
-| PREPARE         |   81 | 131 |
-| WRITE           |  463 |   0 |
+| FETCH           |   58 |  92 |
+| CACHE (icache)  |   23 |  66 |
+| DECODE          |   53 |  74 |
+| PREPARE         |   79 | 131 |
+| WRITE           |  461 |   0 |
 | Registers       |  166 | 142 |
-| Memory          |   60 |  74 |
-| Glue            |    8 |   1 |
-| **CPU total**   |  932 | 580 |
+| Memory          |   57 |  74 |
+| Glue            |    7 |   1 |
+| **CPU total**   |  904 | 580 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 50% of the CPU's LUTs**, and 247 of its 463 are the ALU
+* **WRITE dominates, at 51% of the CPU's LUTs**, and 247 of its 461 are the ALU
   (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
@@ -473,8 +473,13 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (932 vs 871 LUTs). That is expected:
-the first is measured after place-and-route, where physical optimisation
-replicates logic to meet timing, while the second stops after synthesis. Slices
-are not listed per module because slices are shared between modules and are not
-attributable that way.
+The two tables do not add up to each other (904 vs 917 LUTs). That is expected,
+and note that the *sign* of the gap is not stable — this build lands the
+opposite way round from the previous one. The per-module figure comes first and
+stops after synthesis with `-flatten_hierarchy none`, which forbids optimisation
+across module boundaries and so tends to over-count; the device figure comes
+second, after place-and-route with `-flatten_hierarchy rebuilt`, which optimises
+across those boundaries but also replicates logic to meet timing. Either effect
+can dominate, so do not read the difference — in either direction — as
+meaningful. Slices are not listed per module because slices are shared between
+modules and are not attributable that way.

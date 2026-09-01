@@ -39,6 +39,7 @@ make utilization                      # refresh the measured numbers in doc/READ
 make timing                           # re-render every timing diagram (.tex -> .png; needs pdflatex)
 make synth                            # Yosys synthesis (ghdl -a, then yosys -m ghdl synth_xilinx)
 make formal                           # run all formal verification (delegates to formal/Makefile)
+make -C formal loopcheck              # CPU-level combinational-loop check (zero-latency slaves)
 make lint                             # check every VHDL file against CODING_STYLE.md (needs vsg)
 make clean                            # remove all generated files, including formal/ outputs
 ```
@@ -125,8 +126,12 @@ check the modules listed in the `DUTS` variable at the top of
 [.github/workflows/formal.yml](.github/workflows/formal.yml), taking the whole toolchain from a
 pinned OSS CAD Suite release and using `make -C formal -k` so one failing DUT does not hide the
 rest. All twelve DUTs are currently enabled and **the whole suite
-passes** (35 tasks); if you want to narrow scope while iterating, comment lines out there — but
-put them back. The Makefile tracks each job with a `<dut>.stamp` file whose prerequisites are read
+passes** (41 tasks); if you want to narrow scope while iterating, comment lines out there — but
+put them back. `make -C formal` additionally runs `loopcheck`, which is not an `sby` job at all:
+it elaborates the whole CPU against combinational Wishbone slaves on both buses and asks yosys
+`check -assert` whether the netlist contains a combinational cycle. See
+[formal/zero_latency_loop.vhd](formal/zero_latency_loop.vhd) for why that question cannot be
+decomposed per module, and why nothing else in the repo would notice the answer changing. The Makefile tracks each job with a `<dut>.stamp` file whose prerequisites are read
 from that job's own `[files]` section, so `make` re-runs exactly the jobs whose `.sby`, `.psl` or
 VHDL sources changed, and nothing otherwise. A stamp exists only if that job's last run passed
 (the recipe deletes it before invoking `sby`), so a failure is always retried. Note `make` still
@@ -369,10 +374,14 @@ combinational loop is possible, and its address/data pairing is order-based rath
 timing-based); the Memory module does. That FIFO's output is registered, so the
 same-cycle case is handled by `wb_ack_zero_lat`, which takes the op-type from `mreq_op_i` and
 suppresses the push instead of pushing-then-popping. Two things there are load-bearing and cheap to
-undo. `mreq_accept` must read the response buffers' *registered* `tsb_*_fill`, not
-`msrc_valid_o`/`mdst_valid_o` — those cut through from `wb_ack_i`, and against a combinational slave
-that is a real combinational loop (yosys `check -assert` on a flattened zero-latency harness finds
-it). And `wb_ack_zero_lat` must NOT be conjoined with `wb_stb_o and not wb_stall_i`, however much
+undo. **Every term of `mreq_accept` must be registered** (`tsb_*_fill`). Both
+`msrc_valid_o`/`mdst_valid_o` and `msrc_ready_i`/`mdst_ready_i` are disqualified, for different
+reasons: the first pair cuts through from `wb_ack_i` inside the module; the second closes a loop
+*outside* it, through PREPARE's `wait_for_mem_dst`, so `memory.vhd` reads as loop-free in isolation
+and is not. Six loops, and nothing in `make test` or `memory.psl` sees any of them — GHDL settles
+them and Vivado quietly inserts false paths. `make -C formal loopcheck` is the only guard. The
+refinement bought nothing anyway: dropping it left all nine programs' cycle counts bit-identical in
+both `READ_REG` modes. And `wb_ack_zero_lat` must NOT be conjoined with `wb_stb_o and not wb_stall_i`, however much
 more obviously correct that reads: it is redundant (`f_zero_lat_ack_is_issue`) and it drags DECODE's
 microcodes through the Sequencer onto the front of the response path and on into the Icache reset —
 measured at WNS +0.135 ns → −2.172 ns. `bmc` does not defend any of this: with the bypass forced off
