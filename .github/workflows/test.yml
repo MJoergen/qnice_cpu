@@ -8,9 +8,35 @@ on:
 
 jobs:
   test:
-    name: Simulate all test programs
+    name: Simulate all test programs (READ_REG=${{ matrix.read_reg }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # Two legs, differing only in how the testbench memory answers:
+    #
+    #   true  - ordinary pipelined Wishbone slave, ACK a cycle after the
+    #           request is accepted. This is the shipping configuration and the
+    #           one the synthesised design uses.
+    #   false - a zero-latency slave: combinational ACK, read data valid in the
+    #           same cycle. This is the only thing that exercises the
+    #           same-cycle paths in the two bus masters end to end -- see
+    #           src/memory/README.md#Zero-latency-ACKs and
+    #           src/fetch/README.md#Zero-latency-ACKs. Formal covers them, but
+    #           formal cannot tell you the CPU still runs a program correctly.
+    #
+    # The two legs share test/*.writes.golden and must produce identical write
+    # logs; only the cycle counts differ, and those have their own
+    # test/*.stats_zerolat.golden. See test/README.md.
+    #
+    # This is a matrix rather than a second "make test" step in one job, for
+    # two reasons: a failure in one leg must not stop the other from running,
+    # since which of the two fails IS the diagnosis; and the two runs write the
+    # same test/*.writes paths, so sharing a job would have the second leg
+    # overwrite the first's logs before they could be uploaded.
+    strategy:
+      fail-fast: false
+      matrix:
+        read_reg: [ 'true', 'false' ]
 
     steps:
       - name: Check out the CPU
@@ -82,14 +108,18 @@ jobs:
       # test/*.writes.golden. So a green job here means the CPU behaved exactly
       # as expected, not merely that the simulation ran. See test/README.md.
       - name: Run the test suite
-        run: make test ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
+        run: make test READ_REG=${{ matrix.read_reg }} ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
 
       # On a golden-file mismatch the diff is already in the job log, but the
-      # full logs make it much easier to see what moved.
+      # full logs make it much easier to see what moved. The stats files are
+      # here too because they are the other half of the comparison, and because
+      # the two legs check them against different reference files.
       - name: Upload the write logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: writes-logs
-          path: test/*.writes
+          name: writes-logs-read_reg-${{ matrix.read_reg }}
+          path: |
+            test/*.writes
+            test/*.stats
           if-no-files-found: ignore

@@ -51,7 +51,10 @@ is what [.github/workflows/test.yml](.github/workflows/test.yml) does. That work
 their own workflows, see below); it builds only `qasm`/`qasm2rom` from
 the upstream project rather than the whole QNICE toolchain, and asserts up front that the
 installed GHDL really does map `std.env.finish(0)`/`stop(1)` onto process exit codes, since the
-whole pass/fail signal rests on that.
+whole pass/fail signal rests on that. It runs as a **two-leg matrix**, `READ_REG=true` and
+`READ_REG=false`, so the zero-latency memory path is guarded on every push and not only by formal;
+`fail-fast` is off because which leg fails is itself the diagnosis, and the legs are separate jobs
+rather than two steps because both write the same `test/*.writes` paths.
 
 **Reaching `HALT` does not mean the test passed.** Most test programs contain many `HALT`
 instructions — in the self-checking `prog.asm` every failed sub-test branches to its own `HALT`.
