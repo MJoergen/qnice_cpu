@@ -122,6 +122,35 @@ Also stated in the file header:
   request is owed means discarding the next `wb_stale` acknowledgements. The
   Memory module makes the same assumption for the same reason, see
   [memory/README.md](../memory/README.md).
+* The WISHBONE slave **may** acknowledge in the same cycle it accepts the
+  request. See [Zero-latency ACKs](#Zero-latency-ACKs) below.
+
+### Zero-latency ACKs
+
+Unlike the Memory module, FETCH needs **no special case** for a slave that
+answers in the very cycle it accepts a request. Two structural properties give
+that for free, and both are easy to give away by accident:
+
+* **No combinational path from `wb_ack_i` to any WISHBONE output.** `wb_cyc_o`,
+  `wb_stb_o` and `wb_addr_o` are all registers written by `p_wishbone`, so a
+  slave whose `ACK` is a combinational function of `STB` closes no loop. Memory
+  had such a path — through `mreq_accept` — and had to be reworked to remove it.
+  Checked, not assumed: elaborating `fetch` against a genuinely combinational
+  slave and running yosys `prep -flatten; check -assert` reports no logic loop.
+* **The address/data pairing is order-based, not timing-based.**
+  `i_two_stage_fifo_addr` is pushed once per request in issue order,
+  `i_two_stage_buffer_data` once per response in the same order, and
+  `i_pipe_concat` pops one of each together. The Nth address meets the Nth word
+  regardless of how long any individual `ACK` takes. Memory's problem was
+  different in kind: its acks carry no address at all, so it has to *recover*
+  the request type from a FIFO whose registered output is one cycle too late.
+
+There is one visible consequence. With a same-cycle `ACK` both blocks are pushed
+on the same edge, and only the data buffer cuts through (`two_stage_buffer`)
+while the address FIFO registers its output (`two_stage_fifo`) — so the response
+reaches `i_pipe_concat` a cycle **before** its own address. That ordering is
+unreachable against a slower slave. `i_pipe_concat` is a symmetric join and
+handles it; what changed is that `fetch.sby` no longer deletes the cover for it.
 
 ## icache.vhd
 
@@ -230,7 +259,7 @@ on `fetch`*. So the job proves not only that `fetch` behaves, but that it drives
 keeping in mind when editing the sub-block `.psl` files: an assumption written
 there becomes an obligation here.
 
-One cover statement is explicitly removed for this job:
+One cover statement used to be explicitly removed for this job:
 
 ```
 chformal -cover -remove c:*i_pipe_concat.f_s0_waits*
@@ -238,9 +267,27 @@ chformal -cover -remove c:*i_pipe_concat.f_s0_waits*
 
 `pipe_concat`'s `f_s0_waits` covers "s0 arrives before s1". Inside `fetch`, `s1`
 is the address FIFO (filled when a request is *issued*) and `s0` is the data
-buffer (filled when the response *arrives*), so the address is always present
-first and that ordering is unreachable by construction. It stays covered by
-`pipe_concat.sby` standalone, where both orderings are reachable.
+buffer (filled when the response *arrives*), so against a slave that takes a
+cycle to answer the address is always present first and that ordering was
+unreachable by construction.
+
+**That removal is gone**, because the ordering is reachable once the slave is
+allowed to acknowledge in the same cycle it accepts — see
+[Zero-latency ACKs](#Zero-latency-ACKs) above. The cover now carries its weight
+here rather than only in `pipe_concat.sby` standalone, and it is one of the two
+covers that go unreachable if the zero-latency response path is broken.
+
+The zero-latency case is admitted by the `wb_req_accept` term in
+`f_wb_slave_ack_idle`; without it, `f_cover_zero_lat_ack`,
+`f_cover_zero_lat_deliver`, `f_cover_zero_lat_data_first` and
+`f_cover_zero_lat_mixed` are all unreachable, which is the quickest way to tell
+which contract the job is running under. Two mutations pin the rest down:
+making the RTL drop a same-cycle response (`wb_rsp_accept` additionally gated on
+`wb_outstanding /= 0`) fails `f_inv_fill` *and* takes out both data-ordering
+covers; and reverting `f_wb_slave_data` to read `f_ack_addr0` instead of
+`f_ack_addr_now` fails `f_dc_data_integrity` — which is what shows the
+end-to-end integrity proof genuinely runs through the zero-latency path rather
+than passing vacuously over it.
 
 Note that the two jobs verify the two entities separately; nothing currently
 proves the *composition* — in particular that `cpu.vhd` really does drive

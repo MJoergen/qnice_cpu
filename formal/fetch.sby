@@ -30,10 +30,15 @@ chformal -assume2assert fetch/* %M
 
 # pipe_concat's f_s0_waits covers "s0 arrives before s1". Inside fetch, s1 is
 # the address FIFO (filled when a request is ISSUED) and s0 is the data buffer
-# (filled when the response ARRIVES), so the address is always present first
-# and this ordering is unreachable by construction. It is still covered by
-# pipe_concat.sby standalone, where both orderings are reachable.
-chformal -cover -remove c:*i_pipe_concat.f_s0_waits*
+# (filled when the response ARRIVES), so against a slave that takes a cycle to
+# answer the address is always present first and this ordering is unreachable
+# by construction -- which is why it used to be removed here.
+#
+# It is reachable now. A zero-latency ACK pushes address and data on the SAME
+# edge, and only the data buffer cuts through (two_stage_buffer); the address
+# FIFO registers its output (two_stage_fifo), so the data leads by a cycle.
+# The cover is therefore left in place, and it is the check that the
+# zero-latency path really does drive the join in the new order.
 
 [files]
 fetch.psl

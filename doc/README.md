@@ -120,10 +120,11 @@ apart:
   request. For a read it drives the result onto `wb_data_i` in that same cycle.
   **Writes are acknowledged too**, with no meaningful data. The pulse usually
   comes a cycle or more after the request is accepted, but it may also come in
-  the *same* cycle -- the Memory module handles zero-latency slaves, see
-  [Zero-latency ACKs](../src/memory/README.md#Zero-latency-ACKs). Nothing in
-  this repo is one: `test/wb_dp_mem.vhd` is backed by `dp_ram`, whose read port
-  is registered.
+  the *same* cycle -- both masters handle zero-latency slaves, see
+  [memory](../src/memory/README.md#Zero-latency-ACKs) and
+  [fetch](../src/fetch/README.md#Zero-latency-ACKs). Nothing in this repo is
+  one: `test/wb_dp_mem.vhd` is backed by `dp_ram`, whose read port is
+  registered.
 
 Because acknowledgements are just pulses carrying no identifying information,
 and because several requests may be outstanding at once, the master has to
@@ -132,10 +133,13 @@ inside the [Memory module](../src/memory/README.md) does: it records the type of
 every accepted-but-unacknowledged request, and matches each `wb_ack_i` against
 the oldest one to decide whether the returned data belongs to the source operand
 buffer, the destination operand buffer, or nowhere at all (a write). This relies
-on the slave acknowledging in issue order. Note the FETCH unit keeps its own,
+on the slave acknowledging in issue order. The FETCH unit keeps its own,
 separate bookkeeping for the instruction bus (`wb_stale` in
-[fetch/README.md](../src/fetch/README.md#Redirect)), and unlike the Memory
-module it has **not** been checked against a zero-latency slave.
+[fetch/README.md](../src/fetch/README.md#Redirect)); it too accepts a
+zero-latency slave, and needs no special case for one, because its Wishbone
+outputs are all registered and its address/data pairing is order-based rather
+than timing-based — see
+[fetch/README.md](../src/fetch/README.md#Zero-latency-ACKs).
 
 ## Interleaving
 Analyzing the timing of a QNICE assembly program is not simple, due to the

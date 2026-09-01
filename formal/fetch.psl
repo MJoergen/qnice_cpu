@@ -51,6 +51,19 @@ vunit i_fetch(fetch(synthesis))
    signal f_ack_addr0 : std_logic_vector(15 downto 0) := (others => '0');
    signal f_ack_addr1 : std_logic_vector(15 downto 0) := (others => '0');
 
+   -- A ZERO-LATENCY ACK: the slave answering in the very cycle it accepts the
+   -- request.  f_wb_outstanding is registered, so it does not yet count that
+   -- request -- an ACK with nothing outstanding is therefore exactly the
+   -- signature of the case (and, by f_wb_slave_ack_idle below, the only thing
+   -- it can be).  Such a request never becomes outstanding at all, so it is
+   -- neither pushed onto nor popped off the shadow queue.
+   signal f_ack_zero_lat : std_logic;
+
+   -- The address of the request that an ACK in this cycle completes: the head
+   -- of the shadow queue normally, but wb_addr_o -- the request live on the
+   -- bus -- when that ACK is zero-latency and the queue is therefore empty.
+   signal f_ack_addr_now : std_logic_vector(15 downto 0);
+
    -- Address latched on abort, used to check the first instruction delivered
    -- to DECODE after a new PC.
    signal f_dc_new_pc_valid : std_logic := '0';
@@ -65,6 +78,11 @@ vunit i_fetch(fetch(synthesis))
    --------------------------------------------
 
    f_wb_ack <= wb_cyc_o and wb_ack_i;
+
+   f_ack_zero_lat <= '1' when f_wb_ack = '1' and f_wb_outstanding = 0 else
+                     '0';
+   f_ack_addr_now <= wb_addr_o when f_ack_zero_lat = '1' else
+                     f_ack_addr0;
 
    -- Count the number of outstanding WISHBONE requests.
    -- Derived from ports only.  If CYC goes low the transaction is aborted and
@@ -136,15 +154,18 @@ vunit i_fetch(fetch(synthesis))
    end process p_wb_addr;
 
    -- Shadow queue of outstanding request addresses.  Pop before push, so that
-   -- a simultaneous ACK and request acceptance is handled correctly.
+   -- a simultaneous ACK and request acceptance is handled correctly.  That is
+   -- the case where the ACK completes an OLDER request while a new one is
+   -- accepted; a zero-latency ACK is the different case where the two are the
+   -- same request, which therefore neither enters nor leaves the queue.
    p_ack_addr : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if f_wb_ack = '1' then
+         if f_wb_ack = '1' and f_ack_zero_lat = '0' then
             f_ack_addr0 <= f_ack_addr1;
          end if;
 
-         if wb_req_accept = '1' then
+         if wb_req_accept = '1' and f_ack_zero_lat = '0' then
             if f_wb_outstanding = 0 or
                (f_wb_outstanding = 1 and f_wb_ack = '1') then
                f_ack_addr0 <= wb_addr_o;
@@ -374,14 +395,24 @@ vunit i_fetch(fetch(synthesis))
    -- WISHBONE SLAVE: No ACKs without an outstanding request.  This also
    -- encodes the requirement that a slave must not acknowledge a request that
    -- was cancelled by deasserting CYC.
+   --
+   -- f_wb_outstanding is registered and so does not count a request the slave
+   -- accepts in THIS cycle.  The wb_req_accept term is what admits a
+   -- zero-latency ACK; dropping it restores the old "at least one cycle of
+   -- latency" contract and makes every f_cover_zero_lat_* below unreachable,
+   -- which is the quickest way to tell the two apart.
    f_wb_slave_ack_idle : assume always
-      {f_wb_outstanding = 0} |-> {not wb_ack_i};
+      {f_wb_outstanding = 0 and wb_req_accept = '0'} |-> {not wb_ack_i};
 
    -- WISHBONE SLAVE: The data returned for f_const_addr is always
-   -- f_const_data.  f_ack_addr0 is the address of the oldest outstanding
-   -- request, i.e. the one being acknowledged.
+   -- f_const_data.  f_ack_addr_now is the address of the request being
+   -- acknowledged: the oldest outstanding one, or the one live on the bus if
+   -- this ACK is zero-latency.  Using f_ack_addr0 unconditionally here would
+   -- leave a zero-latency read of f_const_addr entirely unconstrained -- the
+   -- queue is empty in that cycle -- and f_dc_data_integrity would then fail
+   -- against arbitrary returned data rather than against a real bug.
    f_wb_slave_data : assume always
-      {f_wb_ack = '1' and f_ack_addr0 = f_const_addr} |-> {wb_data_i = f_const_data};
+      {f_wb_ack = '1' and f_ack_addr_now = f_const_addr} |-> {wb_data_i = f_const_data};
 
    -- WISHBONE SLAVE: Stall for at most three consecutive cycles.  This is an
    -- artificial constraint.  It is written as an implication on the input so
@@ -447,6 +478,35 @@ vunit i_fetch(fetch(synthesis))
 
    -- The bus cycle terminating and later restarting
    f_cover_cyc_restart : cover {wb_cyc_o; not wb_cyc_o; wb_cyc_o};
+
+   -- ZERO-LATENCY ACK reachability.  These matter more than the usual cover:
+   -- f_wb_slave_ack_idle is what admits the case at all, so without them a
+   -- passing bmc says nothing about whether a same-cycle ACK is ever
+   -- exercised -- the same trap as f_cover_stale_ack above.
+   f_cover_zero_lat_ack : cover {f_ack_zero_lat = '1' and wb_req_accept = '1'};
+
+   -- ...and the instruction it carries actually reaching DECODE, which is
+   -- where a mispaired address/data would show up.
+   f_cover_zero_lat_deliver : cover {f_ack_zero_lat = '1' and wb_req_accept = '1';
+                                     true[*];
+                                     dc_valid_o = '1' and dc_ready_i = '1'};
+
+   -- The response present before its own address.  This ordering is
+   -- unreachable against a slave that takes a cycle to answer -- the address
+   -- FIFO is pushed on ISSUE and the data buffer on RESPONSE -- but a
+   -- zero-latency ACK pushes both on the same edge, and only the data buffer
+   -- cuts through (two_stage_buffer), while the address FIFO registers its
+   -- output (two_stage_fifo).  So the join in i_pipe_concat now genuinely sees
+   -- s0 arrive before s1.  See the note in fetch.sby.
+   f_cover_zero_lat_data_first : cover {tsb_out_data_valid = '1' and
+                                        tsf_out_addr_valid = '0' and rst_i = '0'};
+
+   -- A zero-latency ACK immediately followed by an ordinary, delayed one.
+   -- This is what would catch the same-cycle case corrupting the shadow queue
+   -- or the outstanding count for the request that follows it.
+   f_cover_zero_lat_mixed : cover {f_ack_zero_lat = '1' and wb_req_accept = '1';
+                                   true[*];
+                                   f_wb_ack = '1' and f_ack_zero_lat = '0'};
 
    -- VACUITY CHECK for f_dc_data_integrity.
    --

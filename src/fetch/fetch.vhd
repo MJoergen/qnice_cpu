@@ -56,6 +56,38 @@
 --    wb_stale of them. Against a slave that completed requests out of order
 --    this would drop the wrong responses. The Memory module makes the same
 --    assumption for the same reason; see src/memory/README.md.
+-- e) The slave MAY acknowledge in the SAME cycle it accepts the request. This
+--    unit needs no special case for it, unlike the Memory module -- see
+--    ZERO-LATENCY ACKS below -- but the property is easy to lose, so it is
+--    stated as a contract and covered in formal/fetch.psl
+--    (f_cover_zero_lat_*), not merely left to hold by accident.
+--
+-- ZERO-LATENCY ACKS
+-- Nothing here has to detect or special-case a same-cycle ACK, for two
+-- reasons worth keeping intact:
+--
+-- * There is no combinational path from wb_ack_i to any WISHBONE output.
+--   wb_cyc_o, wb_stb_o and wb_addr_o are all registers written by p_wishbone,
+--   so a slave whose ACK is a combinational function of STB closes no loop.
+--   (Memory has such a path and needed rework; see src/memory/README.md.)
+--   Anything that makes an output depend combinationally on wb_ack_i --
+--   driving wb_stb_o from a signal rather than the register, say -- gives
+--   that up.
+--
+-- * The address/data pairing is order-based, not timing-based, and so does
+--   not care how long an ACK takes. i_two_stage_fifo_addr is pushed once per
+--   request in issue order, i_two_stage_buffer_data once per response in the
+--   same order, and i_pipe_concat pops one of each together. The Nth address
+--   therefore meets the Nth word whether the ACK arrives in the same cycle as
+--   the request, or ten cycles later.
+--
+-- One consequence is visible rather than merely internal: with a same-cycle
+-- ACK both blocks are pushed on the same edge, and only the data buffer cuts
+-- through (two_stage_buffer) while the address FIFO registers its output
+-- (two_stage_fifo). So the response is presented to i_pipe_concat one cycle
+-- BEFORE its own address -- an ordering that is unreachable against a slower
+-- slave. i_pipe_concat is a symmetric join and handles it; fetch.sby used to
+-- delete the cover for that ordering as unreachable, and no longer does.
 --
 -- RESET
 -- All state is synchronously reset by rst_i. No clock domain crossing is

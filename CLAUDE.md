@@ -267,6 +267,13 @@ condition, not on `dc_valid_i`. Reverting that one line is silent: `f_wb_slave_a
 forbids the stale acknowledgements entirely, so the discard logic goes unexercised and every
 assertion still passes. `f_cover_abort_redirect` and `f_cover_stale_ack` are what catch it.
 
+The same file's `f_wb_slave_ack_idle` also carries a `wb_req_accept` term admitting a zero-latency
+ACK, and `f_wb_slave_data` must read `f_ack_addr_now` (not `f_ack_addr0`) or `f_dc_data_integrity`
+passes vacuously over that path. One knock-on in `fetch.sby`: the `chformal -cover -remove` of
+`i_pipe_concat.f_s0_waits` is **gone**, because "response present before its own address" stops
+being unreachable-by-construction once the slave may ack in the accept cycle — the data buffer cuts
+through while the address FIFO registers its output.
+
 ### Elastic pipeline building blocks (`src/sub/`)
 
 Six small, reusable valid/ready ("AXI-style") primitives that the rest of the design (FETCH,
@@ -343,8 +350,10 @@ depends entirely on the Wishbone slave acking in issue order (stated in the modu
 here since `wbd_*` (see `cpu.vhd`) connects to a single, non-reordering physical memory, but would
 silently misattribute data against a slave that completed requests out of order.
 
-**Zero-latency ACKs** — a slave answering in the same cycle it accepts — are supported, but only on
-the data bus; FETCH has not been checked against one. That FIFO's output is registered, so the
+**Zero-latency ACKs** — a slave answering in the same cycle it accepts — are supported on both
+buses. FETCH needs no special case for one (its Wishbone outputs are all registered, so no
+combinational loop is possible, and its address/data pairing is order-based rather than
+timing-based); the Memory module does. That FIFO's output is registered, so the
 same-cycle case is handled by `wb_ack_zero_lat`, which takes the op-type from `mreq_op_i` and
 suppresses the push instead of pushing-then-popping. Two things there are load-bearing and cheap to
 undo. `mreq_accept` must read the response buffers' *registered* `tsb_*_fill`, not
