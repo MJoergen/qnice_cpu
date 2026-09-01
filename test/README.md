@@ -329,6 +329,58 @@ wrong turn, is in [`wb_dp_mem.vhd`](wb_dp_mem.vhd)'s header. Nothing
 synthesised in this repo sets `READ_REG=false` regardless; the default is what
 the shipping bitstream is built from.
 
+#### It is a net loss on wall time
+
+Fewer cycles is not the same as less time, and this is the case where the
+distinction bites. **The zero-latency memory is about 29% SLOWER in wall-clock
+terms**, because the clock it can close at falls further than the cycle count
+does.
+
+Measured with Vivado 2022.2 on `xc7a100tcsg324-1`, full place-and-route with
+the same directives the shipping build uses, at commit `a04aa90`:
+
+| | closes at | fails at | period | frequency | LUTs |
+| --- | --- | --- | --- | --- | --- |
+| `READ_REG=true` | 7.45 ns (+0.121) | 7.40 ns (−0.014) | **7.45 ns** | 134 MHz | 927 |
+| `READ_REG=false` | 10.70 ns (+0.005) | 10.60 ns (−0.131) | **10.70 ns** | 93.5 MHz | 896 |
+
+At the shipping 8.50 ns constraint the zero-latency build misses by
+**WNS −1.084 ns with 189 failing endpoints**. Multiplying cycles by period:
+
+| program | cycles | wall, registered | wall, zero-latency | wall |
+| --- | --- | --- | --- | --- |
+| `prog` | −10.3% | 112.27 µs | 144.57 µs | **+28.8%** |
+| `prog_interleave` | −18.5% | 0.40 µs | 0.47 µs | +17.0% |
+| `prog_flags` | −0.4% | 1.85 µs | 2.64 µs | +43.0% |
+| all nine | −9.9% | 120.17 µs | 155.48 µs | **+29.4%** |
+
+Zero latency would need to close at **8.27 ns** to break even overall, or
+equivalently to remove **30.4%** of cycles at the clock it does reach. The best
+any program manages is 18.5%, and that is `prog_interleave`, the one most
+dominated by memory operands. There is no program in the suite for which the
+trade pays.
+
+Two notes on reading those numbers. The periods were found by bracketing —
+building at successive constraints until the design stops closing — not by
+extrapolating from WNS at 8.50 ns, which is badly optimistic here: `−1.084` at
+8.50 implies 9.58 ns, and the design actually needs 10.70. And the placement
+noise this design shows (±0.284 ns, see [doc/README.md](../doc/README.md)) is
+larger than the bracket step, so read the periods as ~7.4–7.5 and ~10.6–10.8.
+The 3.25 ns gap between them is an order of magnitude beyond that noise.
+
+**The Block RAM fix is not what costs the clock**, which is worth knowing before
+trying to win the time back by undoing it. The superseded LUTRAM variant —
+asynchronous port B, write left on the rising edge, so no half-period path at
+all — closes at 10.50 ns using 5950 LUTs. Same clock, six times the area, and
+its critical path is a full-period path inside PREPARE rather than anything in
+the memory. The ~10.5–10.7 ns floor is the cost of the combinational ACK
+reaching into PREPARE; the falling-edge write is worth about 0.2 ns of it and
+saves ~5000 LUTs.
+
+So `READ_REG=false` earns its keep as a **verification** configuration — it is
+what exercises the same-cycle paths in both bus masters against a slave that
+really is one — and not as a performance option.
+
 ### What the numbers say about the Harvard split
 
 Instruction and data memory are separate Wishbone interfaces backed by one

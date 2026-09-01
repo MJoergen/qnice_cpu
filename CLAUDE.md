@@ -371,7 +371,16 @@ It stays synthesisable and the memory stays a Block RAM, but only because `dp_ra
 **write** to the falling edge along with its read: stage only the read and the port wants two clocks
 at once, which Vivado refuses (`[Synth 8-6849] Infeasible attribute ram_style = "block"`) and the
 8Kx16 array falls into 4096 LUTRAMs. Measured on `prog.asm`: 15070 cycles to 13511, -10.3%, with a
-byte-identical writes log. FETCH needs no special case for one (its Wishbone outputs are all registered, so no
+byte-identical writes log.
+
+**It is a verification configuration, not a performance one.** Fewer cycles, but a much worse
+clock: it closes at 10.70 ns against the default's 7.45 ns (and misses the shipping 8.50 ns
+constraint by WNS -1.084 ns, 189 failing endpoints), which makes it ~29% SLOWER in wall time across
+the suite. Breaking even would need 8.27 ns, or 30.4% fewer cycles against the 18.5% the best
+program manages. Undoing the Block-RAM fix does not recover it — the LUTRAM variant closes at
+10.50 ns with six times the area — because the floor is the combinational ACK reaching into
+PREPARE, not the falling-edge write. Full numbers and method in
+[test/README.md](test/README.md#Zero-latency-memory-READ_REG-false). FETCH needs no special case for one (its Wishbone outputs are all registered, so no
 combinational loop is possible, and its address/data pairing is order-based rather than
 timing-based); the Memory module does. That FIFO's output is registered, so the
 same-cycle case is handled by `wb_ack_zero_lat`, which takes the op-type from `mreq_op_i` and
