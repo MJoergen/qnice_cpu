@@ -285,7 +285,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `9be5751-dirty`.
+Measured with Vivado 2022.2 on commit `cb2f04e-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -302,21 +302,21 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  873 |     63400 | 1.38 |
+| Slice LUTs      |  871 |     63400 | 1.37 |
 | Slice Registers |  598 |    126800 | 0.47 |
-| Slices          |  286 |     15850 | 1.80 |
+| Slices          |  280 |     15850 | 1.77 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.150 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.086 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_dst_val][5]` to
-`i_prepare/wr_stage_o_reg[dst_val][5]`: 10 logic levels, with 72% of the delay
-in routing rather than logic.
+The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][1]` to
+`i_prepare/wr_stage_o_reg[alu_src_val][3]`: 10 logic levels, with 79% of the
+delay in routing rather than logic.
 <!-- end -->
 
 **In the build measured above, the worst path is the one this section
@@ -473,7 +473,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (932 vs 873 LUTs). That is expected:
+The two tables do not add up to each other (932 vs 871 LUTs). That is expected:
 the first is measured after place-and-route, where physical optimisation
 replicates logic to meet timing, while the second stops after synthesis. Slices
 are not listed per module because slices are shared between modules and are not

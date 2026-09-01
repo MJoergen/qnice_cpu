@@ -17,6 +17,7 @@ make check TEST=prog_r15       # run just one of them, same checks
 make run   TEST=prog_r15       # run it without the writes-log comparison
 make sim                       # assemble test/prog.asm, simulate, open gtkwave
 make sim TEST=prog_interleave  # run test/prog_interleave.asm instead
+make test READ_REG=false       # ...against a zero-latency memory instead
 ```
 
 Every one of these exits 0 if and only if the test passed, so they can be run
@@ -289,6 +290,40 @@ exactly as it does the writes log, so a performance change is now as loud as a
 behavioural one. Nothing here decides pass or fail on its own — a program that
 got slower still passes its own self-checks — it just produces a diff that has
 to be explained. Regenerate with `make golden`.
+
+### Zero-latency memory (`READ_REG=false`)
+
+`READ_REG` selects how [`wb_dp_mem.vhd`](wb_dp_mem.vhd) answers. The default,
+`true`, is an ordinary pipelined slave: the ACK comes a cycle after the request
+is accepted. `false` makes it a **zero-latency slave** — combinational ACK, read
+data valid in the same cycle — which is what exercises the same-cycle paths in
+the two bus masters, [Memory](../src/memory/README.md#Zero-latency-ACKs) and
+[FETCH](../src/fetch/README.md#Zero-latency-ACKs). The generic runs all the way
+down to `G_READ_REG` in [`dp_ram.vhd`](../src/sub/dp_ram.vhd), which removes the
+read output registers; both halves have to move together, or the ACK would
+announce data that has not arrived.
+
+The two modes split the golden files asymmetrically, and the asymmetry is the
+point:
+
+* **`<program>.writes.golden` is shared.** A zero-latency memory changes *when*
+  data arrives, never *what* it is, so the writes log must be byte-identical in
+  both modes. It is, for all nine programs. That is the real correctness check
+  on the whole zero-latency path — and it is why `make golden READ_REG=false`
+  deliberately does *not* refresh it.
+* **`<program>.stats_zerolat.golden` is separate.** Cycle counts legitimately
+  differ, so they get their own reference. `make test READ_REG=false` checks
+  against it, and `make golden READ_REG=false` regenerates it.
+
+The measured effect on `prog.asm` is 15070 cycles down to 13511, **−10.3%**,
+with the instruction- and data-request counts unchanged. Per program the range
+is −0.4% (`prog_flags`, almost all ALU work) to −18.5% (`prog_interleave`, which
+is dominated by memory operands).
+
+Note this is a **simulation** configuration. An asynchronous read cannot come
+out of a Block RAM, so synthesising it moves the whole array into LUTRAM — the
+measured numbers are in [`wb_dp_mem.vhd`](wb_dp_mem.vhd)'s header. Nothing
+synthesised in this repo sets it.
 
 ### What the numbers say about the Harvard split
 

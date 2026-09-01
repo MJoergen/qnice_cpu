@@ -38,6 +38,17 @@ TEST_SOURCES += test/system.vhd
 TEST ?= prog
 REGISTER_BANK_WIDTH ?= 8
 
+# Memory model behaviour, passed all the way down to src/sub/dp_ram.vhd:
+#   true  - ordinary pipelined Wishbone slave, ACK one cycle after the request
+#           is accepted. The default, and what the shipping build synthesises.
+#   false - a full zero-latency slave: combinational ACK, read data valid in
+#           the same cycle. Exercises the zero-latency paths in the two bus
+#           masters (src/memory, src/fetch) against a slave that really is one.
+# The writes log is identical either way -- same program, same results -- so
+# both modes share test/<name>.writes.golden. Only the cycle counts differ,
+# which is why the stats goldens are per-mode; see STATS_GOLDEN below.
+READ_REG ?= true
+
 # Every test program that "make test" runs.
 TESTS  = prog
 TESTS += prog_simple
@@ -64,7 +75,15 @@ GOLDEN = test/$(TEST).writes.golden
 # here means the program got faster or slower, or changed how it uses the two
 # memory buses. See test/README.md.
 STATS  = test/$(TEST).stats
+# Per-mode, because a zero-latency slave legitimately produces a different
+# cycle count and a different number of speculative instruction fetches. The
+# writes log is NOT per-mode and must match in both -- that is the actual
+# correctness check on the zero-latency path.
+ifeq ($(READ_REG),false)
+STATS_GOLDEN = test/$(TEST).stats_zerolat.golden
+else
 STATS_GOLDEN = test/$(TEST).stats.golden
+endif
 
 TB  = tb_cpu
 TEST_SOURCES += test/$(TB).vhd
@@ -97,6 +116,8 @@ help:
 	@echo "Optional arguments:"
 	@echo "  TEST=<filename>           : Specify assembly source file. Defaults to prog."
 	@echo "  REGISTER_BANK_WIDTH=<val> : Number of bits in register bank number. Defaults to 8."
+	@echo "  READ_REG=<true|false>     : Memory model. false = zero-latency Wishbone"
+	@echo "                              slave (combinational ACK). Defaults to true."
 	@echo
 
 
@@ -110,6 +131,7 @@ help:
 GHDL_RUN = ghdl -r --std=08 $(TB) \
 	   -gG_ROM=$(ROM) \
 	   -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) \
+	   -gG_READ_REG=$(READ_REG) \
 	   -gG_WRITES_FILE=$(WRITES) \
 	   -gG_STATS_FILE=$(STATS)
 
@@ -154,13 +176,22 @@ test:
 
 # Regenerate the reference copies. Only ever do this deliberately, and read the
 # resulting "git diff" carefully -- these files are the regression check.
+#
+# With READ_REG=false only the STATS golden is refreshed. The writes golden is
+# mode-independent by construction -- the zero-latency slave changes when data
+# arrives, never what it is -- so regenerating it from that mode would be
+# silently overwriting the reference with an unverified copy of itself, and
+# would destroy the check if the two ever genuinely diverged. Refresh the
+# writes goldens from the default mode only.
+STATS_GOLDEN_FOR_MODE = $(if $(filter false,$(READ_REG)),test/$$t.stats_zerolat.golden,test/$$t.stats.golden)
+
 .PHONY: golden
 golden:
 	@for t in $(TESTS); do \
 	   echo "=== $$t ==="; \
 	   $(MAKE) --no-print-directory run TEST=$$t || exit 1; \
-	   cp test/$$t.writes test/$$t.writes.golden; \
-	   cp test/$$t.stats  test/$$t.stats.golden; \
+	   $(if $(filter false,$(READ_REG)),:,cp test/$$t.writes test/$$t.writes.golden); \
+	   cp test/$$t.stats  $(STATS_GOLDEN_FOR_MODE); \
 	done
 
 $(ROM): $(ASM)

@@ -33,6 +33,7 @@ make golden                           # regenerate every test/*.writes.golden re
 make sim                              # assemble test/prog.asm, run GHDL simulation, open gtkwave
 make sim TEST=prog_interleave         # run a different test program (test/<name>.asm)
 make sim REGISTER_BANK_WIDTH=8        # override register bank address width (default 8)
+make test READ_REG=false              # run every test against a zero-latency memory
 make system.bit                       # Vivado synthesis + bitstream (needs Vivado at $XILINX_DIR)
 make utilization                      # refresh the measured numbers in doc/README.md (needs Vivado)
 make timing                           # re-render every timing diagram (.tex -> .png; needs pdflatex)
@@ -61,7 +62,11 @@ word** to the reserved address `0x1FFF` (0 = pass) just before its final `HALT`,
 `HALT`, at no cost to the failure paths — fails the run, as does never reaching a `HALT` (the
 `G_TIMEOUT` watchdog in `tb_cpu.vhd`). `make check` / `make test` additionally diff **two** golden
 files per program: the run's register/memory write log against `test/<name>.writes.golden`, and
-its statistics against `test/<name>.stats.golden`. Every one of these targets exits 0 if and only
+its statistics against `test/<name>.stats.golden` — or `test/<name>.stats_zerolat.golden` under
+`READ_REG=false`. The writes golden is deliberately shared between the two modes: a zero-latency
+memory changes when data arrives, never what it is, so byte-identical writes logs are the
+correctness check on that whole path, and `make golden READ_REG=false` therefore refreshes only
+the stats file. Every one of these targets exits 0 if and only
 if the test passed. See [test/README.md](test/README.md); if a golden diff is *expected*,
 regenerate both with `make golden` and read the `git diff` carefully.
 
@@ -351,7 +356,12 @@ here since `wbd_*` (see `cpu.vhd`) connects to a single, non-reordering physical
 silently misattribute data against a slave that completed requests out of order.
 
 **Zero-latency ACKs** — a slave answering in the same cycle it accepts — are supported on both
-buses. FETCH needs no special case for one (its Wishbone outputs are all registered, so no
+buses, and `make test READ_REG=false` runs the whole suite against one: `test/wb_dp_mem.vhd` then
+drives both ACKs combinationally and passes `G_READ_REG` down to `dp_ram`, which drops both read
+output registers. Both halves must move together, or the ACK announces data that has not arrived.
+Simulation only — an asynchronous read cannot come out of a Block RAM, so synthesising it moves the
+8Kx16 array from 4 RAMB36 into 4096 LUTRAMs. Measured on `prog.asm`: 15070 cycles to 13511,
+-10.3%, with a byte-identical writes log. FETCH needs no special case for one (its Wishbone outputs are all registered, so no
 combinational loop is possible, and its address/data pairing is order-based rather than
 timing-based); the Memory module does. That FIFO's output is registered, so the
 same-cycle case is handled by `wb_ack_zero_lat`, which takes the op-type from `mreq_op_i` and

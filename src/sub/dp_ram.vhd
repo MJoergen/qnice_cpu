@@ -4,7 +4,9 @@
 --   Two independently addressed ports sharing one clock and one memory array.
 --   Writes take effect on the rising edge. Reads are registered with a 1-cycle
 --   latency and gated by their read enable (*_rd_data_o holds its previous
---   value while *_rd_en_i = '0').
+--   value while *_rd_en_i = '0'). Port A's output register can be removed with
+--   G_READ_REG => false, which turns that port into a same-cycle read; see
+--   G_READ_REG below.
 --
 --   Two ports, each with ONE address. Port A reads. Port B reads and writes,
 --   both at b_addr_i. Tie off whatever an instance does not need:
@@ -29,8 +31,9 @@
 --   read: under G_RAM_STYLE = "block" it is staged through a falling-edge
 --   register (see below), which is what puts the register file's read on the
 --   right side of its critical path. Port B's read is a plain rising-edge read
---   sharing its process with the write. Behaviourally they are identical --
---   same latency, same read-first ordering, same read-enable gating.
+--   sharing its process with the write. With G_READ_REG = true they are
+--   behaviourally identical -- same latency, same read-first ordering, same
+--   read-enable gating.
 --
 -- WHY ONLY PORT B WRITES
 --   A second write port cannot be had without either a "shared variable",
@@ -58,6 +61,59 @@
 --                   register suffices; the falling-edge trick is neither possible
 --                   nor necessary here.
 --
+-- G_READ_REG (both read ports)
+--   true  - the default and the configuration everything in this repo uses.
+--           Both ports read with the 1-cycle latency described above.
+--
+--   false - the rising-edge output register is removed from BOTH read ports,
+--           so the data for the address presented in a cycle is available at
+--           the END of that SAME cycle. This is what a zero-latency Wishbone slave needs: an
+--           ACK returned in the cycle the request is accepted (see
+--           src/memory/README.md and src/fetch/README.md). It costs a
+--           combinational path from a_addr_i to a_rd_data_o, so it is opt-in.
+--
+--           Port B simply becomes an asynchronous read, in either style, and
+--           in doing so stops sharing a RAM port with the write -- see the
+--           comment at gen_b_reg below, which is where the cost lands. Port A
+--           keeps whatever staging its style gives it, so BOTH styles lose
+--           exactly one cycle of latency there, but they present the data at
+--           different points WITHIN the cycle:
+--             "block"       - the falling-edge register stays, so the array
+--                             read still happens on the falling edge and only
+--                             the wire from it is combinational. The data
+--                             appears MID-CYCLE and is stable from there to
+--                             the closing edge -- about half a cycle of setup
+--                             for the consumer, and a correspondingly relaxed
+--                             path. Requires a reasonably balanced duty cycle,
+--                             as the registered block configuration already
+--                             does.
+--             "distributed" - a genuine asynchronous LUTRAM read: address to
+--                             data is combinational for the WHOLE cycle. More
+--                             setup for the consumer, but the entire array
+--                             access is now on the critical path.
+--
+--           The block variant is easy to mis-predict, so it is worth being
+--           explicit: it does NOT keep the 1-cycle latency merely because a
+--           register remains in the path. That register captures the CURRENT
+--           cycle's address halfway through the cycle, so the value is out
+--           before the edge that ENDS that cycle. formal/dp_ram.psl states the
+--           two styles with different properties for exactly this reason --
+--           f_read_back_async (same cycle) for distributed, and
+--           f_read_back_async_block (low phase only) for block, because for
+--           block neither plain rising-edge form is true: |=> is too late and
+--           |-> is too early.
+--
+--           a_rd_en_i keeps a meaning rather than being ignored: with no
+--           register there is nothing to hold, so instead of holding its
+--           previous value a_rd_data_o reads all-zeros while a_rd_en_i = '0'.
+--           Deliberate, not incidental. A silently-inert port is the trap
+--           G_B_READ already documents below; a caller that drives a_rd_en_i
+--           low deserves a defined output rather than the array contents at
+--           whatever a_addr_i happens to be. The mask costs one AND per bit --
+--           if it ever lands on a critical path, dropping it (output follows
+--           the address unconditionally) is a one-line change, but then say so
+--           here and fix f_read_zero_when_disabled in formal/dp_ram.psl.
+--
 -- RESET
 --   None. Memory contents come from G_INIT_FILE (or zero) and are not reset by
 --   rst_i. rst_i is unused and kept only for interface uniformity / the formal
@@ -69,6 +125,8 @@
 --   G_B_READ    : generate port B's read half. Leave false for a write-only
 --                 port B; see the note at the read itself for why the caller's
 --                 tie-off is not enough on its own.
+--   G_READ_REG  : keep both read ports' output registers (default). False
+--                 makes them same-cycle reads; see G_READ_REG above.
 --   G_ADDR_SIZE : address width; memory depth is 2**G_ADDR_SIZE words.
 --   G_DATA_SIZE : data word width in bits.
 
@@ -82,20 +140,24 @@ entity dp_ram is
       G_INIT_FILE : string  := "";
       G_RAM_STYLE : string  := "block"; -- "block" or "distributed"
       G_B_READ    : boolean := false;   -- enable port B's read half
+      G_READ_REG  : boolean := true;    -- keep the read output registers
       G_ADDR_SIZE : positive;
       G_DATA_SIZE : positive
    );
    port (
       clk_i       : in  std_logic;
       rst_i       : in  std_logic;                                   -- unused (see header)
-      -- Port A: read only (registered, 1-cycle latency, gated by a_rd_en_i).
-      -- Staged through a falling-edge register when G_RAM_STYLE = "block".
+      -- Port A: read only, gated by a_rd_en_i. Registered with 1-cycle
+      -- latency by default; same-cycle and zero when disabled if G_READ_REG is
+      -- false. Staged through a falling-edge register when
+      -- G_RAM_STYLE = "block".
       a_addr_i    : in  std_logic_vector(G_ADDR_SIZE-1 downto 0);
       a_rd_en_i   : in  std_logic;
       a_rd_data_o : out std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0');
       -- Port B: read and write, both at b_addr_i. Same read latency and
-      -- ordering as port A. The read half exists only when G_B_READ is set;
-      -- b_rd_en_i and b_rd_data_o are then tied off and inert.
+      -- ordering as port A, and G_READ_REG applies here too. The read half
+      -- exists only when G_B_READ is set; b_rd_en_i and b_rd_data_o are then
+      -- tied off and inert.
       b_addr_i    : in  std_logic_vector(G_ADDR_SIZE-1 downto 0);
       b_rd_en_i   : in  std_logic;
       b_rd_data_o : out std_logic_vector(G_DATA_SIZE-1 downto 0) := (others => '0');
@@ -147,34 +209,71 @@ begin
       report "G_RAM_STYLE must be either 'block' or 'distributed'. Incorrect value is " & G_RAM_STYLE
       severity failure;
 
-   -- Port B: the write (sole driver of dp_ram_r) together with port B's read,
-   -- at the shared address b_addr_i. They MUST stay in this one process, on
-   -- this one edge and on this one address, or they stop sharing a physical RAM
-   -- port and the array is duplicated -- see the header.
-   --
-   -- Read-first ordering falls out of signal semantics rather than statement
-   -- order: the read's right-hand side is evaluated with the pre-edge contents
-   -- of dp_ram_r, so a write in the same cycle is not visible to it.
-   p_b : process (clk_i)
-   begin
-      if rising_edge(clk_i) then
-         -- The G_B_READ term is what actually removes the read, and it has to
-         -- be the generic rather than the caller's b_rd_en_i => '0': the
-         -- per-module utilization pass synthesises with -flatten_hierarchy
-         -- none, where a tie-off applied at the instantiation is not visible
-         -- and the whole read port gets built anyway. That cost 40 LUTs of
-         -- phantom LUTRAM in the register file's row of the table in
-         -- doc/README.md. The shipping build flattens and prunes it either
-         -- way, so this is about the measurement being honest, not the gates.
-         if G_B_READ and b_rd_en_i = '1' then
-            b_rd_data_o <= dp_ram_r(to_integer(b_addr_i));
-         end if;
+   gen_b_reg : if G_READ_REG generate
 
-         if b_wr_en_i = '1' then
-            dp_ram_r(to_integer(b_addr_i)) <= b_wr_data_i;
+      -- Port B: the write (sole driver of dp_ram_r) together with port B's read,
+      -- at the shared address b_addr_i. They MUST stay in this one process, on
+      -- this one edge and on this one address, or they stop sharing a physical RAM
+      -- port and the array is duplicated -- see the header.
+      --
+      -- Read-first ordering falls out of signal semantics rather than statement
+      -- order: the read's right-hand side is evaluated with the pre-edge contents
+      -- of dp_ram_r, so a write in the same cycle is not visible to it.
+      p_b : process (clk_i)
+      begin
+         if rising_edge(clk_i) then
+            -- The G_B_READ term is what actually removes the read, and it has to
+            -- be the generic rather than the caller's b_rd_en_i => '0': the
+            -- per-module utilization pass synthesises with -flatten_hierarchy
+            -- none, where a tie-off applied at the instantiation is not visible
+            -- and the whole read port gets built anyway. That cost 40 LUTs of
+            -- phantom LUTRAM in the register file's row of the table in
+            -- doc/README.md. The shipping build flattens and prunes it either
+            -- way, so this is about the measurement being honest, not the gates.
+            if G_B_READ and b_rd_en_i = '1' then
+               b_rd_data_o <= dp_ram_r(to_integer(b_addr_i));
+            end if;
+
+            if b_wr_en_i = '1' then
+               dp_ram_r(to_integer(b_addr_i)) <= b_wr_data_i;
+            end if;
          end if;
-      end if;
-   end process p_b;
+      end process p_b;
+
+   else generate
+
+      -- G_READ_REG = false: port B's read is asynchronous, so it can no longer
+      -- share a process with the write. The write keeps its own process and
+      -- stays the sole driver of dp_ram_r.
+      --
+      -- This is the branch that gives up the RAM-port sharing the header
+      -- insists on above, and it does so knowingly: an asynchronous read
+      -- cannot come out of a Block RAM at all, so under G_RAM_STYLE = "block"
+      -- this configuration does not map to BRAM. That is why G_READ_REG
+      -- defaults to true and why nothing synthesised in this repo sets it
+      -- false -- it exists to let the simulation model a zero-latency slave.
+      -- Measured on the 8Kx16 testbench memory: 4 RAMB36 become 0, replaced by
+      -- 4096 LUTRAMs. The numbers are in test/wb_dp_mem.vhd's header.
+      p_b_write : process (clk_i)
+      begin
+         if rising_edge(clk_i) then
+            if b_wr_en_i = '1' then
+               dp_ram_r(to_integer(b_addr_i)) <= b_wr_data_i;
+            end if;
+         end if;
+      end process p_b_write;
+
+      gen_b_read : if G_B_READ generate
+
+         -- Read-first ordering survives: the write above lands on the NEXT
+         -- rising edge, so a read in the same cycle still sees the old
+         -- contents.
+         b_rd_data_o <= dp_ram_r(to_integer(b_addr_i)) when b_rd_en_i = '1' else
+                        (others => '0');
+
+      end generate gen_b_read;
+
+   end generate gen_b_reg;
 
 
    gen_block_ram : if G_RAM_STYLE = "block" generate
@@ -202,28 +301,56 @@ begin
          end if;
       end process p_read_falling;
 
-      -- Rising-edge output register, gated by a_rd_en_i (holds when '0').
-      p_read_rising : process (clk_i)
-      begin
-         if rising_edge(clk_i) then
-            if a_rd_en_i = '1' then
-               a_rd_data_o <= a_rd_data;
+      gen_a_reg_block : if G_READ_REG generate
+
+         -- Rising-edge output register, gated by a_rd_en_i (holds when '0').
+         p_read_rising : process (clk_i)
+         begin
+            if rising_edge(clk_i) then
+               if a_rd_en_i = '1' then
+                  a_rd_data_o <= a_rd_data;
+               end if;
             end if;
-         end if;
-      end process p_read_rising;
+         end process p_read_rising;
+
+      else generate
+
+         -- Same-cycle read: the falling-edge stage above already holds this
+         -- cycle's array read by mid-cycle, so the output is just a wire from
+         -- it and settles half a cycle before the consumer samples. Masked to
+         -- zero rather than held when disabled -- there is no register left to
+         -- hold anything, and inferring a latch here would be a bug, not a
+         -- feature. See G_READ_REG in the header.
+         a_rd_data_o <= a_rd_data when a_rd_en_i = '1' else
+                        (others => '0');
+
+      end generate gen_a_reg_block;
 
    else generate -- G_RAM_STYLE = "distributed"
 
-      -- Distributed RAM: a single rising-edge read register is enough; the
-      -- falling-edge staging used for Block RAM is neither available nor needed.
-      p_read : process (clk_i)
-      begin
-         if rising_edge(clk_i) then
-            if a_rd_en_i = '1' then
-               a_rd_data_o <= dp_ram_r(to_integer(a_addr_i));
+      gen_a_reg_dist : if G_READ_REG generate
+
+         -- Distributed RAM: a single rising-edge read register is enough; the
+         -- falling-edge staging used for Block RAM is neither available nor needed.
+         p_read : process (clk_i)
+         begin
+            if rising_edge(clk_i) then
+               if a_rd_en_i = '1' then
+                  a_rd_data_o <= dp_ram_r(to_integer(a_addr_i));
+               end if;
             end if;
-         end if;
-      end process p_read;
+         end process p_read;
+
+      else generate
+
+         -- Asynchronous LUTRAM read: address to data is combinational for the
+         -- whole cycle, which is a materially longer path than the block-style
+         -- branch above gives -- see G_READ_REG in the header before choosing
+         -- this combination.
+         a_rd_data_o <= dp_ram_r(to_integer(a_addr_i)) when a_rd_en_i = '1' else
+                        (others => '0');
+
+      end generate gen_a_reg_dist;
 
    end generate gen_block_ram;
 

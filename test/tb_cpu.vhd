@@ -7,6 +7,10 @@ entity tb_cpu is
    generic (
       G_REGISTER_BANK_WIDTH : integer;
       G_ROM                 : string;
+      -- False turns the memory model into a zero-latency Wishbone slave; see
+      -- test/wb_dp_mem.vhd. Defaults to the registered slave, which is what
+      -- the committed golden files were produced with.
+      G_READ_REG            : boolean := true;
       -- Simulation only: file to log every register and memory write to.
       -- An empty string (the default) disables the logging entirely.
       G_WRITES_FILE         : string := "";
@@ -61,6 +65,7 @@ begin
       generic map (
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
          G_ROM                 => G_ROM,
+         G_READ_REG            => G_READ_REG,
          G_WRITES_FILE         => G_WRITES_FILE,
          G_STATS_FILE          => G_STATS_FILE
       )

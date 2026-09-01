@@ -34,19 +34,52 @@ vunit i_dp_ram(dp_ram(synthesis))
    ----------------------------------------------
 
    -- We can read back the last value written to any given address.
+   --
+   -- Port A with its output register (G_READ_REG = true): NEXT rising edge,
+   -- for both RAM styles.
    f_read_back : assert always
       {f_written = '1' and a_addr_i = c_addr and b_wr_en_i = '0' and a_rd_en_i = '1'}
-      |=> {a_rd_data_o = f_data};
+      |=> {not G_READ_REG or a_rd_data_o = f_data};
+
+   -- Port A without it (G_READ_REG = false), DISTRIBUTED style: same cycle.
+   -- The read is asynchronous, so the data is on the output for the whole
+   -- cycle in which the address is presented -- one rising-edge-to-rising-edge
+   -- delay less than f_read_back. No a_rd_en_i escape is needed, unlike a
+   -- next-cycle formulation: antecedent and consequent are the same cycle, so
+   -- the read enable the antecedent requires is the one the output mask sees.
+   f_read_back_async : assert always
+      {f_written = '1' and a_addr_i = c_addr and b_wr_en_i = '0' and a_rd_en_i = '1'}
+      |-> {G_READ_REG or G_RAM_STYLE /= "distributed" or a_rd_data_o = f_data};
 
    -- The same contract on read port B, which reads the array directly (it
    -- shares the write's process and clock edge, so it has no staging register).
    f_read_back_b : assert always
       {f_written = '1' and b_addr_i = c_addr and b_wr_en_i = '0' and b_rd_en_i = '1'}
-      |=> {b_rd_data_o = f_data};
+      |=> {not G_READ_REG or b_rd_data_o = f_data};
+
+   -- Port B with G_READ_REG = false. Simpler than port A: it has no staging
+   -- register in either style, so dropping the output register leaves a plain
+   -- asynchronous read and the same-cycle form holds for "block" and
+   -- "distributed" alike -- no separate low-phase property needed.
+   f_read_back_b_async : assert always
+      {f_written = '1' and b_addr_i = c_addr and b_wr_en_i = '0' and b_rd_en_i = '1'}
+      |-> {G_READ_REG or b_rd_data_o = f_data};
 
    -- Output value only changes when the port's read enable is asserted.
-   f_stable_a : assert always {a_rd_en_i = '0'} |=> {stable(a_rd_data_o)};
-   f_stable_b : assert always {b_rd_en_i = '0'} |=> {stable(b_rd_data_o)};
+   -- Port A holds only while it has an output register to hold in; with
+   -- G_READ_REG = false there is no register, and the contract is the mask
+   -- below instead.
+   f_stable_a : assert always {a_rd_en_i = '0'} |=> {not G_READ_REG or stable(a_rd_data_o)};
+   f_stable_b : assert always {b_rd_en_i = '0'} |=> {not G_READ_REG or stable(b_rd_data_o)};
+
+   -- The other half of that contract: an unregistered read port reads all-zeros
+   -- while disabled, rather than leaking whatever the array holds at its
+   -- address. These are the properties to delete if the mask is ever dropped
+   -- for timing -- see G_READ_REG in dp_ram.vhd's header.
+   f_read_zero_when_disabled : assert always
+      {a_rd_en_i = '0'} |-> {G_READ_REG or a_rd_data_o = 0};
+   f_read_zero_when_disabled_b : assert always
+      {b_rd_en_i = '0'} |-> {G_READ_REG or b_rd_data_o = 0};
 
 
    ----------------------------------------------
@@ -70,6 +103,28 @@ vunit i_dp_ram(dp_ram(synthesis))
    -- G_RAM_STYLE configurations expose the same rising-edge-sampled behaviour.
    assume always {not clk_i}
       |-> {f_falling_a_rd_en = a_rd_en_i and f_falling_a_rd_addr = a_addr_i};
+
+
+   -- Port A without it, BLOCK style: within the cycle, but only after the
+   -- falling edge.
+   --
+   -- Neither rising-edge-sampled form works for this configuration, which is
+   -- worth knowing before trying to simplify it. |=> is too late: the address
+   -- has already moved on to the next cycle's value. |-> is too early: at the
+   -- rising edge the falling-edge stage still holds the PREVIOUS cycle's
+   -- capture, and BMC demonstrates it by simply parking the clock high so no
+   -- falling edge ever arrives. The data genuinely appears mid-cycle, so the
+   -- property has to be a low-phase one, which is the same reason f_rd_data
+   -- below carries a clk_i = '0' guard.
+   --
+   -- Read through the falling-edge shadow rather than a_addr_i directly: those
+   -- are equal by the stability assumption below, but going through the shadow
+   -- is what makes the property say what it means -- the output reflects the
+   -- address THIS capture used.
+   f_read_back_async_block : assert always
+      {clk_i = '0' and f_written = '1' and f_falling_a_rd_addr = c_addr
+       and b_wr_en_i = '0' and f_falling_a_rd_en = '1'}
+      |-> {G_READ_REG or G_RAM_STYLE /= "block" or a_rd_data_o = f_data};
 
 
    ----------------------------------------------

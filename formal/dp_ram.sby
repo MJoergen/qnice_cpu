@@ -1,6 +1,28 @@
-## Verification matrix for dp_ram across both RAM styles and three modes.
+## Verification matrix for dp_ram across both RAM styles, both port-A read
+## configurations, and three modes.
 ##
-## Task naming:  <mode>_<style>
+## Task naming:  <mode>_<style>[_async]
+##
+## The "_async" half of the matrix sets G_READ_REG=false, removing port A's
+## output register. That changes the read contract in two ways, both covered by
+## dp_ram.psl: the data arrives a cycle earlier -- f_read_back_async, a
+## same-cycle implication, replacing f_read_back -- and a disabled read returns
+## zero instead of holding -- f_read_zero_when_disabled replacing f_stable_a.
+##
+## The cycle is dropped in BOTH styles, block included -- the tempting guess,
+## that block keeps the next-cycle contract because a falling-edge register is
+## still in the path, is wrong, and BMC says so in a couple of steps. But the
+## two styles need DIFFERENT properties, because block presents the data
+## mid-cycle rather than for the whole cycle:
+##
+##   distributed + async -> f_read_back_async,       a same-cycle |->
+##   block       + async -> f_read_back_async_block, a low-phase property
+##
+## For block, neither plain rising-edge form is true. |=> is too late (the
+## address has moved on); |-> is too early (at the rising edge the falling-edge
+## stage still holds the previous capture, and the solver demonstrates it by
+## parking the clock high so no falling edge ever arrives). That is the same
+## reason f_rd_data carries a clk_i = '0' guard.
 ##
 ##   prove_distributed - unbounded k-induction of the read-back contract.
 ##                       Fully closed by f_mem_shadow (distributed has a single
@@ -37,12 +59,18 @@
 ## Run everything: sby -f dp_ram.sby
 
 [tasks]
-prove_distributed  prove  distributed
-bmc_distributed    bmc    distributed
-cover_distributed  cover  distributed
-bmc_block          bmc    block
-cover_block        cover  block
-prove_block        prove  block
+prove_distributed        prove  distributed
+bmc_distributed          bmc    distributed
+cover_distributed        cover  distributed
+bmc_block                bmc    block
+cover_block              cover  block
+prove_block              prove  block
+prove_distributed_async  prove  distributed_async
+bmc_distributed_async    bmc    distributed_async
+cover_distributed_async  cover  distributed_async
+bmc_block_async          bmc    block_async
+cover_block_async        cover  block_async
+prove_block_async        prove  block_async
 
 [options]
 prove: mode prove
@@ -57,8 +85,10 @@ multiclock on
 smtbmc
 
 [script]
-distributed: ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_B_READ=true -gG_RAM_STYLE=distributed dp_ram.vhd dp_ram.psl -e dp_ram
-block:       ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_B_READ=true -gG_RAM_STYLE=block       dp_ram.vhd dp_ram.psl -e dp_ram
+distributed:       ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_B_READ=true -gG_READ_REG=true  -gG_RAM_STYLE=distributed dp_ram.vhd dp_ram.psl -e dp_ram
+block:             ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_B_READ=true -gG_READ_REG=true  -gG_RAM_STYLE=block       dp_ram.vhd dp_ram.psl -e dp_ram
+distributed_async: ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_B_READ=true -gG_READ_REG=false -gG_RAM_STYLE=distributed dp_ram.vhd dp_ram.psl -e dp_ram
+block_async:       ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=8 -gG_B_READ=true -gG_READ_REG=false -gG_RAM_STYLE=block       dp_ram.vhd dp_ram.psl -e dp_ram
 prep -top dp_ram
 
 [files]
