@@ -273,7 +273,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `63b55a4`.
+Measured with Vivado 2022.2 on commit `9be5751-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -290,20 +290,20 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  887 |     63400 | 1.40 |
+| Slice LUTs      |  886 |     63400 | 1.40 |
 | Slice Registers |  598 |    126800 | 0.47 |
-| Slices          |  303 |     15850 | 1.91 |
+| Slices          |  294 |     15850 | 1.85 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.135 ns**, no failing endpoints. The
+Timing at the 8.50 ns constraint: **WNS +0.316 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][1]` to
-`i_prepare/wr_stage_o_reg[alu_src_val][2]`: 9 logic levels, with 81% of the
+The worst setup path runs from `i_prepare/wr_stage_o_reg[r14][2]` to
+`i_prepare/wr_stage_o_reg[alu_src_val][0]`: 8 logic levels, with 77% of the
 delay in routing rather than logic.
 <!-- end -->
 
@@ -434,22 +434,22 @@ written:
 
 | Module          | LUTs | FFs |
 | --------------- | ---- | --- |
-| FETCH           |   60 |  92 |
-| CACHE (icache)  |   40 |  66 |
-| DECODE          |   54 |  74 |
-| PREPARE         |   81 | 131 |
-| WRITE           |  463 |   0 |
+| FETCH           |   58 |  92 |
+| CACHE (icache)  |   23 |  66 |
+| DECODE          |   53 |  74 |
+| PREPARE         |   79 | 131 |
+| WRITE           |  461 |   0 |
 | Registers       |  166 | 142 |
-| Memory          |   57 |  74 |
-| Glue            |    8 |   1 |
-| **CPU total**   |  929 | 580 |
+| Memory          |   56 |  74 |
+| Glue            |    7 |   1 |
+| **CPU total**   |  903 | 580 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 50% of the CPU's LUTs**, and 247 of its 463 are the ALU
+* **WRITE dominates, at 51% of the CPU's LUTs**, and 247 of its 461 are the ALU
   (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
@@ -461,8 +461,13 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (929 vs 887 LUTs). That is expected:
-the first is measured after place-and-route, where physical optimisation
-replicates logic to meet timing, while the second stops after synthesis. Slices
-are not listed per module because slices are shared between modules and are not
+The two tables do not add up to each other (903 vs 886 LUTs). That is expected,
+and note that the *sign* of the gap is not stable — it has landed both ways
+round across builds. The per-module figure comes first and stops after synthesis
+with `-flatten_hierarchy none`, which forbids optimisation across module
+boundaries and so tends to over-count; the device figure comes second, after
+place-and-route with `-flatten_hierarchy rebuilt`, which optimises across those
+boundaries but also replicates logic to meet timing. Either effect can dominate,
+so do not read the difference — in either direction — as meaningful. Slices are
+not listed per module because slices are shared between modules and are not
 attributable that way.

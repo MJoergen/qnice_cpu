@@ -55,8 +55,16 @@ overflowing; see `f_tsb_src_in_overflow` / `f_tsb_dst_in_overflow` / `f_tsf_req_
 `formal/memory.psl`.
 
 **Back-pressure (`mreq_accept`)**: a new request is accepted except when a previously-completed
-SRC or DST response is presented but not yet consumed by PREPARE (`m*_valid_o='1'` and
-`m*_ready_i='0'`) — this is what bounds outstanding responses to what the depth-2 buffers can hold.
+SRC or DST response is already stored in the corresponding response buffer (`tsb_*_fill /= 0`) —
+this is what bounds outstanding responses to what the depth-2 buffers can hold. Note the condition
+is deliberately written against that **registered** occupancy and nothing else. The more precise
+forms — `m*_valid_o` (which cuts through combinationally from `wb_ack_i`) and a
+`m*_ready_i='0'` "…and not being consumed this cycle" refinement (which reaches back to `wb_ack_i`
+through PREPARE's `wait_for_mem_dst`) — both put the response path in front of the request path,
+and both are combinational *loops* against a slave that acks in the cycle it accepts. Neither buys
+anything: removing them left every test program's cycle count bit-identical and made the CPU
+smaller. See the comment at `mreq_accept` in `memory.vhd`, and doc/README.md's Optimizations
+section for the zero-latency experiment that found this.
 `mreq_ready_o` is the AND of this accept condition and the WB-request buffer's own readiness
 (`mreq_ready`); `mreq_valid` (fed into `i_one_stage_buffer_wb`) is gated by the same accept
 condition. A consequence worth knowing before touching this logic: `mreq_valid` can legitimately

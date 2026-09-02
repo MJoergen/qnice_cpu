@@ -341,7 +341,19 @@ the *oldest* outstanding request (the FIFO's head) and that entry is popped to d
 route `wb_data_i` to the SRC buffer, the DST buffer, or nowhere (a WRITE ack). This is correct, but
 depends entirely on the Wishbone slave acking in issue order (stated in the module's header) — safe
 here since `wbd_*` (see `cpu.vhd`) connects to a single, non-reordering physical memory, but would
-silently misattribute data against a slave that completed requests out of order.
+silently misattribute data against a slave that completed requests out of order. It also requires
+at least one cycle of ACK latency: a slave that acks in the cycle it accepts the request leaves the
+FIFO's registered output with nothing to route by.
+
+**`mreq_accept` reads registered state only** — the response buffers' `tsb_*_fill`, never
+`msrc_valid_o`/`mdst_valid_o` (which cut through combinationally from `wb_ack_i`) and never
+`msrc_ready_i`/`mdst_ready_i` (which reach back to `wb_ack_i` through PREPARE's `wait_for_mem_dst`,
+i.e. outside this file, which is why reading `memory.vhd` alone cannot tell you). Both of the more
+precise forms put the response path in front of the request path — `mreq_accept` feeds `wb_stb_o` —
+and both are free to drop: every test program's cycle count is bit-identical without them, and the
+CPU is smaller and 0.18 ns faster. This came out of the zero-latency-slave experiment, where they
+are outright combinational loops; see doc/README.md's Optimizations section for why that experiment
+was rejected.
 
 Formal status (`formal/memory.psl`): `bmc`/`cover` (depth 10) pass. K-induction (`prove`, not
 currently in `formal/memory.sby`'s task list) is **partially closed**: the three buffer/FIFO

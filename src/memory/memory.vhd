@@ -108,19 +108,54 @@ begin
    ------------------------------------------------------------
 
    -- Accept request, EXCEPT when any one of:
-   -- * SRC read data is presented, but not yet accepted
-   -- * DST read data is presented, but not yet accepted
-   mreq_accept <= '0' when (mreq_op_i(C_MEM_READ_SRC) and msrc_valid_o and not msrc_ready_i) = '1' else
-                  '0' when (mreq_op_i(C_MEM_READ_DST) and mdst_valid_o and not mdst_ready_i) = '1' else
+   -- * SRC read data is already stored
+   -- * DST read data is already stored
+   --
+   -- EVERY TERM HERE COMES OFF A FLIP-FLOP, AND THAT IS DELIBERATE.
+   -- mreq_accept feeds mreq_valid, hence wb_stb_o, so anything here that
+   -- depends on wb_ack_i -- however indirectly -- splices the response path
+   -- onto the front of the request path. tsb_*_fill come from the response
+   -- buffers' own m_valid_r registers, so they cannot.
+   --
+   -- Two more precise forms were tried and are worse:
+   --
+   -- * msrc_valid_o / mdst_valid_o. These cut through combinationally from
+   --   tsb_*_in_valid, hence straight from wb_ack_i.
+   --
+   -- * msrc_ready_i / mdst_ready_i, as a "...and not being consumed this
+   --   cycle" refinement. Those come from PREPARE, whose wait_for_mem_dst
+   --   makes SRC-ready depend on DST-valid, which depends on wb_ack_i through
+   --   the buffer above -- so this one reaches back to the ack as well, just
+   --   outside this file. It is also worth nothing: dropping it left the
+   --   cycle count of all nine test programs bit-identical, while the
+   --   synthesised CPU got SMALLER (929 -> 903 LUTs, this module 57 -> 56,
+   --   with FETCH, CACHE, DECODE, PREPARE and WRITE all shrinking as the
+   --   shorter path lets synthesis simplify) and 0.18 ns faster at the
+   --   8.50 ns constraint.
+   --
+   -- Both forms are also combinational LOOPS against a zero-latency slave --
+   -- one that acks in the cycle it accepts the request. This module does not
+   -- support such a slave for other reasons too (the type-tracking FIFO's
+   -- output is registered, so it has no type to route the response by), and
+   -- the header says so; removing these two terms is necessary but not
+   -- sufficient. doc/README.md's Optimizations section records why that road
+   -- was not taken.
+   --
+   -- Accepting only into an EMPTY buffer is the conservative choice and is
+   -- what keeps the bound -- see the "total outstanding per channel never
+   -- exceeds 2" argument in src/memory/README.md, and f_src_total_max /
+   -- f_dst_total_max in formal/memory.psl which state it.
+   mreq_accept <= '0' when mreq_op_i(C_MEM_READ_SRC) = '1' and tsb_src_fill /= 0 else
+                  '0' when mreq_op_i(C_MEM_READ_DST) = '1' and tsb_dst_fill /= 0 else
                   tsf_req_in_ready;
 
    -- Block incoming Memory request until ready
    --
    -- NOTE ON mreq_valid'S STABILITY: mreq_accept (and hence mreq_valid) can
    -- legitimately drop from '1' to '0' across a clock edge even while
-   -- mreq_valid_i stays asserted throughout -- e.g. if msrc_valid_o newly
-   -- asserts with msrc_ready_i='0' in the very cycle i_one_stage_buffer_wb
-   -- becomes ready. This looks like it violates that buffer's own "s_valid_i
+   -- mreq_valid_i stays asserted throughout -- e.g. if a SRC response lands
+   -- in i_two_stage_buffer_src (raising tsb_src_fill) in the very cycle
+   -- i_one_stage_buffer_wb becomes ready. This looks like it violates that buffer's own "s_valid_i
    -- must stay stable until accepted" contract (formally confirmed reachable
    -- by BMC), but it is NOT a functional bug:
    -- * mreq_ready_o = mreq_ready and mreq_accept, so WRITE is never told
