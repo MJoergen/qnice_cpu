@@ -118,7 +118,11 @@ apart:
   transaction is finished.
 * **Request completed.** The slave later pulses `wb_ack_i`, once per accepted
   request. For a read it drives the result onto `wb_data_i` in that same cycle.
-  **Writes are acknowledged too**, with no meaningful data.
+  **Writes are acknowledged too**, with no meaningful data. *Later* is a
+  requirement, not just a description: the [Memory module](../src/memory/README.md)
+  needs at least one cycle between accepting a request and acknowledging it. A
+  slave that answers in the same cycle was built and measured, and rejected —
+  see [Optimizations](#Optimizations).
 
 Because acknowledgements are just pulses carrying no identifying information,
 and because several requests may be outstanding at once, the master has to
@@ -243,6 +247,82 @@ same bus traffic simply happens a cycle earlier. Cost: 6 LUTs and 2 flip-flops
 in FETCH, and a new requirement that the slave acknowledge in order — see
 [fetch/README.md](../src/fetch/README.md#Redirect).
 
+**Rejected: zero-latency Wishbone slaves.** Both bus masters can be taught to
+accept an `ACK` in the *same* cycle the slave takes the request — `STB` and
+`ACK` together, read data valid immediately — so that an operand fetch costs no
+cycle of its own. It was built and measured in full on the
+`dpram/zero-latency-slave` branch, which is kept for reference and deliberately
+**not merged**. The short version: it buys cycles and gives back more than it
+buys on the clock.
+
+*What it buys.* Cycle counts over the nine test programs fall **9.9%** in total
+(16130 → 14531), ranging from −0.4% on `prog_flags` (nearly all ALU, almost no
+memory operands) to −18.5% on `prog_interleave` (the opposite); `prog.asm`
+itself drops 10.3%, 15070 → 13511. Bus traffic is unchanged, and the writes logs
+are byte-identical in both modes — a zero-latency slave changes *when* data
+arrives, never what it is. On the branch it also has real value as a
+**verification** configuration: it is the only thing that drives the masters'
+same-cycle paths end to end, which formal alone cannot do.
+
+*What it costs.* Fmax, and much more of it than the cycles are worth. Both
+figures below come from bracketing the clock constraint — building at
+successive periods until the design stops closing — on Vivado 2022.2,
+`xc7a100tcsg324-1`, full place-and-route with the directives the shipping build
+uses:
+
+| configuration | closes at | fails at | minimum period | frequency |
+| --- | --- | --- | --- | --- |
+| registered slave (**this branch**) | 7.05 ns (+0.000) | 7.00 ns (−0.033) | **7.05 ns** | 142 MHz |
+| zero-latency slave (`READ_REG=false`) | 10.70 ns (+0.005) | 10.60 ns (−0.131) | **10.70 ns** | 93.5 MHz |
+
+The registered figure is new; only the 8.50 ns constraint the design ships at
+had been measured before. It closes at 7.05, 7.10 (+0.023) and 7.20 (+0.043),
+and fails at 7.00 and at every tighter constraint tried, down to 6.00. The
+zero-latency figure is the branch's own, reproduced here to check it: +0.005 ns
+at 10.70 and −0.308 at 10.00, and at the shipping 8.50 ns constraint it misses
+by **WNS −1.084 ns with 189 failing endpoints** — identical to what the branch
+recorded. Area is not the argument either way: 886 LUTs for the shipping build
+against 896 for the zero-latency one at 10.70 ns. Do not compare LUT counts
+across constraints, though — they inflate by 10% or so at the tightest ones,
+where physical optimisation replicates logic to buy slack.
+
+*The verdict.* 16130 cycles × 7.05 ns is 113.7 µs; 14531 × 10.70 ns is 155.5 µs.
+The zero-latency memory is **about 37% slower in wall-clock time**. Breaking
+even would need it to close at 7.83 ns, or to remove 34% of the cycles at the
+clock it does reach; the best any program in the suite manages is 18.5%, and
+that is the one most dominated by memory operands. There is no program here for
+which the trade pays.
+
+*Where the cost is.* Not in the memory. The combinational `ACK` propagates into
+PREPARE, and everything downstream of that — the operand path, `fetch_valid_o`,
+the Icache reset — has to close in the same cycle as the array access. The
+branch confirms this from the other side: a variant that drops the 8Kx16 array
+into 4096 LUTRAMs, with no half-period path at all and six times the area,
+closes at 10.50 ns and puts its critical path back inside PREPARE. So the
+~10.5–10.7 ns floor is the cost of the ACK reaching into PREPARE, not of any
+particular RAM mapping.
+
+*Two things to know before re-measuring.* Do not extrapolate a minimum period
+from WNS at a loose constraint: −1.084 ns at 8.50 implies 9.58 ns, and the
+zero-latency design actually needs 10.70. And a single failing build well above
+the floor means nothing — this design's placement noise is ±0.284 ns (see
+[The critical path](#The-critical-path) below), so isolated failures at 7.15,
+7.45 and 7.55 sit between builds that close at 7.05. What identifies the floor
+is the point below which *every* constraint fails, not the first one that does.
+The 3.65 ns gap between the two configurations is an order of magnitude beyond
+that noise.
+
+*What came back from the branch.* One change, in
+[memory.vhd](../src/memory/memory.vhd): `mreq_accept` now reads only registered
+state (the response buffers' `tsb_*_fill`) instead of `msrc_valid_o`/
+`mdst_valid_o` and `msrc_ready_i`/`mdst_ready_i`, which reach back to `wb_ack_i`
+and splice the response path onto the front of the request path. It is free in
+cycles — all nine programs are bit-identical — and worth 0.18 ns of slack at the
+8.50 ns constraint (WNS +0.135 → +0.316) and 26 LUTs in the per-module
+measurement (929 → 903), as the shorter path lets synthesis simplify either side
+of it. The rest of the branch is the zero-latency support itself, and stays
+there.
+
 Remaining ideas:
 * The Icache adds a further cycle to the branch penalty: a word arriving from
   FETCH is registered before DECODE sees it. A bypass for the empty-buffer case
@@ -273,7 +353,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `9be5751-dirty`.
+Measured with Vivado 2022.2 on commit `627cd1e`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
