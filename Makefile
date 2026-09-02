@@ -194,8 +194,15 @@ timing: $(addsuffix .png,$(TIMINGS))
 ## Synthesis using Vivado
 ################################################
 
+# -mode batch, NOT -mode tcl. In tcl mode Vivado exits 0 even when the sourced
+# script raises an error, so a build that aborted -- on the timing check below,
+# or on a failure inside synth_design or route_design -- reported success to
+# make. No bitstream was written, so nothing bad could ship, but "make
+# system.bit" said nothing was wrong and "make utilization" would then go on to
+# rewrite doc/README.md from whatever reports the previous run had left behind.
+# Batch mode propagates the error as a non-zero exit status.
 $(TOP).bit: hw/$(TOP).tcl $(SOURCES) $(TEST_SOURCES) hw/$(TOP).xdc $(ROM)
-	bash -c "source $(XILINX_DIR)/settings64.sh ; vivado -mode tcl -source $<"
+	bash -c "source $(XILINX_DIR)/settings64.sh ; vivado -mode batch -source $<"
 
 # The -directive options below are load-bearing, not decoration. With the
 # default directives this design misses timing at the 8.50 ns constraint by
@@ -208,7 +215,9 @@ $(TOP).bit: hw/$(TOP).tcl $(SOURCES) $(TEST_SOURCES) hw/$(TOP).xdc $(ROM)
 # report_timing_summary writes timing_summary.rpt next to the bitstream, and the
 # check after it aborts the build on negative slack. Vivado's write_bitstream
 # succeeds even when timing is violated, so without that check a bitstream is
-# not evidence that the design met timing.
+# not evidence that the design met timing. The check calls "exit 1" rather than
+# "error", so the exit status does not depend on how Vivado chooses to map a
+# Tcl error onto one -- see the -mode batch note above.
 #
 # -flatten_hierarchy rebuilt (rather than none) lets synthesis optimise across
 # module boundaries and then restores the hierarchy for reporting. The critical
@@ -227,7 +236,7 @@ hw/$(TOP).tcl: Makefile
 	echo "write_checkpoint -force post_route.dcp" >> $@
 	echo "report_timing_summary -file timing_summary.rpt" >> $@
 	echo "report_utilization -file utilization_placed.rpt" >> $@
-	echo "if {[get_property SLACK [get_timing_paths]] < 0} { error {TIMING VIOLATED -- see timing_summary.rpt} }" >> $@
+	echo "if {[get_property SLACK [get_timing_paths]] < 0} { puts {TIMING VIOLATED -- see timing_summary.rpt} ; exit 1 }" >> $@
 	echo "write_bitstream -force $(TOP).bit" >> $@
 	echo "exit" >> $@
 
@@ -262,7 +271,7 @@ utilization: utilization_placed.rpt utilization_hier.rpt
 utilization_placed.rpt timing_summary.rpt: $(TOP).bit
 
 utilization_hier.rpt: hw/$(TOP)_hier.tcl $(SOURCES) $(TEST_SOURCES) hw/$(TOP).xdc $(ROM)
-	bash -c "source $(XILINX_DIR)/settings64.sh ; vivado -mode tcl -source $<"
+	bash -c "source $(XILINX_DIR)/settings64.sh ; vivado -mode batch -source $<"
 
 hw/$(TOP)_hier.tcl: Makefile
 	echo "# This is a tcl command script for the Vivado tool chain" > $@
