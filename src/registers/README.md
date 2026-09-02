@@ -89,13 +89,16 @@ Note that this is the *registered* `reg_sr`, not the forwarded value that
 a read issued in the same cycle as an `INCRB` still selects the old page.
 
 That is deliberate, and it is safe only because of an invariant maintained
-outside this module: any instruction that changes those upper bits flushes the
-pipeline when it retires, so the next register read is issued several cycles
-later, with `reg_sr` long since caught up. See
+outside this module: when an instruction changes those upper bits, `cpu_main`
+guarantees that no read already issued against the outgoing page is ever
+*consumed*. It does that by flushing the instruction whose read has already
+happened and holding back the one whose read is going out in that very cycle —
+and it only has to do either when the instruction concerned actually uses a
+banked value. See
 [Register bank switch](../cpu_main/README.md#Register-bank-switch) in the
-`cpu_main` write-up for why forwarding the bank here would not have been enough
-on its own — the read address reaches the RAM a cycle before the new bank
-exists.
+`cpu_main` write-up for the details, including why forwarding the bank here
+would not have been enough on its own: the read address reaches the RAM a cycle
+before the new bank exists.
 
 The **write** address does not need forwarding either, for a different and
 self-contained reason: a lower-bank write requires `wr_reg_i(3) = '0'`, and the
@@ -103,6 +106,12 @@ only ways the bank can change are `INCRB`/`DECRB`, which write no
 general-purpose register, and an ordinary write to `R14`, which has
 `wr_reg_i(3) = '1'` and so leaves `lower_wr_en` deasserted. Every other
 `wr_sr_en_i` write is a flag update, which preserves bits 15 downto 8.
+
+That asymmetry — the read address uses the page in force when the read was
+*issued*, the write address the page in force when the write *retires* — is what
+makes writing a banked register harmless across a bank switch, and it is the
+reason `cpu_main` can leave `MOVE R8, R0` unflushed straight after an `INCRB`:
+the value arrives carrying only a register number, and lands on the new page.
 
 ### Write-Before-Read on the dedicated SR port
 

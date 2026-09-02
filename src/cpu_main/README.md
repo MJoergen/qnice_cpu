@@ -404,6 +404,16 @@ write value. The same `fetch_valid_o` also flushes the pipeline, see
 The one case that is not a write to `R15` is a change of the register bank, see
 [Register bank switch](#Register-bank-switch).
 
+### Between WRITE and DECODE
+```
+bank_switch_o : out std_logic;   -- WRITE -> DECODE
+bank_stale_i  : in  std_logic;   -- DECODE -> WRITE
+```
+The only signals in `cpu_main` that skip a stage. They exist so that an
+`INCRB`/`DECRB` does not have to flush the pipeline unconditionally; both are
+combinational and both are explained under
+[Register bank switch](#Register-bank-switch).
+
 ### Halt
 ```
 halt_o : out std_logic;
@@ -680,9 +690,8 @@ issued one cycle before the `wr_sr_en_i` write lands.
 So the bank switch joins `fetch_valid_o` in [write.vhd](write.vhd), redirecting
 FETCH to the address of the following instruction — the same value that
 `ASUB`/`RSUB` push as a return address. The instruction that comes back has its
-register read issued long after `reg_sr` has caught up. The cost is a branch
-penalty on a bank switch, which is what the ISA uses to enter and leave a
-subroutine: rare, and much cheaper than reading the wrong registers.
+register read issued long after `reg_sr` has caught up. That is what an ordinary
+write to `R14` costs: a full branch penalty.
 
 The trigger is deliberately *syntactic* — "this instruction writes `R14`, or it
 is `INCRB`/`DECRB`" — and not a comparison of the new bank against the old. The
@@ -690,8 +699,8 @@ precise version is more selective, and would leave the common
 `MOVE ST____C_, R14` idiom free of a flush, but it costs the entire timing
 margin: `fetch_valid_o` is the reset pin of every flip-flop in two stages, so
 feeding it from `reg_val_o` puts the ALU result and an 8-bit comparator in front
-of a high-fanout net. The measured numbers are in the comment above `is_crb` in
-[write.vhd](write.vhd). The price of the syntactic form is that *any* write to
+of a high-fanout net. The measured numbers are in the "Register bank switch"
+comment in [write.vhd](write.vhd). The price of the syntactic form is that *any* write to
 `R14` costs a branch penalty, `MOVE ST____C_, R14` included.
 
 Because the trigger keys on `reg_addr_o`, which the combinational `p_reg` drives
@@ -699,13 +708,82 @@ for pre/post-increment write-backs as well as for ordinary results, it covers
 `R14` used as a *pointer* (`MOVE @R14++, R0`) too, on any micro-op rather than
 only the last.
 
-`test/prog_hazard.asm` covers `INCRB`, `DECRB` and the ordinary-write case in
-`H11`-`H13`. What those cannot show is that the over-approximation is
-*complete*; that is `f_flush_on_bank_change` in
-[formal/cpu_main.psl](../../formal/cpu_main.psl), which states the requirement
-directly — whenever the upper eight bits of `R14` change, `fetch_valid_o` must
-assert — and so checks the syntactic trigger against the semantic one it stands
-in for.
+#### Only two instructions are ever at risk
+`INCRB`/`DECRB` does better than a full flush, because it is the instruction the
+ISA uses to enter and leave a subroutine and is therefore worth two extra
+signals between WRITE and DECODE. Exactly two instructions can have read the
+outgoing bank by the time the switch retires in WRITE:
+
+| | Where it is | What its register read did | Remedy |
+|---|---|---|---|
+| I1 | DECODE's output register | Issued a cycle ago, against the old bank. DECODE passes `src_val`/`dst_val` through as *live* wires, so the values are already gone. | Flush. |
+| I2 | DECODE's input | Being issued in this very cycle, still against the old bank: `reg_sr` does not take the new value until this cycle's clock edge. But nothing has accepted it yet. | Hold `fetch_ready_o` low for one cycle, so it reads again from the new bank. |
+
+Anything further back issues its read at least one cycle from now and picks up
+the new bank by itself, which is why the list stops at two.
+
+Neither I1 nor I2 is a hazard unless it actually *uses* a value that came out of
+the banked half of the register file. Writing `R0`-`R7` does not count: the write
+travels down the pipeline as a register *number* and is applied against whatever
+bank is current when it retires — the new one, which is the right one.
+`uses_bank` in [decode.vhd](decode.vhd) works that out from the instruction being
+decoded:
+
+* the source operand is consumed whenever there is one — as an ALU input in
+  register mode, as an address in every other — and only `CTRL` has none;
+* the destination operand is consumed when the opcode reads it (everything
+  except `MOVE`/`SWAP`/`NOT`/`CTRL`/`JMP`, whose flags come from the result
+  alone, see [alu_flags.vhd](sub/alu_flags.vhd)) or when it is not in register
+  mode, i.e. when the register holds a pointer.
+
+`MOVE R8, R0` uses neither, and that is the point of the whole exercise: it is
+the standard way to pass an argument into a freshly entered bank, and
+`MOVE @R13++, R15` — the return — reads nothing banked either. So `bank_switch_o`
+tells DECODE that a switch is retiring, DECODE holds its input only if that
+input uses a banked value, and `bank_stale_o` comes back saying whether I1 does,
+which is the only case that still flushes.
+
+An `INCRB`/`DECRB` therefore costs a full branch penalty only when the
+instruction immediately after it reads `R0`-`R7`, one cycle when the one after
+*that* does, and nothing at all otherwise. Measured: all ten bank switches in
+`test/prog.asm` now fall in the last category, taking that program from 15070 to
+15030 cycles — the branch penalty here is 4 cycles apiece.
+
+One implementation note that is easy to undo: `bank_switch_o` reads
+`prep_stage_i.is_crb`, a bit DECODE decodes from the instruction word and
+carries down in `t_stage`, rather than re-deriving "opcode is `CTRL` and
+command is `INCRB`/`DECRB`" in WRITE. That test is ten bits and two levels of
+logic sitting directly in front of `fetch_valid_o`; moving it two stages earlier
+trades one flip-flop per stage for two levels off the design's most
+timing-critical net, and the whole change closes timing with it and does not
+without.
+
+The qualification deliberately does **not** extend to the ordinary-`R14`-write
+term. `R14` and `R15` share `reg_addr_o(3 downto 1) = "111"`, which is what
+collapses "writes `R14`" and "writes `R15`" into a single product term; telling
+them apart to spare `R14` the flush would add an input to the most
+timing-critical net in the design in order to speed up a case `INCRB`/`DECRB`
+already covers. Note that the unconditional flush also stands in for the I2 hold:
+it discards I1 and I2 alike.
+
+`test/prog_hazard.asm` covers this in `H11`-`H17`: `H11`-`H13` that the flush
+happens when it must (`INCRB`/`DECRB`, an ordinary write to `R14`, and a write to
+`R14` that does *not* move the bank), `H14`-`H15` that a write-only instruction
+after the switch is neither flushed nor left in the old bank, and `H16`-`H17`
+that a destination read and a pointer read are still caught. Simulation of the
+CPU shows all three outcomes occurring: of the eighteen bank switches in that
+program, three flush, eight hold and seven are free.
+
+What the test programs cannot show is that the over-approximation is *complete*.
+That is `f_flush_on_bank_change` and `f_hold_on_bank_change` in
+[formal/cpu_main.psl](../../formal/cpu_main.psl). Both state the requirement
+directly — whenever the upper eight bits of `R14` change, an in-flight
+instruction that consumes a banked value must be either flushed (I1) or not
+accepted (I2) — and both derive "consumes a banked value" from the raw
+instruction encoding rather than from `uses_bank`, so narrowing `uses_bank`
+fails them. Verified by doing exactly that: dropping the destination half of
+`uses_bank` fails `f_hold_on_bank_change`, and forcing `bank_stale_o` low fails
+`f_flush_on_bank_change` and `f_flush_on_crb`.
 
 ### Self-modifying code
 The third thing that flushes the pipeline is a store into the instruction stream.
@@ -786,27 +864,36 @@ The assertions fall into four groups:
 
 * **Pipeline flush.** `fetch_valid_o` is not only the redirect back to FETCH; it
   is the reset pin of every flip-flop in DECODE and PREPARE, so everything that
-  raises it is a flush (see [Pipeline flush](#Pipeline-flush) above). Three
+  raises it is a flush (see [Pipeline flush](#Pipeline-flush) above). Four
   properties cover the two conditions that used to rest on simulation alone.
   `f_flush_on_bank_change` states the *requirement* rather than the
   implementation: whenever the value landing in `R14` changes the upper eight
-  bits relative to `prep2wr_stage.r14`, `fetch_valid_o` must assert. The RTL
-  never compares banks — it triggers syntactically on "writes `R14`, or is
-  `INCRB`/`DECRB`" — so this is a check that the over-approximation really does
-  cover every bank change, not a restatement of it. `f_flush_on_crb` pins the
-  `INCRB`/`DECRB` term specifically, since those two reach `R14` through the
-  Status Register port and the `reg_addr_o` term never sees them.
-  `f_flush_on_smc` does the same for self-modifying code, and deliberately
-  measures `mem_req_addr_o` — the address the store really goes to, after the
-  pre-decrement mux — rather than the `prep_stage_i.dst_val` that `smc_hit`
-  subtracts, so it constrains the window instead of copying it.
+  bits relative to `prep2wr_stage.r14`, and the instruction in DECODE's output
+  register consumes a banked value, `fetch_valid_o` must assert.
+  `f_hold_on_bank_change` is the same requirement one stage further back, where
+  refusing the instruction is an alternative to flushing it: on such a cycle,
+  DECODE must either flush or hold `fetch_ready_o` low. Both derive "consumes a
+  banked value" from the raw instruction encoding rather than from `uses_bank`,
+  which is the signal under test, so they check the over-approximation instead
+  of restating it — sabotaging either half of `uses_bank` fails one of them.
+  `f_flush_on_crb` pins the `INCRB`/`DECRB` term specifically, since those two
+  reach `R14` through the Status Register port and the `reg_addr_o` term never
+  sees them. `f_flush_on_smc` does the same for self-modifying code, and
+  deliberately measures `mem_req_addr_o` — the address the store really goes to,
+  after the pre-decrement mux — rather than the `prep_stage_i.dst_val` that
+  `smc_hit` subtracts, so it constrains the window instead of copying it.
 
-  The four `c_flush_*` covers show each antecedent is reachable.
-  `c_no_flush_far_store` is the one that runs the other way: it requires that a
-  store far from the program counter can retire *without* a flush. Flushing
-  unconditionally is functionally correct, so no assertion here would object to
-  it — but it costs +64% of the run time of `test/prog_interleave.asm`, and this
-  cover is what notices.
+  The `c_flush_*` covers show each antecedent is reachable, including the two
+  qualified ones (`c_flush_bank_used`, `c_hold_bank_used`).
+  `c_no_flush_far_store` is one of the two that run the other way: it requires
+  that a store far from the program counter can retire *without* a flush.
+  Flushing unconditionally is functionally correct, so no assertion here would
+  object to it — but it costs +64% of the run time of
+  `test/prog_interleave.asm`, and this cover is what notices. `c_crb_free` is
+  the other: an `INCRB`/`DECRB` that retires with neither a flush nor a hold. If
+  that stops being reachable, the bank-switch optimisation has been undone
+  without any assertion noticing. `c_crb_flush` and `c_crb_hold` cover the two
+  outcomes that do cost something.
 
 The Sequencer is additionally verified standalone in `formal/sequencer.psl`,
 where `prove` (k-induction) passes: output valid is a pure pass-through of input

@@ -391,17 +391,20 @@ survive.
 
 ### The timing problem
 
-`fetch_valid_o` currently fits a **single 6-input LUT**: `reg_we_o`, three
-address bits, `inst_done_o` and `is_crb` (see the note above `is_crb` in
-[write.vhd](../src/cpu_main/write.vhd)). An interrupt grant is a fourth term,
-which pushes it to two levels of logic on a net that is the reset pin of two
-entire pipeline stages.
+`fetch_valid_o` has three terms already: a write to `R14`/`R15` (`reg_we_o` and
+three address bits), a register bank switch (`inst_done_o`, `prep_stage_i.is_crb`
+and `bank_stale_i`) and a store into the instruction stream (see the "Register
+bank switch" note in [write.vhd](../src/cpu_main/write.vhd)). It used to fit a
+single 6-input LUT and no longer does. An interrupt grant is a fourth term on a
+net that is the reset pin of two entire pipeline stages, and the bank-switch work
+spent 0.072 ns of the margin quoted below getting the third one in.
 
-The budget is **+0.135 ns** — see [Utilization](README.md#Utilization), measured
-at commit `a9f2c0b`. For scale, adding the register-bank flush alone cost
-0.098 ns, and placement noise unrelated to any edit has been measured at up to
-0.284 ns. This is the single risk most likely to invalidate the approach, which
-is why it is measured first rather than last.
+The budget is **+0.093 ns** — see [Utilization](README.md#Utilization), measured
+at the 7.25 ns constraint. For scale, adding the register-bank flush alone cost
+0.098 ns, making it conditional cost a further 0.072 ns, and placement noise
+unrelated to any edit has been measured at up to 0.284 ns. This is the single
+risk most likely to invalidate the approach, which is why it is measured first
+rather than last.
 
 ## Test cases
 

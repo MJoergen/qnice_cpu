@@ -30,6 +30,10 @@ entity write is
       fetch_valid_o   : out std_logic;
       fetch_addr_o    : out std_logic_vector(15 downto 0);
 
+      -- Register bank switch, to and from DECODE. See below.
+      bank_switch_o   : out std_logic;                        -- combinatorial
+      bank_stale_i    : in  std_logic;
+
       inst_done_o     : out std_logic;
 
       -- Asserted for one clock cycle when a HALT instruction retires.
@@ -49,7 +53,6 @@ architecture synthesis of write is
 
    signal next_pc   : std_logic_vector(15 downto 0);
    signal wr_r15    : std_logic;
-   signal is_crb    : std_logic;
    signal smc_delta : std_logic_vector(15 downto 0);
    signal smc_hit   : std_logic;
 
@@ -237,12 +240,48 @@ begin
    -- pair "DECRB / MOVE R0, R9", the read goes out one cycle before the SR
    -- write lands.
    --
-   -- So a bank switch is flushed exactly the way a taken branch is: redirect
-   -- FETCH to the following instruction, which resets DECODE and PREPARE (see
-   -- the note at the top of cpu_main.vhd). The instruction that comes back has
-   -- its register read issued long after reg_sr has caught up. The cost is a
-   -- branch penalty on INCRB/DECRB, which is what the ISA uses to enter and
-   -- leave a subroutine -- rare, and cheaper than getting the wrong registers.
+   -- A bank switch can therefore be flushed exactly the way a taken branch is:
+   -- redirect FETCH to the following instruction, which resets DECODE and
+   -- PREPARE (see the note at the top of cpu_main.vhd). The instruction that
+   -- comes back has its register read issued long after reg_sr has caught up.
+   -- That is what the reg_addr_o term below still does for an ordinary write
+   -- to R14.
+   --
+   -- INCRB/DECRB does better than that, because it is common enough to be
+   -- worth the two extra signals. Only TWO instructions can ever have read the
+   -- outgoing bank:
+   --
+   --   I1, the one in DECODE's OUTPUT register. Its operands were read a cycle
+   --       ago against the old bank, and decode.vhd passes the register file's
+   --       outputs straight through (prep_stage_o.src_val/dst_val are live
+   --       wires, not flip-flops), so the values are already gone. Only a
+   --       flush can undo that.
+   --   I2, the one at DECODE's INPUT. Its read is going out in THIS cycle,
+   --       still against the old bank -- reg_sr does not take the new value
+   --       until this cycle's clock edge. But it has not been accepted yet, so
+   --       holding DECODE's ready low for this one cycle is enough: it is
+   --       re-read next cycle, from the new bank.
+   --
+   -- Anything further back issues its read at least one cycle from now and
+   -- sees the new bank by itself.
+   --
+   -- Neither I1 nor I2 is a hazard unless it actually USES a value out of the
+   -- banked half of the register file, which is what decode.vhd's uses_bank
+   -- works out -- see the comment there for why writing R0-R7 does not count.
+   -- That distinction is the point of the whole exercise: the standard thing
+   -- to do straight after INCRB is "MOVE R8, R0", copying an argument INTO the
+   -- new bank, and the standard thing after DECRB is "MOVE @R13++, R15";
+   -- neither reads anything banked. So:
+   --
+   --   * bank_switch_o tells DECODE that a switch is retiring. DECODE holds
+   --     its input for one cycle if, and only if, that input uses a banked
+   --     value.
+   --   * bank_stale_i comes back saying that I1 uses one, and only then is the
+   --     pipeline flushed.
+   --
+   -- INCRB/DECRB thus costs a full branch penalty only when the instruction
+   -- immediately after it reads R0-R7, one cycle when the one after THAT does,
+   -- and nothing at all otherwise.
    --
    -- The trigger is deliberately SYNTACTIC -- "this instruction writes R14, or
    -- it is INCRB/DECRB" -- and not a comparison of the new bank against the
@@ -264,10 +303,10 @@ begin
    -- the worst path landing on i_prepare/wr_stage_o_reg[alu_src_val]. The
    -- syntactic version below gives +0.246 ns and 4 LUTs FEWER than baseline.
    --
-   -- Everything below comes from stage REGISTERS instead -- prep_stage_i.inst
-   -- for the opcode, and reg_addr_o/reg_we_o, which p_reg builds out of
-   -- prep_stage_i.src_addr/dst_addr/res_reg and the microcodes. None of it
-   -- depends on the ALU, so the flush condition is ready early in the cycle.
+   -- Everything below comes from stage REGISTERS instead -- prep_stage_i.is_crb
+   -- and prep_stage_i.microcodes, and reg_addr_o/reg_we_o, which p_reg builds
+   -- out of prep_stage_i.src_addr/dst_addr/res_reg and the microcodes. None of
+   -- it depends on the ALU, so the flush condition is ready early in the cycle.
    --
    -- The price is that any write to R14 flushes, even one that leaves the bank
    -- alone. That covers "MOVE ST____C_, R14" and friends; they cost a branch
@@ -276,10 +315,21 @@ begin
    -- micro-op, not just the last -- this also covers R14 used as a POINTER,
    -- e.g. "MOVE @R14++, R0".
    --
+   -- The bank_stale_i qualification deliberately does NOT extend to that term.
+   -- R14 and R15 share reg_addr_o(3 downto 1) = "111", which is what collapses
+   -- "writes R14" and "writes R15" into one product term; telling them apart
+   -- to spare R14 the flush costs an extra input on the single most
+   -- timing-critical net in the design (fetch_valid_o is the reset pin of
+   -- every flip-flop in two stages) to speed up an instruction that INCRB and
+   -- DECRB already cover. Note the term also stands in for the I2 hold that
+   -- INCRB/DECRB gets: an unconditional flush discards I1 and I2 alike.
+   --
    -- f_flush_on_bank_change in formal/cpu_main.psl is what checks that this
    -- syntactic trigger really does cover every change of the bank bits: it
    -- compares the value landing in R14 against prep_stage_i.r14, which the RTL
-   -- here never does. Narrow the term below and that property objects.
+   -- here never does, and it qualifies the conclusion with its own reading of
+   -- the instruction encoding rather than with uses_bank. Narrow either term
+   -- below and that property objects.
 
 
    ------------------------------------------------------------
@@ -357,16 +407,19 @@ begin
    -- Register bank switch, continued
    ------------------------------------------------------------
 
-   is_crb <= '1' when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
-                      (prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INCRB or
-                       prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_DECRB) else
-             '0';
+   -- prep_stage_i.is_crb rather than a compare on prep_stage_i.inst here. The
+   -- test is "opcode = CTRL and command in {INCRB, DECRB}", ten bits and two
+   -- levels of logic, and it used to sit right in front of fetch_valid_o.
+   -- DECODE has the instruction word two stages earlier and nothing else to do
+   -- with it, so it decodes the bit there and carries it down in t_stage. It
+   -- is one flip-flop per stage against two levels off the design's most
+   -- timing-critical net.
+   bank_switch_o <= inst_done_o and prep_stage_i.is_crb;
 
    -- Note that R14 and R15 share reg_addr_o(3 downto 1) = "111", so the two
-   -- register-write terms collapse into one, and the whole expression fits a
-   -- single 6-input LUT: reg_we_o, three address bits, inst_done_o, is_crb.
+   -- register-write terms collapse into one: reg_we_o and three address bits.
    fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1))) or
-                    (inst_done_o and is_crb) or
+                    (bank_switch_o and bank_stale_i) or
                     (inst_done_o and prep_stage_i.microcodes(C_MEM_WRITE) and smc_hit);
 
 

@@ -148,7 +148,7 @@ register, and read while a multi-micro-op instruction is in flight; a
 post-increment pointer reused immediately; and the stack pointer written and
 then used as a pre-decrement pointer.
 
-`H11`-`H13` cover the register bank instead of a single register. `H11` and
+`H11`-`H17` cover the register bank instead of a single register. `H11` and
 `H12` switch banks — with `INCRB`/`DECRB` and with an ordinary write to `R14` —
 and then read `R0` from the very next instruction, as source and as destination.
 Both read the previous bank unless the bank switch flushes the pipeline, see
@@ -156,13 +156,27 @@ Both read the previous bank unless the bank switch flushes the pipeline, see
 the case that silently copies one bank's value into another. `H13` writes `R14`
 *without* changing the bank — the flag-setup idiom — and checks that `R0` still
 reads back correctly afterwards. Note it cannot check that no flush happened:
-the trigger is syntactic, so that write does flush, and the cost is invisible to
-a self-checking program. Only the cycle count would show it.
+the trigger for an ordinary `R14` write is syntactic, so that write does flush,
+and the cost is invisible to a self-checking program. Only the cycle count would
+show it.
+
+`H14`-`H17` cover the other side of the same mechanism: an `INCRB`/`DECRB` only
+flushes when an instruction already in flight *consumes* a banked value. `H14`
+and `H15` are the subroutine-prologue shape, where the instruction after the
+switch merely *writes* `R0` — no flush is needed, and the test checks both that
+the write is not lost and that it lands in the new bank rather than the old one.
+`H16` and `H17` are the two ways of consuming one that are easy to miss: `R0` as
+a *destination* operand (`ADD 0x0000, R0`) and `R0` as a *pointer*
+(`MOVE 0x9999, @R0`). These are pass/fail tests of the resulting values, not of
+which mechanism fired; what shows that all three outcomes occur is a probe on
+the RTL (of the eighteen bank switches in this program, three flush, eight hold
+DECODE for a cycle, and seven cost nothing) and the `c_crb_*` covers in
+[formal/cpu_main.psl](../formal/cpu_main.psl).
 
 `prog.asm` also has a `L_BANK_00` section checking that banking works at all —
 `R0` is banked, `R8` is not, and a value survives a round trip. Its reads are
 two or more instructions after their `INCRB`/`DECRB`, so it does *not* cover the
-hazard above; that is what `H11`-`H13` are for. The exhaustive walk over all 256
+hazard above; that is what `H11`-`H17` are for. The exhaustive walk over all 256
 banks that follows it is left commented out, since it dominates the simulation
 time of the whole program.
 

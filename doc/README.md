@@ -58,7 +58,7 @@ The thick arrows indicate the AXI-like pipeline handshake, consisting of a
 `VALID` signal from source to sink and a `READY` signal from sink to source.
 This handshake is used to control back-pressure.
 
-There are two sources of back-pressure in the design:
+There are three sources of back-pressure in the design:
 * An instruction may expand into up to three micro-operations. The Sequencer in
   the PREPARE stage issues one per clock cycle and holds its ready signal low
   until the last one has been accepted, which stalls DECODE, which in turn
@@ -66,6 +66,13 @@ There are two sources of back-pressure in the design:
 * The Memory module will generate back-pressure while waiting for the result
   read from the memory bus. This is part of the Wishbone protocol and allows
   for an I/O device to take more than one clock cycle to respond.
+* A retiring `INCRB`/`DECRB` stalls DECODE for a single cycle, but only if the
+  instruction DECODE is about to accept would read one of the banked registers
+  `R0`-`R7` — its register read is going out against the outgoing bank, and one
+  cycle of back-pressure is enough to make it read again against the new one.
+  This is the cheap half of
+  [Register bank switch](../src/cpu_main/README.md#Register-bank-switch); the
+  expensive half is a pipeline flush.
 
 
 ## Detailed design description
@@ -247,6 +254,27 @@ same bus traffic simply happens a cycle earlier. Cost: 6 LUTs and 2 flip-flops
 in FETCH, and a new requirement that the slave acknowledge in order — see
 [fetch/README.md](../src/fetch/README.md#Redirect).
 
+**Done: a register bank switch no longer always flushes the pipeline.** Changing
+the upper eight bits of `R14` moves the page of `R0`-`R7` that the Register
+module presents, and DECODE issues its register read two stages ahead of WRITE,
+so instructions already in flight can have read the outgoing bank. That used to
+mean an unconditional flush — a full branch penalty on every `INCRB`/`DECRB`,
+which is what the ISA uses to enter and leave a subroutine. Only two
+instructions are ever at risk, though, and only if they actually *consume* a
+value out of the banked registers: writing `R0`-`R7` is safe by itself, because
+the write travels down the pipeline as a register number and lands in the bank
+that is current when it retires. So the one in DECODE's output register is
+flushed only if it reads a banked register, and the one at DECODE's input is
+merely held for a cycle. The standard subroutine prologue `INCRB` /
+`MOVE R8, R0` and epilogue `DECRB` / `MOVE @R13++, R15` read nothing banked and
+now cost nothing at all: all ten bank switches in `test/prog.asm` are free,
+**−0.3%** of its run time (15070 → 15030 cycles, i.e. 4 cycles per switch), and
+the saving scales with how bank-switch-heavy a program is rather than showing up
+in this suite, which barely uses them. Cost: 23 LUTs *fewer* and 3 flip-flops
+more, and 0.072 ns of timing margin that the change does not explain — see
+[The critical path](#The-critical-path). More detail under
+[Register bank switch](../src/cpu_main/README.md#Register-bank-switch).
+
 **Rejected: zero-latency Wishbone slaves.** Both bus masters can be taught to
 accept an `ACK` in the *same* cycle the slave takes the request — `STB` and
 `ACK` together, read data valid immediately — so that an operand fetch costs no
@@ -344,7 +372,7 @@ Remaining ideas:
   the register bank, which must reach the flush described under
   [Register bank switch](../src/cpu_main/README.md#Register-bank-switch); and an
   interrupt would be a fourth driver of `fetch_valid_o`, a net whose timing
-  history is documented above `is_crb` in the same file.
+  history is documented under "Register bank switch" in the same file.
   [interrupts.md](interrupts.md) works this up in full: what the ISA requires,
   the one behavioural question to settle first, the test cases, and the order
   the work should happen in. `EXC` turns out to be out of scope — it has never
@@ -353,7 +381,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `627cd1e`.
+Measured with Vivado 2022.2 on commit `91ac9ff-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -370,21 +398,21 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  886 |     63400 | 1.40 |
-| Slice Registers |  598 |    126800 | 0.47 |
-| Slices          |  294 |     15850 | 1.85 |
+| Slice LUTs      |  948 |     63400 | 1.50 |
+| Slice Registers |  601 |    126800 | 0.47 |
+| Slices          |  325 |     15850 | 2.05 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 8.50 ns constraint: **WNS +0.316 ns**, no failing endpoints. The
+Timing at the 7.25 ns constraint: **WNS +0.093 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[r14][2]` to
-`i_prepare/wr_stage_o_reg[alu_src_val][0]`: 8 logic levels, with 77% of the
-delay in routing rather than logic.
+The worst setup path runs from `i_prepare/wr_stage_o_reg[inst][13]` to
+`i_prepare/wr_stage_o_reg[dst_val][3]`: 7 logic levels, with 81% of the delay
+in routing rather than logic.
 <!-- end -->
 
 **In the build measured above, the worst path is the one this section
@@ -459,6 +487,19 @@ of the same net and cost **0.334 ns** — the whole margin — for a precision t
 only saves a pipeline flush on `MOVE <flags>, R14`. See "Register bank switch"
 in [write.vhd](../src/cpu_main/write.vhd).
 
+**Making that flush conditional cost 0.072 ns**, and is the sharpest example on
+this page of the noise described below. Skipping the flush when nothing in
+flight reads a banked register (see
+[Register bank switch](../src/cpu_main/README.md#Register-bank-switch)) removes
+logic rather than adding it — 971 LUTs to 948 — and still gave back +0.165 ns to
++0.093 ns at the 7.25 ns constraint, on the same PREPARE loop as always, which
+the new logic is nowhere near. The first attempt gave back *all* of it: +0.165
+to −0.036 ns, four failing endpoints and no bitstream, at 914 LUTs — smaller
+still. What bought the margin back was moving the `INCRB`/`DECRB` decode two
+stages earlier, out of `fetch_valid_o`'s cone and into a `t_stage` bit: ten bits
+of compare and two levels of logic off that net, in exchange for one flip-flop
+per stage. Three builds, three placements, the same critical path throughout.
+
 Two things to know before trying to optimise it further:
 
 * **It is now routing-bound, not logic-bound.** Interconnect accounts for most
@@ -514,22 +555,22 @@ written:
 
 | Module          | LUTs | FFs |
 | --------------- | ---- | --- |
-| FETCH           |   58 |  92 |
-| CACHE (icache)  |   23 |  66 |
-| DECODE          |   53 |  74 |
-| PREPARE         |   79 | 131 |
-| WRITE           |  461 |   0 |
+| FETCH           |   63 |  92 |
+| CACHE (icache)  |   40 |  66 |
+| DECODE          |   59 |  76 |
+| PREPARE         |   79 | 132 |
+| WRITE           |  463 |   0 |
 | Registers       |  166 | 142 |
-| Memory          |   56 |  74 |
-| Glue            |    7 |   1 |
-| **CPU total**   |  903 | 580 |
+| Memory          |   59 |  74 |
+| Glue            |    8 |   1 |
+| **CPU total**   |  937 | 583 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 51% of the CPU's LUTs**, and 247 of its 461 are the ALU
+* **WRITE dominates, at 49% of the CPU's LUTs**, and 247 of its 463 are the ALU
   (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
@@ -541,7 +582,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (903 vs 886 LUTs). That is expected,
+The two tables do not add up to each other (937 vs 948 LUTs). That is expected,
 and note that the *sign* of the gap is not stable — it has landed both ways
 round across builds. The per-module figure comes first and stops after synthesis
 with `-flatten_hierarchy none`, which forbids optimisation across module

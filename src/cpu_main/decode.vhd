@@ -25,6 +25,10 @@ entity decode is
       reg_dst_val_i  : in  std_logic_vector(15 downto 0);
       reg_r14_i      : in  std_logic_vector(15 downto 0);
 
+      -- Register bank switch. See "Register bank switch" in write.vhd.
+      bank_switch_i  : in  std_logic;
+      bank_stale_o   : out std_logic;                     -- combinatorial
+
       -- To PREPARE
       prep_valid_o   : out std_logic;
       prep_ready_i   : in  std_logic;
@@ -75,6 +79,11 @@ architecture synthesis of decode is
    signal src_memory      : std_logic; -- Does source operand involve memory?
    signal dst_memory      : std_logic; -- Does destination operand involve memory?
 
+   -- Does the instruction consume a value read out of the banked registers?
+   signal uses_bank   : std_logic; -- The instruction at this stage's input
+   signal uses_bank_d : std_logic; -- The instruction in the output register
+   signal is_crb      : std_logic; -- Is the instruction at the input INCRB/DECRB?
+
    -- microcode address bitmap:
    signal microcode_addr  : std_logic_vector(3 downto 0);
    signal microcode_value : std_logic_vector(35 downto 0);
@@ -87,6 +96,7 @@ begin
 
    fetch_double_o <= immediate_src or immediate_dst;
    fetch_ready_o  <= '0' when fetch_double_o and not fetch_double_i else -- Wait for immediate value
+                     '0' when bank_switch_i and uses_bank           else -- Wait for the new bank
                      prep_ready_i;
 
 
@@ -134,6 +144,52 @@ begin
 
 
    ------------------------------------------------------------
+   -- Register bank switch
+   ------------------------------------------------------------
+
+   -- Does this instruction consume a value that came out of the BANKED half of
+   -- the register file, R0-R7? Only such a value goes stale when INCRB/DECRB
+   -- moves the bank underneath an already-issued read; see the long comment in
+   -- write.vhd. Writing R0-R7 is not affected -- the write leaves this stage
+   -- as a register NUMBER and is applied against whatever bank is current when
+   -- it retires, which is the new one, i.e. the right one.
+   --
+   -- Both operands are always read from the register file. What differs is
+   -- whether the value read is used:
+   --
+   --   * the source value always is, when the instruction has a source operand
+   --     -- as an ALU input in register mode, as an address in every other;
+   --   * the destination value only when the instruction reads from the
+   --     destination, or the destination lives in memory and the value is
+   --     therefore a pointer. "MOVE R8, R0" uses neither, which is the whole
+   --     point of this signal: it is the standard way to pass an argument into
+   --     a freshly entered register bank, and it is not a hazard.
+   --
+   -- reads_from_dst is '0' for exactly those opcodes that have no destination
+   -- operand at all (JMP) or ignore its previous value (MOVE/SWAP/NOT/CTRL --
+   -- their flags come from the result alone, see alu_flags.vhd), so it needs
+   -- no separate has_dst_operand term. reg_dst_addr_o rather than the raw
+   -- instruction field, because JMP substitutes R13 there.
+   uses_bank <= (has_src_operand and not reg_src_addr_o(3)) or
+                ((reads_from_dst or dst_memory) and not reg_dst_addr_o(3));
+
+   -- Is this a bank switch? Decoded here and carried down the pipeline in
+   -- t_stage rather than re-derived from prep_stage_i.inst in WRITE: it lands
+   -- on fetch_valid_o, and that net cannot afford a ten-bit compare in front
+   -- of it. See "Register bank switch" in write.vhd.
+   is_crb <= '1' when fetch_data_i(R_OPCODE) = C_OPCODE_CTRL and
+                      (fetch_data_i(R_CTRL_CMD) = C_CTRL_INCRB or
+                       fetch_data_i(R_CTRL_CMD) = C_CTRL_DECRB) else
+             '0';
+
+   -- The instruction in this stage's output register read its operands one
+   -- cycle before it got here, i.e. strictly before the bank switch now
+   -- retiring in WRITE could reach the register file. If it uses a banked
+   -- value, that value is from the outgoing bank and only a flush can undo it.
+   bank_stale_o <= prep_valid_o and uses_bank_d;
+
+
+   ------------------------------------------------------------
    -- Microcode generation
    ------------------------------------------------------------
 
@@ -176,6 +232,8 @@ begin
             prep_stage_o.dst_mode   <= fetch_data_i(R_DST_MODE);
             prep_stage_o.dst_imm    <= immediate_dst;
             prep_stage_o.res_reg    <= reg_dst_addr_o;
+            prep_stage_o.is_crb     <= is_crb;
+            uses_bank_d             <= uses_bank;
 
             -- Treat jumps as a special case
             if fetch_data_i(R_OPCODE) = C_OPCODE_JMP then

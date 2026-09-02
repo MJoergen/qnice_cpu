@@ -37,7 +37,8 @@ vunit i_cpu_main(cpu_main(synthesis))
        stable(dec2prep_stage.dst_addr) and
        stable(dec2prep_stage.dst_mode) and
        stable(dec2prep_stage.dst_imm) and
-       stable(dec2prep_stage.res_reg)};
+       stable(dec2prep_stage.res_reg) and
+       stable(dec2prep_stage.is_crb)};
 
    -- The three live fields really are pure pass-throughs. These hold in every
    -- cycle, stalled or not, and would catch someone registering them by
@@ -488,7 +489,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- end of write.vhd): a write to R15, a register bank switch, and a store
    -- that can land on an instruction already read. Only the first was covered
    -- by this file; the other two rested on simulation alone
-   -- (test/prog_hazard.asm H11-H13, test/prog_self_modifying.asm).
+   -- (test/prog_hazard.asm H11-H18, test/prog_self_modifying.asm).
    --
    -- Both are trigger conditions that invite "simplification" in the name of
    -- timing -- which has already cost the entire slack margin once, see the
@@ -507,11 +508,65 @@ vunit i_cpu_main(cpu_main(synthesis))
    f_r14_next <= reg_val_o when reg_we_o = '1' and reg_addr_o = 14 else
                  reg_r14_o;
 
+   -- Does an instruction CONSUME a value read out of the banked half of the
+   -- register file, R0-R7? Only such a value can go stale when the bank moves
+   -- underneath an already-issued read; a WRITE to R0-R7 travels down the
+   -- pipeline as a register number and lands in whatever bank is current when
+   -- it retires, which is the new one.
+   --
+   -- Both of these are written from the INSTRUCTION ENCODING -- the raw
+   -- opcode, source register, destination register and destination mode
+   -- fields -- and not from decode.vhd's uses_bank, nor from the src_addr /
+   -- dst_addr fields DECODE derives from them. That is deliberate: uses_bank
+   -- is the thing under test. Narrowing it (forgetting that ADD reads its
+   -- destination, say, or that @R0 uses R0 as a pointer) has to fail here.
+   --
+   -- The source operand is consumed whenever there is one -- as an ALU input
+   -- in register mode, as an address otherwise -- and only CTRL has none. The
+   -- destination operand is consumed when the opcode reads it (everything
+   -- except MOVE/SWAP/NOT/CTRL/JMP, whose flags come from the result alone)
+   -- or when it is not in register mode, i.e. when the register holds a
+   -- pointer. Bit 3 of a register number is the one that says "upper,
+   -- unbanked": inst(11) for the source field, inst(5) for the destination.
+   --
+   -- JMP is excluded from the pointer term because DECODE replaces its
+   -- destination with R13, which is unbanked anyway.
+
+   signal f_prep_uses_bank  : std_logic;
+   signal f_fetch_uses_bank : std_logic;
+
+   f_prep_uses_bank <= '1' when
+      (dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL and
+       dec2prep_stage.inst(11) = '0') or
+      (dec2prep_stage.inst(5) = '0' and
+       ((dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_MOVE and
+         dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_SWAP and
+         dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_NOT and
+         dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL and
+         dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP) or
+        (dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP and
+         dec2prep_stage.inst(1 downto 0) /= work.cpu_constants.C_MODE_REG)))
+      else '0';
+
+   f_fetch_uses_bank <= '1' when
+      (fetch_data_i(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL and
+       fetch_data_i(11) = '0') or
+      (fetch_data_i(5) = '0' and
+       ((fetch_data_i(15 downto 12) /= work.cpu_constants.C_OPCODE_MOVE and
+         fetch_data_i(15 downto 12) /= work.cpu_constants.C_OPCODE_SWAP and
+         fetch_data_i(15 downto 12) /= work.cpu_constants.C_OPCODE_NOT and
+         fetch_data_i(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL and
+         fetch_data_i(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP) or
+        (fetch_data_i(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP and
+         fetch_data_i(1 downto 0) /= work.cpu_constants.C_MODE_REG)))
+      else '0';
+
    -- (1) THE REQUIREMENT. If the upper eight bits of R14 change, the register
-   -- bank changes with them, and the pipeline must be flushed. DECODE issues
-   -- its register read two stages ahead of WRITE, so the instruction after the
-   -- switch has already read the OLD bank by the time the new one lands, and
-   -- only a flush can undo that.
+   -- bank changes with them. DECODE issues its register read two stages ahead
+   -- of WRITE, so the instruction sitting in DECODE's output register read its
+   -- operands a cycle ago, against the OLD bank, and DECODE passes the
+   -- register file's outputs through as live wires -- the values are gone. If
+   -- that instruction consumes a banked value, only a flush can undo it.
    --
    -- The reference for "old bank" is prep2wr_stage.r14, i.e. the Status
    -- Register as it stood for the instruction now retiring -- not reg_r14_i,
@@ -524,10 +579,29 @@ vunit i_cpu_main(cpu_main(synthesis))
    f_flush_on_bank_change : assert always
       {rst_i = '0' and prep2wr_valid = '1' and
        ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
-       f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8)}
+       f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
+       dec2prep_valid = '1' and f_prep_uses_bank = '1'}
       |-> {fetch_valid_o = '1'};
 
-   -- (2) THE MECHANISM for the one bank change that does not go through a
+   -- (2) THE SAME REQUIREMENT, one stage further back. The instruction at
+   -- DECODE's INPUT is issuing its register read in this very cycle, and
+   -- reg_sr does not take the new bank until this cycle's clock edge, so that
+   -- read is against the old bank too. It has not been accepted yet, though,
+   -- so there is a second way out: DECODE may simply refuse it and let it read
+   -- again next cycle. Flush or hold -- what it must NOT do is take it.
+   --
+   -- Anything further back than this issues its read at least one cycle from
+   -- now and needs nothing: hence exactly two properties, not a family of
+   -- them.
+   f_hold_on_bank_change : assert always
+      {rst_i = '0' and prep2wr_valid = '1' and
+       ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
+       f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
+       fetch_valid_i = '1' and f_fetch_uses_bank = '1' and
+       fetch_valid_o = '0'}
+      |-> {fetch_ready_o = '0'};
+
+   -- (3) THE MECHANISM for the one bank change that does not go through a
    -- register write at all. INCRB and DECRB reach R14 through the Status
    -- Register port, so the reg_addr_o term of fetch_valid_o never sees them;
    -- they need the separate is_crb term. Dropping it is the regression this
@@ -536,10 +610,11 @@ vunit i_cpu_main(cpu_main(synthesis))
       {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
        prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
        (prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB or
-        prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB)}
+        prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB) and
+       dec2prep_valid = '1' and f_prep_uses_bank = '1'}
       |-> {fetch_valid_o = '1'};
 
-   -- (3) SELF-MODIFYING CODE. A store that can land on an instruction some
+   -- (4) SELF-MODIFYING CODE. A store that can land on an instruction some
    -- stage has already read must flush. Everything already read lies in
    -- [next_pc, next_pc+8), and next_pc is addr+1 or addr+2, so in terms of the
    -- STORE ADDRESS the danger zone is addr+1 .. addr+10 -- hence the 11 below.
@@ -717,6 +792,42 @@ vunit i_cpu_main(cpu_main(synthesis))
    c_flush_decrb       : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
                                 prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
                                 prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB};
+
+   -- The two flush properties qualify their conclusion on an in-flight
+   -- instruction that actually consumes a banked value, so the qualified
+   -- antecedent needs a cover of its own: without this the assertions could
+   -- hold merely because f_prep_uses_bank / f_fetch_uses_bank are never true
+   -- at the same time as a bank change.
+   c_flush_bank_used   : cover {rst_i = '0' and prep2wr_valid = '1' and
+                                ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
+                                f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
+                                dec2prep_valid = '1' and f_prep_uses_bank = '1'};
+   c_hold_bank_used    : cover {rst_i = '0' and prep2wr_valid = '1' and
+                                ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
+                                f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
+                                fetch_valid_i = '1' and f_fetch_uses_bank = '1'};
+
+   -- The three outcomes of an INCRB/DECRB retiring, which is the whole point
+   -- of bank_switch/bank_stale: a full flush, a one-cycle hold of DECODE's
+   -- input, and -- the case worth having -- neither. If the last of these
+   -- stops being reachable, the optimisation has been undone.
+   c_crb_flush : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                        prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                        (prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB or
+                         prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB) and
+                        fetch_valid_o = '1'};
+   c_crb_hold  : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                        prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                        (prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB or
+                         prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB) and
+                        fetch_valid_o = '0' and fetch_valid_i = '1' and fetch_double_o = '0' and
+                        dec2prep_ready = '1' and fetch_ready_o = '0'};
+   c_crb_free  : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                        prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                        (prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB or
+                         prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB) and
+                        fetch_valid_o = '0' and fetch_valid_i = '1' and dec2prep_valid = '1' and
+                        fetch_ready_o = '1'};
    c_flush_smc         : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
                                 mem_req_valid_o = '1' and
                                 mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '1' and

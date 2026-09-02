@@ -170,20 +170,39 @@ register write at the end of most instructions); `R13` (Stack Pointer) is an ord
 handled in DECODE.
 
 The upper eight bits of `R14` select which of the 256 pages of `R0`-`R7` the register file
-presents, and **changing them flushes the pipeline** — `is_crb` in `src/cpu_main/write.vhd`, plus
-the `reg_addr_o` term next to it, join `fetch_valid_o` and redirect FETCH to the next instruction.
-This is not an optimisation choice: DECODE issues a register read two stages ahead of WRITE, so the
-instruction after an `INCRB` has already read the old bank by the time the new one lands, and
-forwarding the bank into the read address cannot fix it (the address reaches the RAM a cycle before
-the new bank exists). The trigger is deliberately **syntactic** — "writes `R14`, or is
-`INCRB`/`DECRB`" — and NOT a comparison of the new bank against the old: the precise form is more
-selective but costs the entire timing margin, since `fetch_valid_o` is the reset pin of every
-flip-flop in DECODE and PREPARE. So `MOVE ST____C_, R14` does cost a branch penalty. Do not
-"optimise" this without reading the measured numbers in the comment above `is_crb`.
-`test/prog_hazard.asm` `H11`-`H13` pin the behaviour down (before the flush existed, `INCRB` /
-`ADD 0, R0` silently copied one bank's `R0` into the next bank's), and `f_flush_on_bank_change` in
-`formal/cpu_main.psl` states what the syntactic over-approximation has to cover: whenever the bank
-bits actually change, `fetch_valid_o` must assert. See
+presents, and **changing them costs a pipeline flush unless nothing already in flight would read
+the old bank**. DECODE issues a register read two stages ahead of WRITE, so the instruction after
+an `INCRB` has already read the old bank by the time the new one lands, and forwarding the bank
+into the read address cannot fix it (the address reaches the RAM a cycle before the new bank
+exists). Exactly two instructions can be affected — the one in DECODE's output register and the one
+at its input — and only if they *consume* a banked value: WRITING `R0`-`R7` is safe, because the
+write carries a register number down the pipeline and lands in whatever bank is current when it
+retires, which is the new one. So `uses_bank` in `src/cpu_main/decode.vhd` classifies each
+instruction, `bank_switch_o`/`bank_stale_i` carry the two bits between WRITE and DECODE, and an
+`INCRB`/`DECRB` flushes only when the instruction in DECODE's output register reads a banked
+register, holds DECODE for one cycle when the one at its input does, and costs nothing otherwise —
+which is the case for the standard `INCRB` / `MOVE R8, R0` prologue and `DECRB` /
+`MOVE @R13++, R15` epilogue. All ten bank switches in `prog.asm` are now free (15070 → 15030
+cycles, i.e. a 4-cycle branch penalty apiece). One detail is load-bearing for TIMING rather than
+function: `is_crb` is decoded in DECODE and carried in `t_stage`, not re-derived from
+`prep_stage_i.inst` in WRITE. Deriving it there puts a ten-bit compare in front of `fetch_valid_o`
+and the design **does not build** (WNS −0.036 ns at 7.25 ns, 4 failing endpoints); with the
+precomputed bit it closes at +0.093 ns.
+
+An ordinary write to `R14` still flushes **unconditionally**, and its trigger is deliberately
+**syntactic** — "writes `R14`, or writes `R15`", collapsed into a single product term because the
+two share `reg_addr_o(3 downto 1)` — and NOT a comparison of the new bank against the old: the
+precise form is more selective but costs the entire timing margin, since `fetch_valid_o` is the
+reset pin of every flip-flop in DECODE and PREPARE. So `MOVE ST____C_, R14` does cost a branch
+penalty. Do not "optimise" either half of this without reading the measured numbers in the "Register bank
+switch" comment in `write.vhd`.
+`test/prog_hazard.asm` `H11`-`H17` pin the behaviour down (before the flush existed, `INCRB` /
+`ADD 0, R0` silently copied one bank's `R0` into the next bank's; `H14`-`H15` are the write-only
+case that must NOT flush), and `f_flush_on_bank_change` / `f_hold_on_bank_change` in
+`formal/cpu_main.psl` state what `uses_bank` has to cover: whenever the bank bits actually change,
+an in-flight instruction that consumes a banked value must be flushed or refused. Both derive
+"consumes a banked value" from the raw instruction encoding rather than from `uses_bank`, so
+narrowing `uses_bank` fails them. See
 [src/cpu_main/README.md](src/cpu_main/README.md#Register-bank-switch).
 
 ### Microcode / instruction decomposition

@@ -78,6 +78,11 @@ architecture synthesis of cpu_main is
    signal prep2wr_ready : std_logic;
    signal prep2wr_stage : t_stage;
 
+   -- WRITE to DECODE and back: register bank switch. See the "Register bank
+   -- switch" comment in write.vhd.
+   signal bank_switch : std_logic;
+   signal bank_stale  : std_logic;
+
 begin
 
    ------------------------------------------------------------
@@ -100,6 +105,8 @@ begin
          reg_dst_addr_o => reg_dst_reg_o,
          reg_dst_val_i  => reg_dst_val_i,
          reg_r14_i      => reg_r14_i,
+         bank_switch_i  => bank_switch,
+         bank_stale_o   => bank_stale,
          prep_valid_o   => dec2prep_valid,
          prep_ready_i   => dec2prep_ready,
          prep_stage_o   => dec2prep_stage
@@ -152,6 +159,8 @@ begin
          reg_val_o       => reg_val_o,
          fetch_valid_o   => fetch_valid_o,
          fetch_addr_o    => fetch_addr_o,
+         bank_switch_o   => bank_switch,
+         bank_stale_i    => bank_stale,
          inst_done_o     => inst_done_o,
          halt_o          => halt_o
       ); -- i_write

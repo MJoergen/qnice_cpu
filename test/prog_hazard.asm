@@ -175,8 +175,123 @@ H13             MOVE    0x0000, R14     ; bank 0
                 MOVE    0x0005, R14     ; flags only, same bank
                 MOVE    R0, R9
                 CMP     R9, 0xDDDD
-                ABRA    EXIT, Z
+                ABRA    H14, Z
 E_H13           HALT
+
+; ---------------------------------------------------------------
+; H14: the subroutine-prologue shape. The instruction right after INCRB only
+;      WRITES a banked register, which is not a hazard: the write carries a
+;      register NUMBER down the pipeline and lands in whatever bank is current
+;      when it retires, i.e. the new one. So it must survive the switch, and it
+;      must not land in the old bank either. Reading R0 back on both sides of
+;      the switch is what notices if it did.
+; ---------------------------------------------------------------
+H14             MOVE    0x0000, R14     ; bank 0
+                MOVE    0x1234, R0
+                INCRB                   ; bank 1
+                MOVE    0x5678, R0      ; write-only: no flush needed
+                MOVE    R0, R9          ; must read bank 1
+                DECRB                   ; bank 0
+                MOVE    R0, R10         ; must read bank 0
+                CMP     R9, 0x5678
+                ABRA    E_H14, !Z
+                CMP     R10, 0x1234
+                ABRA    H15, Z
+E_H14           HALT
+
+; ---------------------------------------------------------------
+; H15: the same shape with TWO write-only instructions behind the switch, so
+;      that both of the instructions that can have read the outgoing bank are
+;      harmless at once. Both values still have to land in the NEW bank, and
+;      the old bank has to come back intact.
+; ---------------------------------------------------------------
+H15             MOVE    0x0000, R14     ; bank 0
+                MOVE    0xBEEF, R0
+                MOVE    0xCAFE, R1
+                INCRB                   ; bank 1
+                MOVE    0x1111, R0      ; two write-only instructions in flight
+                MOVE    0x2222, R1
+                MOVE    R0, R9          ; must read bank 1
+                MOVE    R1, R10
+                DECRB                   ; bank 0
+                MOVE    R0, R11         ; must read bank 0
+                MOVE    R1, R12
+                CMP     R9, 0x1111
+                ABRA    E_H15, !Z
+                CMP     R10, 0x2222
+                ABRA    E_H15, !Z
+                CMP     R11, 0xBEEF
+                ABRA    E_H15, !Z
+                CMP     R12, 0xCAFE
+                ABRA    H16, Z
+E_H15           HALT
+
+; ---------------------------------------------------------------
+; H16: the instruction right after the switch reads a banked register as its
+;      DESTINATION operand -- ADD, not MOVE -- which is the case that silently
+;      accumulates into the wrong bank if the flush is skipped.
+; ---------------------------------------------------------------
+H16             MOVE    0x0000, R14     ; bank 0
+                MOVE    0x0007, R0
+                INCRB                   ; bank 1
+                MOVE    0x0030, R0
+                DECRB                   ; bank 0
+                ADD     0x0000, R0      ; must read bank 0's 0x0007
+                CMP     R0, 0x0007
+                ABRA    H17, Z
+E_H16           HALT
+
+; ---------------------------------------------------------------
+; H17: the instruction right after the switch uses a banked register as a
+;      POINTER. The value never reaches the ALU, but it is read out of the
+;      register file just the same, so it goes stale in exactly the same way
+;      and the store would land at the other bank's address.
+; ---------------------------------------------------------------
+H17             MOVE    0x0000, R14     ; bank 0
+                MOVE    D_P0, R0
+                INCRB                   ; bank 1
+                MOVE    D_P1, R0
+                DECRB                   ; bank 0
+                MOVE    0x9999, @R0     ; must store through bank 0's pointer
+                MOVE    D_P0, R9
+                MOVE    @R9, R10
+                MOVE    D_P1, R9
+                MOVE    @R9, R11
+                CMP     R10, 0x9999
+                ABRA    E_H17, !Z
+                CMP     R11, 0x0000
+                ABRA    H18, Z
+E_H17           HALT
+
+; ---------------------------------------------------------------
+; H18: back-to-back INCRB, i.e. a bank switch retiring while the next one is
+;      already in the pipeline. The second one derives its new R14 from the
+;      value the first one is writing in that very cycle, forwarded through the
+;      register file's Status Register port; reading the stale R14 instead
+;      would leave it one bank short. INCRB and DECRB consume no banked value
+;      themselves, so this also runs a switch straight into another one with
+;      nothing in between for the flush to key on.
+; ---------------------------------------------------------------
+H18             MOVE    0x0000, R14     ; bank 0
+                MOVE    0x1010, R0
+                INCRB
+                INCRB                   ; bank 2
+                CMP     0x0201, R14     ; both increments landed
+                ABRA    E_H18, !Z
+                MOVE    0x2020, R0      ; bank 2's R0
+                DECRB
+                DECRB                   ; bank 0
+                MOVE    R0, R9          ; must read bank 0
+                CMP     R9, 0x1010
+                ABRA    E_H18, !Z
+                INCRB
+                INCRB                   ; bank 2 again
+                MOVE    R0, R10         ; must read bank 2
+                DECRB
+                DECRB                   ; bank 0
+                CMP     R10, 0x2020
+                ABRA    EXIT, Z
+E_H18           HALT
 
 ; ---------------------------------------------------------------
 EXIT            MOVE    0x0000, R14     ; leave the register bank at 0
@@ -188,5 +303,9 @@ EXIT            MOVE    0x0000, R14     ; leave the register bank at 0
 OK              .ASCII_W "OK\n"
 D_A             .DW     0xAAAA
 D_ZERO          .DW     0x0000
+; H17's two scratch words. Deliberately NOT adjacent to D_STACK: H10 pushes
+; through "@--R13", which writes the word BELOW the D_STACK label.
+D_P0            .DW     0x0000
+D_P1            .DW     0x0000
 D_B             .DW     0x0000, 0x0000
 D_STACK         .DW     0x0000, 0x0000
