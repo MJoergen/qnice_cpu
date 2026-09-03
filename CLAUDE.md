@@ -98,7 +98,7 @@ vsg release — the pin is load-bearing, because VSG adds and re-scopes rules be
 `vsg.yml` only overrides the defaults it knows about, so an unpinned bump can turn the job red
 with no VHDL change at all.
 
-**The tree is clean: zero errors.** What remains is 42 `length_001` warnings, which are the
+**The tree is clean: zero errors.** What remains is 40 `length_001` warnings, which are the
 100-column *target* of CODING_STYLE.md section 3 advising rather than failing; warnings do not fail
 the job. Every rule VSG applies here is now either stated in CODING_STYLE.md or deliberately
 disabled in `vsg.yml` with the reason written next to it, so wanting to change a `vsg.yml` rule is
