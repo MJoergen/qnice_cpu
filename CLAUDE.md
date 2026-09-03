@@ -261,6 +261,56 @@ flip-flop in DECODE and PREPARE, so the comparison must subtract **raw stage reg
 flush costs cycles, not correctness. `test/prog_self_modifying.asm` covers both edges;
 see [doc/README.md](doc/README.md#Self-modifying-code).
 
+### Early redirect (unconditional branches)
+
+A branch normally costs **four cycles**: one to register the new PC in FETCH, one for the
+instruction memory's read latency, one in the Icache, and one because DECODE and PREPARE are then
+empty. Measured on `prog.asm`, the 731 redirects cost 3625 cycles — **24% of the run**.
+
+`ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1` escapes most of that, because DECODE can resolve it without
+help: the condition selects `SR` bit 0, which reads as 1 always, and the target is the immediate
+word FETCH already delivered alongside the instruction (`decode.vhd` even computes the absolute
+address for the relative modes, for `prep_stage_o.immediate`). So `early_jmp` in
+`src/cpu_main/decode.vhd` drives `early_valid_o`/`early_addr_o` on the cycle DECODE accepts the
+instruction, two cycles before WRITE would have; `cpu.vhd` merges that with WRITE's redirect into
+the single port `fetch.vhd` sees. **Four cycles becomes two, and one for `ASUB`/`RSUB`**, whose
+second micro-op overlaps another cycle of the refill. **It costs 0.091 ns of the 0.093 ns of margin
+there was** (WNS +0.093 → +0.002 ns): it closes, the cycles are free at the shipping frequency, and
+there is now essentially nothing left for the next change. The critical path is unmoved — inside
+PREPARE, through the ALU operand muxing, which this does not touch — so re-measure rather than
+assume any particular edit is what moved it.
+
+Three things are load-bearing:
+
+* **The early redirect flushes FETCH and the Icache only** — never DECODE or PREPARE. By the end of
+  the cycle the branch is in DECODE's output register and everything downstream is *older*, so
+  those two are the only place wrong-path instructions live. Hence `icache_rst` (from WRITE) and
+  `icache_flush` (from DECODE) are separate signals in `cpu.vhd`.
+* **The Icache flush must be soft.** `icache.vhd`'s `rst_i` gates `m_valid_o` combinationally, which
+  is mandatory for WRITE's flush and fatal here: DECODE raises the flush *because* it is accepting
+  the branch being offered this cycle, so gating `m_valid_o` withdraws the handshake the flush is
+  derived from and the loop settles on "no branch accepted, no flush" — silently inert. `flush_i`
+  therefore clears the buffer at the edge and gates `s_ready_o` but leaves `m_valid_o` alone, the
+  same asymmetry `two_stage_fifo` documents in its contract (b). `f_flush_offers` and
+  `f_cover_flush_handshake` in `formal/icache.psl` are the tripwires.
+* **WRITE must not redirect again**, or it discards what the early redirect went to fetch.
+  `prep_stage_i.early_jmp` carries that in `t_stage` beside `is_crb`. Its `rst_i` companion term in
+  `write.vhd` is not decoration: `p_reg` forces the `R15 = 0` write that gives FETCH its initial PC
+  during reset, and PREPARE's output register is *not* cleared by reset, so a stale `early_jmp`
+  would suppress it.
+
+`test/prog_subroutine.asm` exists because the rest of the suite is unrepresentative here: only 73
+of `prog.asm`'s 731 redirects are of this form (−1.0%), whereas the QNICE-FPGA monitor sources are
+62% unconditional-immediate branches (328 `RSUB x, 1`, 182 `RBRA x, 1` against 308 conditional
+`RBRA`). That benchmark falls 678 → 580 cycles, **−14.5%**.
+
+Two things were measured and rejected, both defeated by the same fact — `dp_ram`'s block-RAM read
+stages through a **falling-edge** register, so a RAM address path gets **half a clock period**.
+Removing FETCH's `wbi_addr_o` register needs branch resolution plus a 16-bit mux inside the
+0.85 ns that the bare register-to-RAM route leaves of the 3.625 ns budget; making the Icache
+cut-through merges a 4.373 ns path with a 2.558 ns (also half-cycle) and a 6.565 ns one. Details
+and numbers in doc/README.md's Optimizations section — read them before trying either again.
+
 ### FETCH redirect (branch penalty)
 
 A redirect (`fetch.dc_valid_i`, i.e. `cpu_main`'s `fetch_valid_o`) does **not** terminate the

@@ -275,6 +275,75 @@ more, and 0.072 ns of timing margin that the change does not explain — see
 [The critical path](#The-critical-path). More detail under
 [Register bank switch](../src/cpu_main/README.md#Register-bank-switch).
 
+**Done: an unconditional branch to an immediate target no longer waits for the
+WRITE stage.** `ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1` is the one branch DECODE
+can resolve on the spot: the condition selects `SR` bit 0, which reads as 1
+always, and the target is the immediate word FETCH has already delivered
+alongside the instruction — DECODE even computes the absolute address for the
+relative modes already. So DECODE redirects FETCH on the cycle it accepts the
+instruction, two cycles before WRITE would have, and the penalty falls from four
+cycles to two — to one for `ASUB`/`RSUB`, whose second micro-op overlaps one
+more cycle of the refill.
+
+The test suite understates this badly, and deliberately so: it is a correctness
+suite, and only 73 of `prog.asm`'s 731 redirects are of this form, worth −1.0%.
+Real QNICE code is not shaped like that. Counting the branches in the
+QNICE-FPGA monitor sources gives 328 `RSUB <label>, 1`, 182 `RBRA <label>, 1`
+and 308 conditional `RBRA` — **62% unconditional with an immediate target**,
+since that is what every subroutine call and every unconditional jump assembles
+to. `test/prog_subroutine.asm` was added to keep an honest number in the suite,
+and falls from 678 to 580 cycles, **−14.5%**. Redirects cost 3625 of
+`prog.asm`'s 15030 cycles, so on monitor-shaped code this is worth several per
+cent of total run time.
+
+Cost: **0.091 ns of the 0.093 ns that was there** — WNS +0.093 ns to +0.002 ns at
+the 7.25 ns constraint. That is the uncomfortable part of this change and it
+wants stating plainly: it still closes, and at the shipping frequency the cycles
+are free, but there is now essentially no margin left for the next change. The
+critical path is *unmoved* — register-to-register inside PREPARE through the ALU
+operand muxing, which none of this touches — so the cost is the placement
+sensitivity [The critical path](#The-critical-path) already describes, not logic
+added to the path. Four builds, all closing: +0.093 (baseline), +0.036 (early
+redirect with no reset guard, which is unsafe), +0.002 (guard in `write.vhd`,
+twice, Vivado being deterministic) and +0.007 (guard in `prepare.vhd`'s reset
+instead). The last two are the same design measured two ways; the 0.005 ns
+between them is not worth the reset-duration assumption the second one needs.
+
+It also needs a soft-flush port on the Icache — the ordinary reset gates
+`m_valid_o`, which would withdraw the very handshake the flush is derived from.
+See [Early redirect](../src/cpu_main/README.md#Early-redirect) and
+[The soft flush](../src/fetch/README.md#The-soft-flush).
+
+**Rejected: removing the register on `wbi_addr_o`.** The obvious way to take a
+cycle off *every* redirect is to put the branch target straight onto the
+instruction bus in the cycle WRITE computes it, rather than registering it in
+FETCH first. It cannot be done, and the reason is not the one you would guess
+from the RTL. `dp_ram`'s block-RAM read stages the array read through a
+**falling-edge** register (see its `G_RAM_STYLE` note), which Vivado absorbs into
+the RAMB36's address register. The instruction address therefore has **half a
+clock period**, not a whole one:
+
+```
+fetch/wb_addr_o_reg[12]/C -> i_dp_ram/dp_ram_r_reg_1/ADDRBWRADDR[14]
+   2.774 ns of a 3.625 ns requirement   (slack 0.256, 0 logic levels, 84% route)
+```
+
+The bare register-to-RAM route already spends 2.774 ns of it, leaving 0.85 ns
+for the whole of branch resolution plus a 16-bit mux, with no routing budget at
+all. Nor does dropping the falling-edge staging rescue it: the branch target
+needs 6.587 ns just to reach FETCH's address register today
+(`i_prepare/wr_stage_o_reg[inst][13]` through six LUT levels), and 6.587 + 2.774
+does not fit in 7.25 ns either.
+
+The Icache register is worse. Instruction-RAM data to the Icache input is
+4.373 ns, and from the Icache's `m_data` register it is 2.558 ns to the register
+file's RAM address — another half-cycle path, slack 0.218 — and 6.565 ns to
+FETCH's control registers through DECODE's ready cone. Making the Icache
+cut-through merges those into 7-11 ns paths.
+
+Both of those are why the early redirect above attacks the *front* of the chain
+instead: it does not shorten the refill, it starts it two cycles sooner.
+
 **Rejected: zero-latency Wishbone slaves.** Both bus masters can be taught to
 accept an `ACK` in the *same* cycle the slave takes the request — `STB` and
 `ACK` together, read data valid immediately — so that an operand fetch costs no

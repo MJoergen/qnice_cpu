@@ -35,9 +35,12 @@ vunit i_icache(icache(synthesis))
    -- signed delta rather than four separate conditional adjustments, so that
    -- the mutually exclusive cases cannot accidentally overlap.
    --
-   -- Note that s_ready_o is gated by rst_i in the RTL, so no input handshake
-   -- can complete during a flush cycle and the input term needs no extra
-   -- reset qualification.
+   -- Note that s_ready_o is gated by BOTH rst_i and flush_i in the RTL, so no
+   -- input handshake can complete during either kind of flush cycle and the
+   -- input term needs no extra reset qualification. The OUTPUT term does need
+   -- the flush_i clause below: a soft flush deliberately leaves m_valid_o
+   -- ungated, so a word may legitimately leave in the same cycle the buffer is
+   -- emptied, and the delta would otherwise be applied twice.
    p_count : process (clk_i)
       variable delta_v : integer range -2 to 1;
    begin
@@ -60,9 +63,10 @@ vunit i_icache(icache(synthesis))
 
          f_count <= f_count + delta_v;
 
-         -- rst_i is both the global reset and the pipeline flush; either way
-         -- the buffer is emptied.
-         if rst_i = '1' then
+         -- rst_i is both the global reset and the hard pipeline flush, and
+         -- flush_i is the soft one DECODE raises for its own early redirect
+         -- (contract (d)); all three empty the buffer.
+         if rst_i = '1' or flush_i = '1' then
             f_count <= 0;
          end if;
       end if;
@@ -79,7 +83,7 @@ vunit i_icache(icache(synthesis))
             f_s_addr       <= s_addr_i;
          end if;
 
-         if rst_i = '1' then
+         if rst_i = '1' or flush_i = '1' then
             f_s_addr_valid <= '0';
          end if;
       end if;
@@ -115,16 +119,25 @@ vunit i_icache(icache(synthesis))
 
    -- When two words are offered and not consumed, nothing can change: the
    -- buffer is full, so s_ready_o is low and no new word can arrive.
-   f_stable_double : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '1'}
+   --
+   -- NOTE the flush_i = '0' in the trigger of both of these, where rst_i needs
+   -- no such term. It is not missing symmetry: rst_i gates m_valid_o
+   -- combinationally, so the trigger simply cannot fire in a hard-reset cycle,
+   -- whereas the soft flush deliberately leaves m_valid_o asserted and the
+   -- trigger fires normally. "abort" does not rescue that -- GHDL evaluates it
+   -- from the cycle after the trigger -- so the qualifier has to be here.
+   f_stable_double : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '1' and
+                                    flush_i = '0'}
                                |=> {stable(m_valid_o) and stable(m_double_o) and
-                                    stable(m_addr_o) and stable(m_data_o)} abort rst_i;
+                                    stable(m_addr_o) and stable(m_data_o)} abort (rst_i or flush_i);
 
    -- When one word is offered and not consumed, the offered word must not
    -- change, but m_double_o and the upper half of m_data_o legitimately may,
    -- because a second word can arrive into slot 1 in the meantime.
-   f_stable_single : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '0'}
+   f_stable_single : assert always {m_valid_o = '1' and m_ready_i = '0' and m_double_o = '0' and
+                                    flush_i = '0'}
                                |=> {stable(m_valid_o) and stable(m_addr_o) and
-                                    stable(m_data_o(G_DATA_SIZE - 1 downto 0))} abort rst_i;
+                                    stable(m_data_o(G_DATA_SIZE - 1 downto 0))} abort (rst_i or flush_i);
 
    -- The flush must be visible to DECODE in the very cycle it is applied,
    -- otherwise a stale instruction from the abandoned stream is delivered.
@@ -138,6 +151,28 @@ vunit i_icache(icache(synthesis))
    f_reset_sync : assert always {rst_i = '1'}
                             |=> {m_valid_o = '0' and m_double_o = '0' and f_count = 0};
 
+   -- The soft flush, contract (d). Its whole reason for existing is the
+   -- CONTRAST with f_reset_comb above: it gates s_ready_o, and it must NOT
+   -- gate m_valid_o, because DECODE raises it precisely in order to accept the
+   -- branch that is being offered this cycle. Asserting the non-gating is what
+   -- stops anyone "fixing" this by making flush_i behave like rst_i, which
+   -- would close a combinational loop at the system level.
+   f_flush_comb : assert always {flush_i = '1' and rst_i = '0'} |-> {s_ready_o = '0'};
+
+   -- The non-gating half, stated as its own property: a soft flush of a
+   -- non-empty buffer must still be offering its word. Making flush_i gate
+   -- m_valid_o the way rst_i does would fail here, and at the system level it
+   -- would close a combinational loop -- DECODE derives the flush from the very
+   -- handshake it would withdraw, so the loop settles on "no branch accepted,
+   -- no flush" and the optimisation silently does nothing.
+   f_flush_offers : assert always {flush_i = '1' and rst_i = '0' and f_count > 0}
+                              |-> {m_valid_o = '1'};
+
+   -- ...and the buffer really is empty on the next cycle, so the words of the
+   -- abandoned stream never reach DECODE.
+   f_flush_sync : assert always {flush_i = '1'}
+                            |=> {m_valid_o = '0' and m_double_o = '0' and f_count = 0};
+
    -- m_double_o may never be asserted without m_valid_o, since DECODE is
    -- permitted to sample it combinationally.
    f_double_needs_valid : assert always {m_valid_o = '0'} |-> {m_double_o = '0'};
@@ -147,13 +182,19 @@ vunit i_icache(icache(synthesis))
    -- OCCUPANCY-TO-OUTPUT CORRESPONDENCE
    ---------------------------------------
 
-   f_zero : assert always {f_count = 0 and rst_i = '0'}
+   -- All three constrain s_ready_o, which flush_i gates low exactly as rst_i
+   -- does, hence the extra qualifier. The m_valid_o/m_double_o halves would
+   -- hold during a soft flush cycle -- that is the point of it -- but are kept
+   -- together with the s_ready_o half rather than split into separate
+   -- properties, because f_flush_comb and f_flush_sync below state the soft
+   -- flush's own behaviour directly.
+   f_zero : assert always {f_count = 0 and rst_i = '0' and flush_i = '0'}
                       |-> {s_ready_o = '1' and m_valid_o = '0'};
 
-   f_one  : assert always {f_count = 1 and rst_i = '0'}
+   f_one  : assert always {f_count = 1 and rst_i = '0' and flush_i = '0'}
                       |-> {s_ready_o = '1' and m_valid_o = '1' and m_double_o = '0'};
 
-   f_two  : assert always {f_count = 2 and rst_i = '0'}
+   f_two  : assert always {f_count = 2 and rst_i = '0' and flush_i = '0'}
                       |-> {s_ready_o = m_ready_i and m_valid_o = '1' and m_double_o = '1'};
 
 
@@ -165,51 +206,51 @@ vunit i_icache(icache(synthesis))
    -- word.  Together these constitute a full inductive data-integrity proof,
    -- so no free-constant (anyconst) scoreboard is needed here.
 
-   f_empty : assert always {f_count = 0 and s_valid_i = '0' and rst_i = '0'}
-                       |=> {f_count = 0} abort rst_i;
+   f_empty : assert always {f_count = 0 and s_valid_i = '0' and rst_i = '0' and flush_i = '0'}
+                       |=> {f_count = 0} abort (rst_i or flush_i);
 
-   f_empty_in : assert always {f_count = 0 and s_valid_i = '1' and rst_i = '0'}
+   f_empty_in : assert always {f_count = 0 and s_valid_i = '1' and rst_i = '0' and flush_i = '0'}
                           |=> {f_count = 1 and
                                m_data_o(G_DATA_SIZE - 1 downto 0) = prev(s_data_i) and
-                               m_addr_o = prev(s_addr_i)} abort rst_i;
+                               m_addr_o = prev(s_addr_i)} abort (rst_i or flush_i);
 
-   f_single_in : assert always {f_count = 1 and s_valid_i = '1' and m_ready_i = '0' and rst_i = '0'}
+   f_single_in : assert always {f_count = 1 and s_valid_i = '1' and m_ready_i = '0' and rst_i = '0' and flush_i = '0'}
                            |=> {f_count = 2 and
                                 m_data_o(2 * G_DATA_SIZE - 1 downto G_DATA_SIZE) = prev(s_data_i) and
-                                m_addr(2 * G_ADDR_SIZE - 1 downto G_ADDR_SIZE) = prev(s_addr_i)} abort rst_i;
+                                m_addr(2 * G_ADDR_SIZE - 1 downto G_ADDR_SIZE) = prev(s_addr_i)} abort (rst_i or flush_i);
 
-   f_single_out : assert always {f_count = 1 and s_valid_i = '0' and m_ready_i = '1' and rst_i = '0'}
-                            |=> {f_count = 0} abort rst_i;
+   f_single_out : assert always {f_count = 1 and s_valid_i = '0' and m_ready_i = '1' and rst_i = '0' and flush_i = '0'}
+                            |=> {f_count = 0} abort (rst_i or flush_i);
 
-   f_single_in_out : assert always {f_count = 1 and s_valid_i = '1' and m_ready_i = '1' and rst_i = '0'}
+   f_single_in_out : assert always {f_count = 1 and s_valid_i = '1' and m_ready_i = '1' and rst_i = '0' and flush_i = '0'}
                                |=> {f_count = 1 and
                                     m_data_o(G_DATA_SIZE - 1 downto 0) = prev(s_data_i) and
-                                    m_addr_o = prev(s_addr_i)} abort rst_i;
+                                    m_addr_o = prev(s_addr_i)} abort (rst_i or flush_i);
 
    f_double_single_out : assert always {f_count = 2 and s_valid_i = '0' and m_ready_i = '1' and
-                                        m_double_i = '0' and rst_i = '0'}
+                                        m_double_i = '0' and rst_i = '0' and flush_i = '0'}
                                    |=> {f_count = 1 and
                                         m_data_o(G_DATA_SIZE - 1 downto 0) =
                                            prev(m_data_o(2 * G_DATA_SIZE - 1 downto G_DATA_SIZE)) and
-                                        m_addr_o = prev(m_addr(2 * G_ADDR_SIZE - 1 downto G_ADDR_SIZE))} abort rst_i;
+                                        m_addr_o = prev(m_addr(2 * G_ADDR_SIZE - 1 downto G_ADDR_SIZE))} abort (rst_i or flush_i);
 
    f_double_double_out : assert always {f_count = 2 and s_valid_i = '0' and m_ready_i = '1' and
-                                        m_double_i = '1' and rst_i = '0'}
-                                   |=> {f_count = 0} abort rst_i;
+                                        m_double_i = '1' and rst_i = '0' and flush_i = '0'}
+                                   |=> {f_count = 0} abort (rst_i or flush_i);
 
    f_double_in_single_out : assert always {f_count = 2 and s_valid_i = '1' and m_ready_i = '1' and
-                                           m_double_i = '0' and rst_i = '0'}
+                                           m_double_i = '0' and rst_i = '0' and flush_i = '0'}
                                       |=> {f_count = 2 and
                                            m_data_o(G_DATA_SIZE - 1 downto 0) =
                                               prev(m_data_o(2 * G_DATA_SIZE - 1 downto G_DATA_SIZE)) and
                                            m_data_o(2 * G_DATA_SIZE - 1 downto G_DATA_SIZE) =
-                                              prev(s_data_i)} abort rst_i;
+                                              prev(s_data_i)} abort (rst_i or flush_i);
 
    f_double_in_double_out : assert always {f_count = 2 and s_valid_i = '1' and m_ready_i = '1' and
-                                           m_double_i = '1' and rst_i = '0'}
+                                           m_double_i = '1' and rst_i = '0' and flush_i = '0'}
                                       |=> {f_count = 1 and
                                            m_data_o(G_DATA_SIZE - 1 downto 0) = prev(s_data_i) and
-                                           m_addr_o = prev(s_addr_i)} abort rst_i;
+                                           m_addr_o = prev(s_addr_i)} abort (rst_i or flush_i);
 
 
    -----------------------------
@@ -229,9 +270,9 @@ vunit i_icache(icache(synthesis))
                                 |-> {m_valid_o = '1' and m_double_o = '1'};
 
    -- FETCH must hold a presented word stable until it is accepted.
-   f_input_stable : assume always {s_valid_i = '1' and s_ready_o = '0' and rst_i = '0'}
+   f_input_stable : assume always {s_valid_i = '1' and s_ready_o = '0' and rst_i = '0' and flush_i = '0'}
                               |=> {s_valid_i = '1' and stable(s_addr_i) and
-                                   stable(s_data_i)} abort rst_i;
+                                   stable(s_data_i)} abort (rst_i or flush_i);
 
    -- Input contract (b): words arrive in consecutive, increasing addresses
    -- between flushes.  FETCH guarantees this - it is the same property its
@@ -258,7 +299,7 @@ vunit i_icache(icache(synthesis))
 
    -- Backpressure towards FETCH.  If this is unreachable then f_two is being
    -- proved vacuously, since s_ready_o only ever drops with the buffer full.
-   f_cover_backpressure : cover {s_ready_o = '0' and rst_i = '0'};
+   f_cover_backpressure : cover {s_ready_o = '0' and rst_i = '0' and flush_i = '0'};
 
    -- Sustained full occupancy across consecutive cycles.
    f_cover_full_to_full : cover {f_count = 2; f_count = 2};
@@ -270,6 +311,22 @@ vunit i_icache(icache(synthesis))
 
    -- Normal operation resuming after a flush.
    f_cover_flush_refill : cover {rst_i = '1'; f_count = 0; f_count = 1};
+
+   -- THE soft-flush scenario: an output handshake completing in the very cycle
+   -- the buffer is flushed. This is what contract (d) exists for, and it is
+   -- unreachable if flush_i is ever made to gate m_valid_o -- so this cover is
+   -- the tripwire for that mistake, in the same way f_cover_stale_ack is for
+   -- fetch's redirect fast path.
+   f_cover_flush_handshake : cover {flush_i = '1' and m_valid_o = '1' and m_ready_i = '1'};
+
+   -- ...including the two-word case, which is what DECODE actually does: an
+   -- unconditional branch to an immediate target consumes instruction and
+   -- operand together and flushes on the same handshake.
+   f_cover_flush_double : cover {flush_i = '1' and m_valid_o = '1' and m_ready_i = '1' and
+                                 m_double_i = '1'};
+
+   -- Normal operation resuming after a soft flush.
+   f_cover_soft_refill : cover {flush_i = '1'; f_count = 0; f_count = 1};
 
 
    ----------------------------------------------

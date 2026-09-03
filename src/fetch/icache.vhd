@@ -48,6 +48,24 @@
 --
 -- c) m_double_i must only be asserted when m_valid_o = '1' and m_double_o = '1'.
 --
+-- d) flush_i is a SOFT flush, and is the counterpart of rst_i for a redirect
+--    that the DECODE stage itself originates (an unconditional branch with an
+--    immediate target -- see "Early redirect" in cpu_main/decode.vhd). It
+--    discards the buffered words at the end of the cycle in which it is
+--    asserted, but -- unlike rst_i -- it does NOT gate m_valid_o, so the output
+--    handshake of that same cycle still completes.
+--
+--    That asymmetry is the whole point, and it is the same one two_stage_fifo
+--    documents in its own contract (b). DECODE raises the flush precisely
+--    BECAUSE it is accepting the branch this cycle; gating m_valid_o would
+--    withdraw the instruction that caused the flush, and since the flush is
+--    combinationally derived from that handshake, the two would form a
+--    combinational loop that settles on "no branch accepted, no flush".
+--
+--    s_ready_o IS gated, exactly as it is for rst_i: an input word arriving in
+--    a flush cycle belongs to the abandoned stream. FETCH is being redirected
+--    by the same signal and discards that word too.
+--
 -- RESET
 -- All state is synchronously reset by rst_i, with the combinational gating of
 -- m_valid_o and s_ready_o noted above. No clock domain crossing is present;
@@ -67,6 +85,9 @@ entity icache is
 
       -- Synchronous reset AND pipeline flush; see interface contract (a).
       rst_i      : in  std_logic;
+
+      -- Soft flush from DECODE; see interface contract (d).
+      flush_i    : in  std_logic;
 
       -- From Instruction fetch
       s_valid_i  : in  std_logic;
@@ -128,7 +149,7 @@ begin
    -- forms a loop in the intended system, because FETCH's output valid does
    -- not depend on its input ready, but both are worth keeping in mind for
    -- timing closure.
-   s_ready_o <= '0' when rst_i = '1' else
+   s_ready_o <= '0' when rst_i = '1' or flush_i = '1' else
                 '1' when count = 0 or count = 1 or (count = 2 and m_ready_i = '1') else
                 '0';
 
@@ -233,6 +254,15 @@ begin
                null;
 
          end case;
+
+         -- Soft flush; see interface contract (d). Applied after the case
+         -- above so that it overrides whatever that left behind -- including
+         -- the refill in the count=1/count=2 branches, which would otherwise
+         -- leave a word of the abandoned stream in slot 0.
+         if flush_i = '1' then
+            m_valid  <= '0';
+            m_double <= '0';
+         end if;
 
          -- Reset and flush. Applied last so that it overrides every branch
          -- above. Clearing m_double as well as m_valid guarantees that

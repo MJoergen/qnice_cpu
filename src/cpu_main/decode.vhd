@@ -17,6 +17,11 @@ entity decode is
       fetch_data_i   : in  std_logic_vector(31 downto 0);
       fetch_double_o : out std_logic;                     -- combinatorial
 
+      -- Early redirect to FETCH, for an unconditional branch with an immediate
+      -- target. See "Early redirect" below.
+      early_valid_o  : out std_logic;                     -- combinatorial
+      early_addr_o   : out std_logic_vector(15 downto 0); -- combinatorial
+
       -- Register file. Value arrives on the next clock cycle
       reg_rd_en_o    : out std_logic;
       reg_src_addr_o : out std_logic_vector(3 downto 0);  -- combinatorial
@@ -83,6 +88,10 @@ architecture synthesis of decode is
    signal uses_bank   : std_logic; -- The instruction at this stage's input
    signal uses_bank_d : std_logic; -- The instruction in the output register
    signal is_crb      : std_logic; -- Is the instruction at the input INCRB/DECRB?
+
+   -- Is the instruction at the input an unconditional branch with an immediate
+   -- target, i.e. one whose redirect this stage can issue itself?
+   signal early_jmp : std_logic;
 
    -- microcode address bitmap:
    signal microcode_addr  : std_logic_vector(3 downto 0);
@@ -190,6 +199,76 @@ begin
 
 
    ------------------------------------------------------------
+   -- Early redirect
+   ------------------------------------------------------------
+
+   -- A branch is normally resolved in WRITE, two stages further on, and the
+   -- redirect it sends to FETCH costs four cycles: one to register the new PC,
+   -- one for the instruction memory's read latency, one in the Icache, and one
+   -- because the pipeline behind it is empty. For ONE class of branch none of
+   -- that has to wait, because everything the redirect needs is already here:
+   --
+   --   * "taken" is unconditional -- the condition field selects SR bit 0,
+   --     which reads as 1 always, and is not negated. No flags, so no
+   --     dependency on instructions still in flight ahead of this one.
+   --   * the target is an immediate, so it is the word FETCH has already
+   --     supplied alongside the instruction. No register read, no memory read.
+   --
+   -- That is "ABRA/ASUB/RBRA/RSUB <label>, 1", which is the bulk of real QNICE
+   -- code: RSUB is every subroutine call and RBRA ..., 1 every unconditional
+   -- jump. Issuing the redirect here rather than in WRITE cuts the penalty from
+   -- four cycles to two, and to one for ASUB/RSUB, whose second micro-op keeps
+   -- the branch in this stage's output register for an extra cycle and so
+   -- overlaps one more cycle of the refill.
+   --
+   -- WHAT THE EARLY REDIRECT MUST NOT FLUSH. It resets FETCH and the Icache
+   -- only, never this stage or PREPARE. The branch is in this stage's output
+   -- register by the end of the cycle and everything downstream of it is
+   -- OLDER, so the only wrong-path instructions in the machine are the ones
+   -- FETCH and the Icache are holding. That is also why the Icache needs a
+   -- soft flush rather than its ordinary reset -- see contract (d) in
+   -- icache.vhd; the ordinary one would withdraw the very handshake that
+   -- raises this signal.
+   --
+   -- WRITE must then NOT redirect again when the branch retires, or it would
+   -- discard the correctly fetched target. prep_stage_o.early_jmp carries that
+   -- down the pipeline; see "Writes to R15" in write.vhd.
+   --
+   -- prep_ready_i rather than fetch_ready_o, although the condition being
+   -- tested is "this stage accepts the instruction this cycle" and that is
+   -- fetch_valid_i and fetch_ready_o. The two are EQUAL for this instruction
+   -- class: fetch_ready_o's first term needs fetch_double_o and not
+   -- fetch_double_i, and fetch_double_i is required below; its second needs
+   -- uses_bank, which is '0' here because the source register is R15 and JMP
+   -- has no destination operand. Using fetch_ready_o instead would put the
+   -- Icache's own output data in front of FETCH's address register, through
+   -- this stage's whole ready cone -- the longest path in the design after the
+   -- ALU. prep_ready_i comes from PREPARE's registers and the Memory module,
+   -- so both legs of the AND below start at a flip-flop.
+   early_jmp <= '1' when fetch_data_i(R_OPCODE) = C_OPCODE_JMP and
+                         fetch_data_i(R_JMP_COND) = "000" and
+                         fetch_data_i(R_JMP_NEG) = '0' and
+                         immediate_src = '1' else
+                '0';
+
+   -- fetch_double_i is what makes fetch_data_i(R_IMMEDIATE) meaningful: it says
+   -- the Icache is offering the second word, not just the instruction. It is
+   -- implied by the handshake for this class (fetch_ready_o holds the stage off
+   -- until the operand arrives), but the target address is built from that word
+   -- below, so it is named explicitly rather than left to be inferred.
+   early_valid_o <= early_jmp and fetch_valid_i and fetch_double_i and prep_ready_i;
+
+   -- The same target p_output computes for prep_stage_o.immediate, which is
+   -- where the branch would otherwise have picked it up two stages later: an
+   -- absolute mode branches to the operand, a relative one to the operand plus
+   -- the address of the word after it.
+   early_addr_o <= fetch_data_i(R_IMMEDIATE) + fetch_addr_i + 2
+                       when fetch_data_i(R_JMP_MODE) = C_JMP_RBRA or
+                            fetch_data_i(R_JMP_MODE) = C_JMP_RSUB else
+                    fetch_data_i(R_IMMEDIATE);
+
+
+   ------------------------------------------------------------
    -- Microcode generation
    ------------------------------------------------------------
 
@@ -233,6 +312,7 @@ begin
             prep_stage_o.dst_imm    <= immediate_dst;
             prep_stage_o.res_reg    <= reg_dst_addr_o;
             prep_stage_o.is_crb     <= is_crb;
+            prep_stage_o.early_jmp  <= early_jmp;
             uses_bank_d             <= uses_bank;
 
             -- Treat jumps as a special case

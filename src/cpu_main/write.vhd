@@ -53,6 +53,7 @@ architecture synthesis of write is
 
    signal next_pc   : std_logic_vector(15 downto 0);
    signal wr_r15    : std_logic;
+   signal wr_early  : std_logic;
    signal smc_delta : std_logic_vector(15 downto 0);
    signal smc_hit   : std_logic;
 
@@ -222,6 +223,48 @@ begin
 
    fetch_addr_o <= reg_val_o when wr_r15 = '1' else
                    next_pc;
+
+
+   -- ... except for the one class of branch DECODE has already redirected on
+   -- its own: an unconditional jump to an immediate target. FETCH was sent to
+   -- the target two stages ago and has been filling the pipeline from it ever
+   -- since, so redirecting again here would discard exactly the instructions
+   -- the early redirect went to fetch. See "Early redirect" in decode.vhd.
+   --
+   -- The suppression is safe to apply to the whole product term rather than
+   -- just its R15 half. reg_addr_o only matches "111x" for such an instruction
+   -- on its result write, which is the write to R15: JMP's microcode carries no
+   -- REG_MOD_SRC (FETCH supplies the immediate inline, so there is no @R15++
+   -- write-back to make), and the destination ASUB/RSUB invent for the return
+   -- address is R13.
+   --
+   -- Nothing else in fetch_valid_o can fire for one either: bank_switch_o needs
+   -- is_crb, and the self-modifying-code term needs C_MEM_WRITE on the micro-op
+   -- that also carries C_LAST, whereas ASUB/RSUB put the push and the PC write
+   -- on different micro-ops.
+   --
+   -- THE rst_i TERM BELOW IS NOT DECORATION. p_reg forces reg_we_o = '1' with
+   -- reg_addr_o = R15 while rst_i is asserted, and that is how FETCH is given
+   -- its initial Program Counter -- it is a write to R15 like any other, and it
+   -- reaches fetch_valid_o through exactly this product term. But PREPARE's
+   -- output register is not cleared by reset (p_output in prepare.vhd clears
+   -- wr_valid_o alone, deliberately: the payload is meaningless while the valid
+   -- is low, and clearing it would cost flops), so prep_stage_i.early_jmp still
+   -- holds whatever the last instruction to pass through left there -- or 'U',
+   -- before the first one. Without the rst_i term a reset taken after any
+   -- unconditional branch would suppress its own PC write and the CPU would sit
+   -- there fetching from wherever wb_addr_o happened to reset to.
+   --
+   -- The reason no valid term is needed alongside it: p_reg only ever raises
+   -- reg_we_o from inside "if prep_valid_i and prep_ready_o and update_reg",
+   -- or from the reset branch. So reg_we_o = '1' with rst_i = '0' already
+   -- implies prep_valid_i = '1', i.e. that prep_stage_i holds a real
+   -- instruction and its early_jmp bit means something.
+   --
+   -- Cost on the design's most timing-critical net is nil: the product term had
+   -- four inputs (reg_we_o and three address bits) and now has six, which is
+   -- still one LUT6 and still one level of logic.
+   wr_early <= prep_stage_i.early_jmp and not rst_i;
 
 
    ------------------------------------------------------------
@@ -418,7 +461,7 @@ begin
 
    -- Note that R14 and R15 share reg_addr_o(3 downto 1) = "111", so the two
    -- register-write terms collapse into one: reg_we_o and three address bits.
-   fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1))) or
+   fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1)) and not wr_early) or
                     (bank_switch_o and bank_stale_i) or
                     (inst_done_o and prep_stage_i.microcodes(C_MEM_WRITE) and smc_hit);
 

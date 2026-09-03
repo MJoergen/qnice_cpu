@@ -24,6 +24,12 @@ entity cpu_main is
       fetch_data_i    : in  std_logic_vector(31 downto 0); -- 2 words from instruction memory
       fetch_double_o  : out std_logic;
 
+      -- DECODE: early redirect to Fetch, for an unconditional branch with an
+      -- immediate target. Mutually exclusive with fetch_valid_o below; see
+      -- "Early redirect" in decode.vhd.
+      early_valid_o   : out std_logic;
+      early_addr_o    : out std_logic_vector(15 downto 0);
+
       -- DECODE: to Register
       reg_rd_en_o     : out std_logic;
       reg_src_reg_o   : out std_logic_vector(3 downto 0);
@@ -99,6 +105,8 @@ begin
          fetch_addr_i   => fetch_addr_i,
          fetch_data_i   => fetch_data_i,
          fetch_double_o => fetch_double_o,
+         early_valid_o  => early_valid_o,
+         early_addr_o   => early_addr_o,
          reg_rd_en_o    => reg_rd_en_o,
          reg_src_addr_o => reg_src_reg_o,
          reg_src_val_i  => reg_src_val_i,

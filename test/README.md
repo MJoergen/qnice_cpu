@@ -205,6 +205,27 @@ either way:
 * `T6` — store to data that merely happens to sit near the program counter. It
   costs a needless flush, which must not change what executes.
 
+`prog_subroutine.asm` is a benchmark rather than a correctness test, and it
+exists because the rest of this directory is unrepresentative in one specific
+way. These are CPU tests, so their branches are overwhelmingly *conditional*:
+only 73 of the 731 pipeline redirects in `prog.asm` come from an unconditional
+branch to an immediate target, the one class DECODE resolves by itself (see
+[Early redirect](../src/cpu_main/README.md#Early-redirect)). Real QNICE code is
+the other way round — counting branches in the QNICE-FPGA monitor sources gives
+328 `RSUB <label>, 1`, 182 `RBRA <label>, 1` and 308 conditional `RBRA`, i.e.
+62% unconditional with an immediate target, because that is what every
+subroutine call and unconditional jump assembles to. Measuring that optimisation
+against `prog.asm` alone understates it roughly sixfold.
+
+So this program calls: an accumulation loop around a subroutine that itself
+calls a nested one, giving two unconditional calls, two returns and one
+conditional branch per iteration. It is deliberately conservative about the mix
+— the returns are `MOVE @R13++, R15`, whose target comes out of memory and can
+never be resolved early. It is still a real test: the accumulated result is
+checked before the status word is written, so a pipeline bug that corrupts a
+call or a return fails the run rather than merely changing
+`prog_subroutine.stats.golden`.
+
 `prog_waveform.asm` is different in kind from the rest: it exists to *generate*
 the pipeline timing diagram in
 [src/cpu_main/README.md](../src/cpu_main/README.md#Waveforms). It is a straight

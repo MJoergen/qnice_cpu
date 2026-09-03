@@ -614,6 +614,62 @@ vunit i_cpu_main(cpu_main(synthesis))
        dec2prep_valid = '1' and f_prep_uses_bank = '1'}
       |-> {fetch_valid_o = '1'};
 
+   -- (5) THE EARLY REDIRECT. DECODE resolves an unconditional branch to an
+   -- immediate target itself, two stages before WRITE would, and marks the
+   -- instruction so that WRITE then does NOT redirect again -- see "Early
+   -- redirect" in decode.vhd. The two properties below are the two halves of
+   -- what makes that safe, and they are written from the raw instruction
+   -- encoding rather than from early_jmp, so narrowing that signal fails them.
+   --
+   -- SOUNDNESS: the redirect only ever goes out for an instruction that really
+   -- is such a branch, and only on the cycle DECODE accepts it. The
+   -- fetch_ready_o term is the load-bearing one: the Icache's soft flush is
+   -- driven from this signal and discards everything it holds, so a redirect
+   -- raised on a cycle where the branch is NOT taken into DECODE would throw
+   -- the branch itself away.
+   f_early_sound : assert always
+      {early_valid_o = '1'}
+      |-> {fetch_valid_i = '1' and fetch_ready_o = '1' and
+           fetch_double_i = '1' and
+           fetch_data_i(15 downto 12) = work.cpu_constants.C_OPCODE_JMP and
+           fetch_data_i(2 downto 0) = "000" and
+           fetch_data_i(3) = '0' and
+           fetch_data_i(11 downto 8) = work.cpu_constants.C_REG_PC and
+           fetch_data_i(7 downto 6) = work.cpu_constants.C_MODE_POST};
+
+   -- COMPLETENESS, and the more dangerous direction of the two. DECODE sets
+   -- prep_stage_o.early_jmp from the same decode that raises early_valid_o, and
+   -- WRITE suppresses its own redirect on that bit. So an accepted branch of
+   -- this class that did NOT redirect here would never redirect at all: the
+   -- CPU would fall through into whatever follows the branch. Nothing else in
+   -- this file would notice.
+   f_early_complete : assert always
+      {rst_i = '0' and fetch_valid_i = '1' and fetch_ready_o = '1' and
+       fetch_double_i = '1' and
+       fetch_data_i(15 downto 12) = work.cpu_constants.C_OPCODE_JMP and
+       fetch_data_i(2 downto 0) = "000" and
+       fetch_data_i(3) = '0' and
+       fetch_data_i(11 downto 8) = work.cpu_constants.C_REG_PC and
+       fetch_data_i(7 downto 6) = work.cpu_constants.C_MODE_POST}
+      |-> {early_valid_o = '1'};
+
+   -- ...and it must be sent to the right place. Recomputed here from the
+   -- instruction encoding, which is the same derivation WRITE would have
+   -- applied two cycles later via prep_stage_o.immediate: the absolute modes
+   -- branch to the operand, the relative ones to the operand plus the address
+   -- of the word after it.
+   f_early_addr_abs : assert always
+      {early_valid_o = '1' and
+       fetch_data_i(5 downto 4) /= work.cpu_constants.C_JMP_RBRA and
+       fetch_data_i(5 downto 4) /= work.cpu_constants.C_JMP_RSUB}
+      |-> {early_addr_o = fetch_data_i(31 downto 16)};
+
+   f_early_addr_rel : assert always
+      {early_valid_o = '1' and
+       (fetch_data_i(5 downto 4) = work.cpu_constants.C_JMP_RBRA or
+        fetch_data_i(5 downto 4) = work.cpu_constants.C_JMP_RSUB)}
+      |-> {early_addr_o = fetch_data_i(31 downto 16) + fetch_addr_i + 2};
+
    -- (4) SELF-MODIFYING CODE. A store that can land on an instruction some
    -- stage has already read must flush. Everything already read lies in
    -- [next_pc, next_pc+8), and next_pc is addr+1 or addr+2, so in terms of the
@@ -774,6 +830,16 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    -- Non-vacuity: the stall condition that f_dec2prep_valid_stable predicates
    -- on must actually be reachable, otherwise that assertion proves nothing.
+   -- The early redirect actually happening, for each of the two target
+   -- computations. Without these, f_early_sound and the two address properties
+   -- are all vacuously true if early_valid_o never fires at all -- which is
+   -- exactly what a regression in decode.vhd's early_jmp would look like.
+   c_early_redirect_abs : cover {early_valid_o = '1' and
+                                 fetch_data_i(5 downto 4) = work.cpu_constants.C_JMP_ABRA};
+
+   c_early_redirect_rel : cover {early_valid_o = '1' and
+                                 fetch_data_i(5 downto 4) = work.cpu_constants.C_JMP_RSUB};
+
    c_dec2prep_stalled : cover {dec2prep_valid = '1' and dec2prep_ready = '0' and rst_i = '0' and fetch_valid_o = '0'};
 
    -- ... and the interesting case within it: a stall during which the Status

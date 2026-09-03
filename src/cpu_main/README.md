@@ -404,6 +404,23 @@ write value. The same `fetch_valid_o` also flushes the pipeline, see
 The one case that is not a write to `R15` is a change of the register bank, see
 [Register bank switch](#Register-bank-switch).
 
+One class of branch does *not* redirect from here, because DECODE has already
+done it two cycles earlier — see [From DECODE to FETCH](#From-DECODE-to-FETCH)
+immediately below.
+
+### From DECODE to FETCH
+```
+early_valid_o : out std_logic;                      -- combinatorial
+early_addr_o  : out std_logic_vector(15 downto 0);  -- combinatorial
+```
+A second redirect port, driven by DECODE rather than WRITE, for the one class of
+branch DECODE can resolve by itself: an unconditional jump to an immediate
+target, i.e. `ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1`. See
+[Early redirect](#Early-redirect).
+
+The two redirect ports are mutually exclusive and `cpu.vhd` merges them into the
+single one `fetch.vhd` sees, so FETCH itself is unaware of the distinction.
+
 ### Between WRITE and DECODE
 ```
 bank_switch_o : out std_logic;   -- WRITE -> DECODE
@@ -672,6 +689,91 @@ This also covers the exit from reset. While `rst_i` is asserted, the `p_reg`
 process in [write.vhd](write.vhd) forces a write of `R15 = 0`, which in turn
 asserts `fetch_valid_o` and so starts execution from address 0 with a clean
 pipeline.
+
+### Early redirect
+A branch costs four cycles because WRITE resolves it two stages after DECODE
+read it: one cycle to register the new PC in FETCH, one for the instruction
+memory's read latency, one in the Icache, and one because DECODE and PREPARE are
+then empty. Measured on `test/prog.asm`, redirects account for 3625 cycles of a
+15030-cycle run — **24%**.
+
+For one class of branch none of that has to wait, because everything the
+redirect needs is already sitting in DECODE:
+
+* **Unconditional.** The condition field of `X <label>, 1` selects `SR` bit 0,
+  which reads as 1 always, and is not negated. There are no flags to wait for,
+  so no dependency on the instructions still ahead of it in the pipeline.
+* **Immediate target.** The target is the word FETCH already supplied alongside
+  the instruction. No register read, no memory read. DECODE even computes the
+  absolute target for the relative modes already, for `prep_stage_o.immediate`.
+
+So `early_jmp` in [decode.vhd](decode.vhd) recognises the instruction and
+DECODE issues the redirect on the cycle it accepts it, two cycles before WRITE
+would have. The penalty drops from **four cycles to two**, and to **one** for
+`ASUB`/`RSUB`, whose second micro-op holds the branch in DECODE's output
+register for an extra cycle and so overlaps one more cycle of the refill.
+
+This matters far more than the test suite suggests. Only 73 of `prog.asm`'s 731
+redirects are of this form, but counting branches in the QNICE-FPGA monitor
+sources gives 328 `RSUB <label>, 1`, 182 `RBRA <label>, 1` and 308 conditional
+`RBRA` — **62% unconditional with an immediate target**, because that is what
+every subroutine call and every unconditional jump assembles to.
+`test/prog_subroutine.asm` exists to keep an honest figure in the suite: it
+falls from 678 to 580 cycles, **−14.5%**, against −1.0% for `prog.asm`.
+
+Three things make it work, and each is easy to undo:
+
+**The early redirect flushes FETCH and the Icache only — never DECODE or
+PREPARE.** By the end of the cycle the branch is in DECODE's output register,
+and everything downstream of it is *older*, so the only wrong-path instructions
+in the machine are the ones FETCH and the Icache hold. That is what makes this
+cheaper than resolving a branch early in general, and it is why `cpu.vhd` keeps
+`icache_rst` (from WRITE) and `icache_flush` (from DECODE) as separate signals.
+
+**The Icache flush has to be *soft*.** Its ordinary `rst_i` gates `m_valid_o`
+combinationally, which is mandatory for WRITE's flush and fatal for this one:
+DECODE raises the flush *because* it is accepting the branch being offered this
+cycle, so gating `m_valid_o` would withdraw the very handshake that produced the
+flush, and the loop settles on "no branch accepted, no flush" — the optimisation
+silently doing nothing. `flush_i` therefore clears the buffer at the clock edge
+and gates `s_ready_o`, but leaves `m_valid_o` alone; this is the same asymmetry
+`two_stage_fifo` documents in its own contract (b). `f_flush_offers` and
+`f_cover_flush_handshake` in [icache.psl](../../formal/icache.psl) are the
+tripwires for anyone "fixing" it.
+
+**WRITE must not redirect again when the branch retires**, or it would discard
+exactly the instructions the early redirect went to fetch. `prep_stage_i.early_jmp`
+carries that down the pipeline, in `t_stage` beside `is_crb` and for the same
+reason — it is decoded where the instruction word already is, rather than in
+front of `fetch_valid_o`. Note the `rst_i` term next to it in
+[write.vhd](write.vhd): `p_reg` forces a write of `R15 = 0` during reset and
+that is how FETCH gets its initial PC, but PREPARE's output register is not
+cleared by reset, so the stale `early_jmp` left there by the last branch would
+otherwise suppress it.
+
+#### What it costs
+**0.091 ns of the 0.093 ns of timing margin there was** — WNS +0.093 ns to
++0.002 ns at the 7.25 ns constraint. It still closes, and at the shipping
+frequency the cycles are free, but there is essentially nothing left for the
+next change. The critical path is unmoved, still register-to-register inside
+PREPARE through the ALU operand muxing, which none of this touches; the cost is
+the placement sensitivity described in
+[doc/README.md](../../doc/README.md#The-critical-path) rather than logic added
+to the path. Measured across four builds: +0.093 (baseline), +0.036 (early
+redirect with the reset guard omitted, which is not safe), +0.002 (as
+committed), +0.007 (guard moved into PREPARE's reset, which buys 0.005 ns and
+costs an assumption that reset is held for more than one cycle).
+
+It also narrows one self-modifying-code margin from three cycles to one. A store
+that lands more than 32 words away misses `smc_hit`'s window, and is safe today
+because "nothing has read that address yet". If the very next instruction is an
+unconditional branch *to* that address, the fetch of the target now happens one
+cycle after the store's write is accepted on the data bus rather than three.
+That is still correct, and structurally so: DECODE cannot accept the branch
+before the store's last micro-op has left its output register, so the fetch can
+never be issued earlier than the cycle after the store's bus request. But the
+margin is one cycle, and it assumes a data-bus slave that does not stall — the
+dual-port RAM here never does.
 
 ### Register bank switch
 The other thing that flushes the pipeline is a change to the upper eight bits of

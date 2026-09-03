@@ -123,6 +123,7 @@ package cpu_constants is
       res_reg     : std_logic_vector(3 downto 0);
       r14         : std_logic_vector(15 downto 0);
       is_crb      : std_logic; -- INCRB/DECRB, decoded early: see decode.vhd
+      early_jmp   : std_logic; -- Redirect already issued by DECODE: see decode.vhd
       alu_oper    : std_logic_vector(3 downto 0);
       alu_ctrl    : std_logic_vector(5 downto 0);
       alu_flags   : std_logic_vector(15 downto 0);

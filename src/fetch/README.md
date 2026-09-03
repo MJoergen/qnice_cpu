@@ -129,7 +129,8 @@ Also stated in the file header:
 generic (G_ADDR_SIZE, G_DATA_SIZE : integer);   -- both 16 in cpu.vhd
 
 clk_i      : in  std_logic;
-rst_i      : in  std_logic;   -- reset AND pipeline flush
+rst_i      : in  std_logic;   -- reset AND pipeline flush (hard)
+flush_i    : in  std_logic;   -- DECODE's early redirect (soft)
 
 -- From fetch
 s_valid_i  : in  std_logic;
@@ -173,6 +174,9 @@ increasing stream. `fetch` guarantees this between redirects.
 
 ## Flush
 
+There are two of them, and the difference between them is the whole content of
+this section.
+
 `icache`'s `rst_i` is not merely a startup reset; it is also the pipeline flush,
 and `cpu.vhd` drives it as
 
@@ -198,6 +202,39 @@ operation:
 * `m_double` is cleared alongside `m_valid`, so `m_double_o` can never be left
   asserted while `m_valid_o` is low.
 
+### The soft flush
+
+`flush_i` is the second one, and it is the counterpart of `rst_i` for a redirect
+that DECODE originates itself rather than receives — an unconditional branch to
+an immediate target, see
+[Early redirect](../cpu_main/README.md#Early-redirect). `cpu.vhd` drives the two
+separately:
+
+```vhdl
+icache_rst   <= rst_i or wr2fetch_valid;   -- hard
+icache_flush <= dc2fetch_valid;            -- soft
+```
+
+It discards the buffered words at the end of the cycle in which it is asserted,
+and it gates `s_ready_o` exactly as `rst_i` does, because an input word arriving
+in a flush cycle belongs to the abandoned stream and FETCH — redirected by the
+same signal — is discarding it too.
+
+**What it must not do is gate `m_valid_o`.** DECODE raises the flush *because*
+it is accepting the branch this cycle; withdrawing that offer would withdraw the
+very handshake the flush is derived from, and the combinational loop settles on
+"no branch accepted, no flush", leaving the optimisation silently inert. This is
+the same asymmetry `two_stage_fifo` documents in its own contract (b), and for
+the same reason: the consumer shares the flush, so it discards what it must.
+
+`f_flush_comb`, `f_flush_offers` and `f_cover_flush_handshake` in
+[icache.psl](../../formal/icache.psl) state both halves and make the mistake
+visible. Note also the `flush_i = '0'` term in the trigger of `f_stable_double`
+and `f_stable_single` there, where `rst_i` needs none: `rst_i` gates `m_valid_o`
+so those triggers cannot fire in a hard-reset cycle at all, whereas a soft flush
+leaves the output asserted and they fire normally. `abort` does not cover the
+trigger cycle in GHDL, so the qualifier has to be in the trigger.
+
 ## Formal verification
 
 Both entities have their own job, and both are in `DUTS` in
@@ -214,6 +251,15 @@ same-cycle/next-cycle reset behaviour, and a full transition table of the
 occupancy for every (`s_valid_i`, `m_ready_i`, `m_double_i`) combination. The
 environment assumptions are the interface contracts above: input stability,
 consecutive input addresses, and `m_double_i` only when two words are offered.
+
+`flush_i` runs through all of it as a second emptying condition alongside
+`rst_i`, and three properties are specifically about the difference between the
+two: `f_flush_comb` (it gates `s_ready_o`), `f_flush_offers` (it does *not*
+withdraw `m_valid_o`) and `f_cover_flush_handshake` / `f_cover_flush_double`
+(an output handshake really does complete in a flush cycle, including the
+two-word case DECODE actually uses). The covers are the important ones: make
+`flush_i` behave like `rst_i` and every assertion still passes while those two
+become unreachable.
 
 ### fetch.sby
 

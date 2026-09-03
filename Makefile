@@ -47,6 +47,7 @@ TESTS += prog_flags
 TESTS += prog_r15
 TESTS += prog_hazard
 TESTS += prog_self_modifying
+TESTS += prog_subroutine
 TESTS += prog_waveform
 
 ASM = test/$(TEST).asm

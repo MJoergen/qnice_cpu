@@ -55,6 +55,7 @@ architecture synthesis of cpu is
 
    -- ICACHE to DECODE
    signal icache_rst                   : std_logic;
+   signal icache_flush                 : std_logic;
    signal icache2decode_valid          : std_logic;
    signal icache2decode_ready          : std_logic;
    signal icache2decode_double_valid   : std_logic;
@@ -70,6 +71,13 @@ architecture synthesis of cpu is
    -- WRITE to FETCH (branches: the new PC, which also flushes the pipeline)
    signal wr2fetch_valid : std_logic;
    signal wr2fetch_addr  : std_logic_vector(15 downto 0);
+
+   -- DECODE to FETCH (the early redirect; see "Early redirect" in
+   -- cpu_main/decode.vhd) and the two merged into what FETCH actually sees.
+   signal dc2fetch_valid : std_logic;
+   signal dc2fetch_addr  : std_logic_vector(15 downto 0);
+   signal redirect_valid : std_logic;
+   signal redirect_addr  : std_logic_vector(15 downto 0);
 
    -- DECODE read from register file
    signal decode2reg_rd_en   : std_logic;
@@ -121,16 +129,37 @@ begin
          dc_ready_i => fetch2icache_ready,
          dc_addr_o  => fetch2icache_addr,
          dc_data_o  => fetch2icache_data,
-         dc_valid_i => wr2fetch_valid,
-         dc_addr_i  => wr2fetch_addr
+         dc_valid_i => redirect_valid,
+         dc_addr_i  => redirect_addr
       ); -- i_fetch
+
+
+   -- FETCH is redirected from two places now: WRITE, when a branch retires, and
+   -- DECODE, when it accepts an unconditional branch to an immediate target and
+   -- resolves it on the spot. FETCH itself is unchanged and sees one redirect
+   -- port, so its interface contracts and its formal job are untouched.
+   --
+   -- The two can never fire in the same cycle. icache2decode_valid is gated
+   -- combinationally by icache_rst, so while WRITE is flushing, DECODE has no
+   -- instruction to accept and dc2fetch_valid is low by construction. WRITE
+   -- still takes priority in the mux below rather than the two being OR-ed:
+   -- relying on the exclusivity for correctness of the ADDRESS would make this
+   -- line quietly wrong the moment the gating above it changed.
+   redirect_valid <= wr2fetch_valid or dc2fetch_valid;
+   redirect_addr  <= wr2fetch_addr when wr2fetch_valid = '1' else
+                     dc2fetch_addr;
 
 
    ------------------------------------------------------------
    -- Instruction ICACHE
    ------------------------------------------------------------
 
-   icache_rst <= rst_i or wr2fetch_valid;
+   -- The hard flush, from WRITE, which must withdraw whatever the Icache is
+   -- offering DECODE in the same cycle. The early redirect from DECODE is the
+   -- soft one, and deliberately must not: DECODE raises it because it is
+   -- accepting the branch this cycle. See contract (d) in icache.vhd.
+   icache_rst   <= rst_i or wr2fetch_valid;
+   icache_flush <= dc2fetch_valid;
 
 
    i_icache : entity work.icache
@@ -141,6 +170,7 @@ begin
       port map (
          clk_i      => clk_i,
          rst_i      => icache_rst,
+         flush_i    => icache_flush,
          s_valid_i  => fetch2icache_valid,
          s_ready_o  => fetch2icache_ready,
          s_addr_i   => fetch2icache_addr,
@@ -191,7 +221,12 @@ begin
          -- cpu_main.vhd), discarding it. prog_pipeline.asm does exactly this --
          -- it branches over twelve HALTs used as padding. Without this clear the
          -- CPU would gate itself off forever on a HALT that never ran.
-         if wr2fetch_valid = '1' or rst_i = '1' then
+         -- dc2fetch_valid cannot actually fire while halt_fetched is set --
+         -- the gate holds icache2decode_valid_gated low, so DECODE accepts
+         -- nothing and raises nothing. It is listed anyway so that the
+         -- invariant is "any flush clears the gate" rather than a fact about
+         -- which flush happens to be reachable from which state.
+         if wr2fetch_valid = '1' or dc2fetch_valid = '1' or rst_i = '1' then
             halt_fetched <= '0';
          end if;
       end if;
@@ -212,6 +247,8 @@ begin
          fetch_addr_i    => icache2decode_addr,
          fetch_data_i    => icache2decode_data,
          fetch_double_o  => icache2decode_double_consume,
+         early_valid_o   => dc2fetch_valid,
+         early_addr_o    => dc2fetch_addr,
          reg_rd_en_o     => decode2reg_rd_en,
          reg_src_reg_o   => decode2reg_src_reg,
          reg_src_val_i   => decode2reg_src_val,
