@@ -241,8 +241,9 @@ the programs `make test` runs; its header says how to run it.
   (`mem_req_addr_o` = `0x000A`).
 * **t=6**: the device word returns on `msrc_data_o` and the Sequencer can
   finally issue the second micro-operation, `0x828` (`LAST` + `MEM_WAIT_SRC` +
-  `REG_WRITE`). This is the loop's only genuine stall. In the same cycle DECODE
-  accepts the `AND`, this time consuming two words at once.
+  `REG_WRITE`). This is the only cycle in which a stage is held waiting for
+  data. In the same cycle DECODE accepts the `AND`, this time consuming two
+  words at once.
 * **t=7**: the `MOVE` retires and `R2` is written.
 * **t=8**: the `AND` retires. It is a single micro-operation, so it follows one
   cycle behind. The device bit is still clear, so the `Z` flag it leaves in
@@ -250,35 +251,76 @@ the programs `make test` runs; its header says how to run it.
 * **t=9**: WRITE is idle. The `RBRA` is only now in DECODE's output register.
 * **t=10 = t=0**: the `RBRA` retires and redirects again.
 
-So of the ten cycles, three instructions retire in three of them (t=7, t=8,
-t=0), and the other seven are the price of the branch and of the memory access:
+### Where the ten cycles go
 
-| cycles | what they pay for |
-| --- | --- |
-| t=1, t=2, t=3 | branch refill — request, instruction-memory latency, Icache |
-| t=4 | DECODE and PREPARE latency for the first instruction |
-| t=5, t=6 | the round trip to the polled device word |
-| t=9 | a bubble in WRITE, see below |
+Read as a narrative, the bullets above invite an answer that does not survive
+arithmetic: that the ten cycles are three instructions plus the overheads around
+them. The useful reading is that they are **one instruction-memory refill**.
+FETCH delivers one word per clock cycle, the loop is five words long, and the
+branch puts a fixed cost either side of those five. Follow the
+`FETCH/dc_addr_o` row, and the cycles in which the Icache actually takes what is
+offered there (`ICACHE/s_ready_o` high):
 
-The bubble at t=9 is the interesting one, because it is a *second*, indirect
-cost of the data read. Watch the back-pressure travel backwards. The `MOVE`
-stalls PREPARE, so DECODE stops consuming (`m_ready_i` low at t=4 and t=5), so
-the Icache fills and refuses FETCH (`s_ready_o` low at t=5), so FETCH has no
-free slot and skips a request (`wb_stb_o` low at t=6). The word `0x0008` that
-FETCH offered at t=5 is therefore not taken until t=6, and the `RBRA`'s second
-word `0x0009` not until t=7 — which is why the Icache cannot offer the `RBRA` as
-a pair (`m_double_o`) before t=8, and why WRITE has nothing to do at t=9. One
-cycle of waiting for the device costs two cycles of loop.
+| cycles | | |
+| --- | --- | --- |
+| t=0, t=1 | 2 | the redirect, then the instruction memory's read latency |
+| t=2 – t=7 | 6 | the loop's five words, one per cycle — but see t=5 |
+| t=8, t=9 | 2 | decoding the last word, and carrying it to WRITE |
 
-Two further things the diagram makes visible. FETCH issues nine
-instruction-memory requests per iteration and only five of them survive the
-branch, so the loop runs at well under half of the instruction bus's bandwidth —
-which is fine, because it is not what limits it. And `early_valid_o` never
-fires: the [early redirect](../src/cpu_main/README.md#Early-redirect) only
-resolves *unconditional* branches in DECODE, and this one is conditional on `Z`,
-so it has to travel all the way to WRITE. Changing the branch to `RBRA loop, 1`
-— which of course no longer polls anything — takes the iteration from ten cycles
-to eight.
+Two plus six plus two is the ten. The first word of the loop lands in the Icache
+at t=2 and the last at t=7 — five words spread over six cycles, because at t=5
+the Icache refuses the word FETCH is offering it. The last one still has to be
+decoded at t=8 and to reach WRITE at t=9, which retires it at t=10 = t=0.
+
+Note what is *not* in that accounting: the data read. Its latency is hidden —
+the request goes out at t=5 and the word is back at t=6, inside the window in
+which the loop is fetching its remaining instruction words anyway.
+
+Not quite hidden, though. The one row in the diagram that the read is
+responsible for is the refusal at t=5, and that chain is worth spelling out,
+because it runs backwards through four modules:
+
+1. The `MOVE` expands into two micro-operations. The Sequencer in PREPARE issues
+   one per cycle and holds `DECODE/prep_ready_i` low until it has issued the
+   last of them.
+2. That second micro-operation carries `MEM_WAIT_SRC`, so it cannot be issued
+   until the device word arrives at t=6. `prep_ready_i` is therefore low for
+   *two* cycles, t=4 and t=5, rather than one.
+3. DECODE cannot accept a new instruction while PREPARE is holding it, so it
+   leaves its `fetch_ready_o` low at t=4 and t=5. That is the row drawn as
+   `ICACHE/m_ready_i`: the two are the same net, seen from the Icache's side.
+4. The Icache buffers two words, and by t=5 it is holding both — the `AND` and
+   its immediate operand (`m_addr_o` = `0x0006`, `m_double_o` high). Nothing is
+   draining it, so it has nowhere to put a third word and drops `s_ready_o`
+   at t=5.
+5. FETCH is offering `0x0008` in that cycle and is refused. It re-offers it at
+   t=6, `0x0009` follows at t=7, so the Icache can only offer the `RBRA` as a
+   pair at t=8 — one cycle later than it otherwise would, which is the tenth
+   cycle of the loop.
+
+That last step is what the reader sees as the bubble at t=9: WRITE is idle
+because the `RBRA` was decoded a cycle late, not because of anything happening
+in WRITE.
+
+The measurement agrees with the chain. Replace `MOVE @R0, R2` with a read of a
+register holding zero, changing nothing else about the loop, and the middle row
+of the table above shrinks from six cycles to five and the iteration from ten to
+**nine**. One cycle is the whole cost of the data access here.
+
+One thing in the diagram is a red herring, and it is worth naming so that it is
+not mistaken for a fourth link in that chain. `FETCH/wb_stb_o` is low at t=6:
+the back-pressure does reach FETCH, and an instruction-memory request cycle does
+go unused. But it costs nothing, because the request it delays is for `0x000A`,
+which the branch discards anyway. FETCH issues nine requests per iteration and
+only five of them survive the branch; the instruction bus is busy in nine cycles
+out of ten, doing five cycles of useful work.
+
+Finally, `early_valid_o` never fires. The
+[early redirect](../src/cpu_main/README.md#Early-redirect) resolves only
+*unconditional* branches in DECODE, and this one is conditional on `Z`, so it
+has to travel all the way to WRITE. Changing it to `RBRA loop, 1` — which of
+course no longer polls anything — takes two cycles off the front of the table
+and the iteration from ten cycles to eight.
 
 ## Self-modifying code
 Instruction and data memory are two ports of the same physical RAM, so a program
