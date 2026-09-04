@@ -4,9 +4,9 @@
 % Version: 0.1
 % Date: 2007/10/11
 %
-% Shared by every timing diagram in this repository; see the "timing" target in
-% the top-level Makefile for the list.  Used by src/cpu_main/timing.tex,
-% src/interrupt/timing.tex and doc/loop_timing.tex.
+% Shared by every timing diagram in this repository; see the TIMINGS list and
+% the "diagrams" target in the top-level Makefile.  Used by
+% src/cpu_main/timing.tex, src/interrupt/timing.tex and doc/loop_timing.tex.
 
 \ProvidesPackage{timing}
 
@@ -78,8 +78,12 @@
     \def\wavewidth{#3}
     \setcounter{wavenum}{0}
     \nextwave{#1}
+    % One dotted time marker per label, t=0 .. t=\wavewidth, but only
+    % \wavewidth clock cycles between them: the marker sits at the START of its
+    % cycle, so a cycle drawn after the last marker would extend the clock a
+    % cycle past every signal row, all of which are \wavewidth units wide.
     \foreach \t in {0,1,...,\wavewidth}{
       \draw[dotted] (t_cur) +(0,.5) node[above] {t=\t} -- ++(0,.4-#2);
-      \clki
+      \ifnum\t<\wavewidth\relax\clki\fi
     }
 }{\end{tikzpicture}}
