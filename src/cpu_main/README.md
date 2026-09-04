@@ -280,7 +280,7 @@ bypass the second `@R0++` would work from the stale `0x001B` and leave `R0` at
 ![Waveform](timing.png)
 
 The diagram is drawn by hand in [timing.tex](timing.tex), from values read off a
-simulation run; `make timing` regenerates `timing.png` from it.
+simulation run; `make diagrams` regenerates `timing.png` from it.
 
 ## External interfaces
 In the following I'll describe in detail the interfaces to the various

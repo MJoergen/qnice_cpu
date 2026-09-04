@@ -253,7 +253,7 @@ input to be registered.
 
 **DONE — see [src/interrupt/README.md](../src/interrupt/README.md).** The diagram
 is [src/interrupt/timing.tex](../src/interrupt/timing.tex), rendered by
-`make timing`, and the module README next to it carries the cycle-by-cycle
+`make diagrams`, and the module README next to it carries the cycle-by-cycle
 walkthrough and the contract as five obligations on the device and five on the
 CPU. Everything on the CPU side of the boundary is registered; the two
 exceptions, `start_i` and the device's drive of `isr_addr_i`, are named as such.
@@ -517,7 +517,7 @@ The reference halts on both.
   sources disagreed about most, so it is worth pinning down before any code
   commits to a reading of it. The diagram is
   [src/interrupt/timing.tex](../src/interrupt/timing.tex) and the prose around it
-  is [src/interrupt/README.md](../src/interrupt/README.md); `make timing` renders
+  is [src/interrupt/README.md](../src/interrupt/README.md); `make diagrams` renders
   the `.png`, and both are committed. The `timing` rule is now a pattern rule
   over a `TIMINGS` list, and the shared LaTeX macros moved to `doc/timing.sty`
   (`src/cpu_main/timing.png` re-renders byte-identical after that move).

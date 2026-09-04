@@ -36,7 +36,7 @@ make sim TEST=prog_interleave         # run a different test program (test/<name
 make sim REGISTER_BANK_WIDTH=8        # override register bank address width (default 8)
 make system.bit                       # Vivado synthesis + bitstream (needs Vivado at $XILINX_DIR)
 make utilization                      # refresh the measured numbers in doc/README.md (needs Vivado)
-make timing                           # re-render every timing diagram (.tex -> .png; needs pdflatex)
+make diagrams                           # re-render every timing diagram (.tex -> .png; needs pdflatex)
 make synth                            # Yosys synthesis (ghdl -a, then yosys -m ghdl synth_xilinx)
 make formal                           # run all formal verification (delegates to formal/Makefile)
 make lint                             # check every VHDL file against CODING_STYLE.md (needs vsg)
@@ -147,7 +147,7 @@ single VHDL entity CPU_MAIN (in `src/cpu_main/cpu_main.vhd`) mainly to simplify 
 verification of the interactions between them. CPU_MAIN also instantiates the **SEQUENCER** on
 the DECODE→PREPARE link; it is not a stage (no payload registers, no latency) but a one-to-many
 adapter, and it shares the two stages' flush reset. The block diagram is
-[doc/cpu.tex](doc/cpu.tex), rendered to `doc/cpu.png` by `make timing`.
+[doc/cpu.tex](doc/cpu.tex), rendered to `doc/cpu.png` by `make diagrams`.
 
 Stage-to-stage handshaking uses an AXI-style `VALID`/`READY` protocol throughout (also on the
 Wishbone bus, via `stall`/`ack`). Two independent sources of back-pressure exist: an
@@ -482,7 +482,7 @@ has Vivado.
   [src/cpu_main/README.md](src/cpu_main/README.md#Waveforms) was read off, and it is in `TESTS`
   only so that a change invalidating the diagram's quoted addresses and cycle counts fails the
   writes-log diff. The diagram itself is hand-written in `src/cpu_main/timing.tex` and rendered
-  by `make timing`; nothing derives it from the simulation automatically.
+  by `make diagrams`; nothing derives it from the simulation automatically.
   `test/prog_poll.asm` is the same idea for the ten-cycle polling loop drawn in
   [doc/loop_timing.tex](doc/loop_timing.tex), but it is deliberately **not** in `TESTS`: it is a
   device-polling loop with no device, so it never halts and `make check TEST=prog_poll` would run
@@ -494,4 +494,4 @@ has Vivado.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).
 - `formal/` — one `.psl`/`.sby`/`.gtkw` triplet per formally-verified module.
 - `doc/` — architecture overview and block diagram source (`cpu.tex`/`cpu.png`, TikZ, rendered by
-  `make timing`; it replaced a diagrams.net `cpu.drawio` that could only be edited in the GUI).
+  `make diagrams`; it replaced a diagrams.net `cpu.drawio` that could only be edited in the GUI).

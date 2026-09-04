@@ -237,7 +237,7 @@ cycles the instruction takes — breaks the writes-log diff instead of silently
 leaving the diagram wrong. Its own self-check is thin on purpose: that `R0` ends
 up past both post-increments and that the sum `0x1234 + 0x2345 = 0x3579` landed
 in memory. When it does need to change, re-read the values from a fresh
-simulation and run `make timing`.
+simulation and run `make diagrams`.
 
 `prog_poll.asm` exists for the same reason — it generates the loop timing
 diagram in [doc/README.md](../doc/README.md#A-polling-loop-cycle-by-cycle) —

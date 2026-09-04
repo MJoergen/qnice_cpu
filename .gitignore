@@ -10,10 +10,10 @@ test/*.writes
 # Per-run statistics; the committed reference copies are test/*.stats.golden
 test/*.stats
 
-# LaTeX intermediates from "make timing" (the .tex files listed in the
-# Makefile's TIMINGS and DIAGRAMS). The rule removes these itself; these entries
-# catch a hand-run pdflatex, which drops them in whatever directory it was
-# invoked from.
+# LaTeX intermediates from "make diagrams" (the .tex files listed in the
+# Makefile's TIMINGS and BLOCK_DIAGRAMS). The rule removes these itself; these
+# entries catch a hand-run pdflatex, which drops them in whatever directory it
+# was invoked from.
 *.aux
 *.pdf
 *.synctex.gz

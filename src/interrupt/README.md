@@ -18,7 +18,7 @@ against a real GHDL simulation once the module runs, exactly as
 
 One hardware interrupt taken to completion, followed by a second request that
 arrives while the ISR is still running and is therefore made to wait. Rendered
-from [timing.tex](timing.tex) by `make timing`.
+from [timing.tex](timing.tex) by `make diagrams`.
 
 ## Ports
 

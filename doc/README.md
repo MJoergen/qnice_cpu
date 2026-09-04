@@ -15,7 +15,7 @@ See the following block diagram:
 
 ![Block Diagram](cpu.png)
 
-It is drawn by [cpu.tex](cpu.tex) and rendered by `make timing`; edit the LaTeX
+It is drawn by [cpu.tex](cpu.tex) and rendered by `make diagrams`; edit the LaTeX
 source rather than the `.png`.
 
 Between DECODE and PREPARE sits the [SEQUENCER](../src/cpu_main/sequencer.vhd),
@@ -233,7 +233,7 @@ The values are read off a GHDL simulation of
 [`test/prog_poll.asm`](../test/prog_poll.asm) — cycles 35 to 45, by which point
 the loop has settled and cycle 45 is bit-for-bit identical to cycle 35, which is
 why the last column repeats the first. The picture is drawn by hand in
-[loop_timing.tex](loop_timing.tex); `make timing` regenerates the `.png` from
+[loop_timing.tex](loop_timing.tex); `make diagrams` regenerates the `.png` from
 it. `test/prog_poll.asm` deliberately never halts and is therefore not one of
 the programs `make test` runs; its header says how to run it.
 

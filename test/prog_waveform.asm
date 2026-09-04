@@ -7,7 +7,7 @@
 ;
 ; CAUTION: changing this file (or anything that shifts the addresses in it)
 ; invalidates the numbers in that README section and in src/cpu_main/timing.tex.
-; Re-read them off a fresh simulation and run "make timing".
+; Re-read them off a fresh simulation and run "make diagrams".
 ;
 ; The tail of the program checks that the ADD did what the diagram claims: that
 ; R0 ends up at L2 after the two post-increments, and that L3 holds the sum
