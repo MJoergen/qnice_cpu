@@ -553,6 +553,53 @@ measurement (929 → 903), as the shorter path lets synthesis simplify either si
 of it. The rest of the branch is the zero-latency support itself, and stays
 there.
 
+**Rejected: a combinatorial DECODE stage.** DECODE's output register looks
+removable: the stage is a decoder, its logic is thin, and the Icache already
+presents its input from a register. What the register actually buys is not
+DECODE's own logic but the **Register module's one-cycle read latency**. DECODE
+drives `reg_src_addr_o`/`reg_dst_addr_o` combinationally off the instruction
+word and the values come back a cycle later, and `prep_stage_o.src_val`/
+`.dst_val` are already live wires — so the register exists only to hold the
+instruction fields until its operands catch up.
+
+That latency is the price of a design goal. This CPU puts the register file in
+**block RAM**, where the original QNICE-FPGA builds it from LUTRAMs; a block RAM
+read is registered by construction, a LUTRAM read is asynchronous. So "make
+DECODE combinatorial" is really "put the register file back in LUTRAM", and it
+was measured that way — `registers.vhd` rewritten around an asynchronous array,
+`p_output` in `decode.vhd` turned into a `process (all)`.
+
+It works, and it simplifies what one would hope: two of the three forwarding
+levels in `registers.vhd` go away, and so does the bank-switch flush entirely
+(with no output register there is no instruction that has already read the
+outgoing bank, so the one-cycle hold on DECODE's input covers every case). All
+ten test programs pass with byte-identical `test/*.writes.golden`, and cycles
+fall **4.2%** on `prog.asm`, 14883 → 14252, up to 11.8% on `prog_hazard`.
+
+It does not close.
+
+| build | banks | WNS | failing endpoints |
+| --- | --- | --- | --- |
+| baseline | 256 | **+0.002 ns** | 0 |
+| baseline | 2 | +0.001 ns | 0 |
+| combinatorial DECODE | 256 | **−0.660 ns** | 688 |
+| combinatorial DECODE | 2 | **−0.234 ns** | 75 |
+
+The 2-bank builds separate two independent costs. At the shipping width the
+worst path is the asynchronous read itself — Icache `m_data` through DECODE into
+a 2048-entry LUTRAM and out through its mux tree into PREPARE, 7.857 ns — and it
+costs the block RAMs it was there to use: 970 → 2739 LUTs, 6 → 4 BRAMs. Shrink
+the array until that path is trivial and the design still misses by 0.234 ns, on
+the **backward** path instead: collapsing DECODE into PREPARE stretches the ready
+chain from WRITE's registers through the sequencer and DECODE into FETCH in a
+single cycle. The Status Register loop, the usual worst path, is unmoved by
+either.
+
+At the periods the two configurations actually reach, `prog.asm` is
+14883 × 7.248 ns = 107.9 µs against 14252 × 7.910 = 112.7 µs, i.e. **4.5% slower
+in wall-clock time**. Even `prog_hazard`, the best case in cycles, only nets
+−3.7%.
+
 Remaining ideas:
 * The Icache adds a further cycle to the branch penalty: a word arriving from
   FETCH is registered before DECODE sees it. A bypass for the empty-buffer case
