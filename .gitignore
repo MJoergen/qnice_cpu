@@ -10,15 +10,14 @@ test/*.writes
 # Per-run statistics; the committed reference copies are test/*.stats.golden
 test/*.stats
 
-# LaTeX intermediates from "make timing" (src/cpu_main/timing.tex). The rule
-# removes these itself; these entries catch a hand-run pdflatex, which drops
-# them in whatever directory it was invoked from.
+# LaTeX intermediates from "make timing" (the .tex files listed in the
+# Makefile's TIMINGS). The rule removes these itself; these entries catch a
+# hand-run pdflatex, which drops them in whatever directory it was invoked from.
 *.aux
 *.pdf
 *.synctex.gz
 texput.log
-src/cpu_main/timing.log
-timing.log
+*timing.log
 
 # Yosys
 yosys.log

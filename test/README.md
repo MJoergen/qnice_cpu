@@ -239,6 +239,19 @@ up past both post-increments and that the sum `0x1234 + 0x2345 = 0x3579` landed
 in memory. When it does need to change, re-read the values from a fresh
 simulation and run `make timing`.
 
+`prog_poll.asm` exists for the same reason — it generates the loop timing
+diagram in [doc/README.md](../doc/README.md#A-polling-loop-cycle-by-cycle) —
+but it is **not** in `TESTS`, because **it never halts**. It is a device-polling
+loop, three instructions spinning until a status bit appears at `@R0`, and the
+testbench has no device to set that bit: `DEV` is an ordinary memory word
+holding zero, and nothing in the loop writes to memory. `make check
+TEST=prog_poll` would therefore run until the `G_TIMEOUT` watchdog in
+`tb_cpu.vhd` failed it. Run it with an explicit stop time instead; the header of
+the program itself gives the command. Nothing guards its numbers the way `TESTS`
+membership guards `prog_waveform.asm`'s, so a change to the pipeline that alters
+the loop's ten-cycle period will not fail CI — re-read the values and run `make
+timing` when the pipeline changes.
+
 ## Unimplemented instructions fail the run
 
 Independently of the verdict protocol above, `p_unimplemented` in

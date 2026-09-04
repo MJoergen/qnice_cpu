@@ -1,0 +1,81 @@
+% Timing diagram of a three-instruction polling loop going round once.
+%
+%       loop  MOVE  @R0, R2        ; 0x0005          (1 word)
+%             AND   0x0002, R2     ; 0x0006, 0x0007  (2 words)
+%             RBRA  loop, Z        ; 0x0008, 0x0009  (2 words)
+%
+% Five words of instruction memory, and exactly ten clock cycles per iteration.
+% The loop waits for bit 1 of an I/O device mapped at the address in R0; here
+% that device is an ordinary memory word (0x000A) holding zero, so the branch is
+% always taken and the loop runs forever. See doc/README.md for the prose.
+%
+% All values below are taken from a GHDL simulation of test/prog_poll.asm,
+% sampled at cycles 35..45 of the run (350 ns .. 450 ns), by which point the
+% loop has settled: cycle 45 is bit-for-bit identical to cycle 35, which is why
+% the last column of the diagram repeats the first.
+%
+% Drawing convention, the same one src/cpu_main/timing.tex uses: handshake bits
+% (valid/ready/enable) are always drawn with their true value; payload buses are
+% greyed out whenever their valid is low, and greyed out but still labelled when
+% they carry a word of the abandoned, speculatively fetched stream past the
+% branch (0x000A and up). What is added here is COLOUR: every box is tinted
+% according to which of the three instructions it belongs to, so that the ten
+% cycles can be attributed to them by eye.
+%
+% The top three rows are not signals but a summary of the three pipeline
+% registers below them, each derived from the valid/address pair drawn further
+% down: ICACHE/m_valid_o + m_addr_o, DECODE/prep_valid_o + prep_stage_o.addr,
+% and WRITE/prep_valid_i + prep_stage_i.addr. A low line means the stage is
+% empty in that cycle.
+%
+% WRITE/prep_stage_i.microcodes is 36 bits wide -- the whole list of up to three
+% micro-operations -- but only the low 12 bits, the one being executed, are
+% shown. 0x084 is MEM_READ_SRC + REG_MOD_SRC, 0x828 is LAST + MEM_WAIT_SRC +
+% REG_WRITE, and 0x808 is LAST + REG_WRITE.
+
+\documentclass{standalone}
+\usepackage{timing}
+
+% Eleven cycles of four-character bus values, plus the widest label in the tree.
+\renewcommand{\wavescale}{1.4}
+
+% One tint per instruction, so a box says at a glance which of the three owns
+% the cycle. Deliberately pale: the value inside is printed in black.
+\newcommand*{\cmove}[2]{\bitvector{#1}{#2}{blue!15}}
+\newcommand*{\cand}[2]{\bitvector{#1}{#2}{green!25}}
+\newcommand*{\crbra}[2]{\bitvector{#1}{#2}{orange!35}}
+
+\begin{document}
+\begin{wave}{29}{11}
+ \nextwave{\textit{in ICACHE}}            \bit{0}{3} \cmove{MOVE}{1} \cand{AND}{3} \crbra{RBRA}{2} \unknown[x]{1} \bit{0}{1}
+ \nextwave{\textit{in DECODE}}            \unknown[x]{1} \bit{0}{3} \cmove{MOVE}{3} \cand{AND}{1} \bit{0}{1} \crbra{RBRA}{1} \unknown[x]{1}
+ \nextwave{\textit{in WRITE}}             \crbra{RBRA}{1} \bit{0}{4} \cmove{MOVE}{1} \bit{0}{1} \cmove{MOVE}{1} \cand{AND}{1} \bit{0}{1} \crbra{RBRA}{1}
+ \nextwave{FETCH/wb\_stb\_o}              \bit{1}{6} \bit{0}{1} \bit{1}{4}
+ \nextwave{FETCH/wb\_addr\_o}             \unknown[000D]{1} \cmove{0005}{1} \cand{0006}{1} \cand{0007}{1} \crbra{0008}{1} \crbra{0009}{1} \unknown[000A]{2} \unknown[000B]{1} \unknown[000C]{1} \unknown[000D]{1}
+ \nextwave{FETCH/dc\_valid\_o}            \bit{0}{2} \bit{1}{8} \bit{0}{1}
+ \nextwave{FETCH/dc\_addr\_o}             \unknown[x]{2} \cmove{0005}{1} \cand{0006}{1} \cand{0007}{1} \crbra{0008}{2} \crbra{0009}{1} \unknown[000A]{1} \unknown[000B]{1} \unknown[x]{1}
+ \nextwave{FETCH/dc\_data\_o}             \unknown[x]{2} \cmove{0048}{1} \cand{9F88}{1} \cand{0002}{1} \crbra{FFA3}{2} \crbra{FFFB}{1} \unknown[0000]{2} \unknown[x]{1}
+ \nextwave{ICACHE/s\_ready\_o}            \bit{0}{1} \bit{1}{4} \bit{0}{1} \bit{1}{4} \bit{0}{1}
+ \nextwave{ICACHE/m\_valid\_o}            \bit{0}{3} \bit{1}{7} \bit{0}{1}
+ \nextwave{ICACHE/m\_ready\_i}            \bit{1}{4} \bit{0}{2} \bit{1}{1} \bit{0}{1} \bit{1}{3}
+ \nextwave{ICACHE/m\_double\_o}           \bit{0}{5} \bit{1}{2} \bit{0}{1} \bit{1}{1} \bit{0}{2}
+ \nextwave{ICACHE/m\_addr\_o}             \unknown[x]{3} \cmove{0005}{1} \cand{0006}{3} \crbra{0008}{2} \unknown[000A]{1} \unknown[x]{1}
+ \nextwave{DECODE/prep\_valid\_o}         \bit{1}{1} \bit{0}{3} \bit{1}{4} \bit{0}{1} \bit{1}{2}
+ \nextwave{DECODE/prep\_ready\_i}         \bit{1}{4} \bit{0}{2} \bit{1}{5}
+ \nextwave{DECODE/prep\_stage\_o.addr}    \unknown[000A]{1} \unknown[x]{3} \cmove{0005}{3} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1} \unknown[000A]{1}
+ \nextwave{WRITE/prep\_valid\_i}          \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1} \bit{1}{2} \bit{0}{1} \bit{1}{1}
+ \nextwave{WRITE/prep\_stage\_i.addr}     \crbra{0008}{1} \unknown[x]{4} \cmove{0005}{1} \unknown[x]{1} \cmove{0005}{1} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1}
+ \nextwave{WRITE/prep\_stage\_i.microcodes} \crbra{808}{1} \unknown[x]{4} \cmove{084}{1} \unknown[x]{1} \cmove{828}{1} \cand{808}{1} \unknown[x]{1} \crbra{808}{1}
+ \nextwave{WRITE/mem\_req\_valid\_o}      \bit{0}{5} \bit{1}{1} \bit{0}{5}
+ \nextwave{WRITE/mem\_req\_addr\_o}       \unknown[x]{5} \cmove{000A}{1} \unknown[x]{5}
+ \nextwave{MEMORY/msrc\_valid\_o}         \bit{0}{6} \bit{1}{1} \bit{0}{4}
+ \nextwave{MEMORY/msrc\_data\_o}          \unknown[x]{6} \cmove{0000}{1} \unknown[x]{4}
+ \nextwave{REGISTERS/wr\_en\_i}           \bit{1}{1} \bit{0}{6} \bit{1}{2} \bit{0}{1} \bit{1}{1}
+ \nextwave{REGISTERS/wr\_reg\_i}          \crbra{F}{1} \unknown[x]{6} \cmove{2}{1} \cand{2}{1} \unknown[x]{1} \crbra{F}{1}
+ \nextwave{REGISTERS/wr\_val\_i}          \crbra{0005}{1} \unknown[x]{6} \cmove{0000}{1} \cand{0000}{1} \unknown[x]{1} \crbra{0005}{1}
+ \nextwave{CPU/inst\_done\_o}             \bit{1}{1} \bit{0}{6} \bit{1}{2} \bit{0}{1} \bit{1}{1}
+ \nextwave{WRITE/fetch\_valid\_o}         \bit{1}{1} \bit{0}{9} \bit{1}{1}
+ \nextwave{WRITE/fetch\_addr\_o}          \crbra{0005}{1} \unknown[x]{9} \crbra{0005}{1}
+\end{wave}
+
+\end{document}

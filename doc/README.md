@@ -192,6 +192,94 @@ The gain is uneven across programs, as the reasoning above predicts.
 experiment described above, is at the other end: 21 data requests in 54 cycles,
 17 of them simultaneous.
 
+## A polling loop, cycle by cycle
+
+The [Interleaving](#Interleaving) section above looks at pairs of instructions.
+This one takes a whole loop apart — the shape a device driver spins in while it
+waits for a status bit:
+
+```
+loop  MOVE  @R0, R2      ; 0x0005
+      AND   0x0002, R2   ; 0x0006, 0x0007
+      RBRA  loop, Z      ; 0x0008, 0x0009
+```
+
+Three instructions, five words of instruction memory, one data read, and
+**exactly ten clock cycles per iteration**. Where those ten cycles go is not
+obvious from the source, so the diagram below follows one iteration through
+every stage from the instruction fetch to `inst_done_o`. Each of the three
+instructions has its own colour, and the top three rows summarise which
+instruction occupies which pipeline register in each cycle. A flat line there
+means the stage is empty.
+
+![Polling loop waveform](loop_timing.png)
+
+The values are read off a GHDL simulation of
+[`test/prog_poll.asm`](../test/prog_poll.asm) — cycles 35 to 45, by which point
+the loop has settled and cycle 45 is bit-for-bit identical to cycle 35, which is
+why the last column repeats the first. The picture is drawn by hand in
+[loop_timing.tex](loop_timing.tex); `make timing` regenerates the `.png` from
+it. `test/prog_poll.asm` deliberately never halts and is therefore not one of
+the programs `make test` runs; its header says how to run it.
+
+* **t=0**: the `RBRA` retires. `inst_done_o` pulses, `R15` is written with the
+  branch target `0x0005`, and `fetch_valid_o` redirects FETCH and flushes the
+  Icache. Everything FETCH had speculatively read past the branch — the four
+  words `0x000A` to `0x000D`, greyed out in the diagram — is thrown away.
+* **t=1**: FETCH issues the first instruction-memory request of the new stream,
+  for `0x0005`.
+* **t=2**: that word (`0x0048`) comes back and is handed to the Icache. The
+  pipeline is empty: DECODE, PREPARE and WRITE all have nothing.
+* **t=3**: the Icache offers it and DECODE accepts `MOVE @R0, R2`. Note
+  `m_double_o` is low — only one word is buffered so far — which is enough,
+  because this instruction has no immediate operand.
+* **t=4**: the `MOVE` sits in DECODE's output register and the Sequencer in
+  PREPARE issues its first micro-operation, `0x084` (`MEM_READ_SRC` +
+  `REG_MOD_SRC`). It holds `prep_ready_i` low, because a second micro-operation
+  is still to come.
+* **t=5**: WRITE puts the read of the device word on the data bus
+  (`mem_req_addr_o` = `0x000A`).
+* **t=6**: the device word returns on `msrc_data_o` and the Sequencer can
+  finally issue the second micro-operation, `0x828` (`LAST` + `MEM_WAIT_SRC` +
+  `REG_WRITE`). This is the loop's only genuine stall. In the same cycle DECODE
+  accepts the `AND`, this time consuming two words at once.
+* **t=7**: the `MOVE` retires and `R2` is written.
+* **t=8**: the `AND` retires. It is a single micro-operation, so it follows one
+  cycle behind. The device bit is still clear, so the `Z` flag it leaves in
+  `R14` is set and the branch will be taken. DECODE accepts the `RBRA`.
+* **t=9**: WRITE is idle. The `RBRA` is only now in DECODE's output register.
+* **t=10 = t=0**: the `RBRA` retires and redirects again.
+
+So of the ten cycles, three instructions retire in three of them (t=7, t=8,
+t=0), and the other seven are the price of the branch and of the memory access:
+
+| cycles | what they pay for |
+| --- | --- |
+| t=1, t=2, t=3 | branch refill — request, instruction-memory latency, Icache |
+| t=4 | DECODE and PREPARE latency for the first instruction |
+| t=5, t=6 | the round trip to the polled device word |
+| t=9 | a bubble in WRITE, see below |
+
+The bubble at t=9 is the interesting one, because it is a *second*, indirect
+cost of the data read. Watch the back-pressure travel backwards. The `MOVE`
+stalls PREPARE, so DECODE stops consuming (`m_ready_i` low at t=4 and t=5), so
+the Icache fills and refuses FETCH (`s_ready_o` low at t=5), so FETCH has no
+free slot and skips a request (`wb_stb_o` low at t=6). The word `0x0008` that
+FETCH offered at t=5 is therefore not taken until t=6, and the `RBRA`'s second
+word `0x0009` not until t=7 — which is why the Icache cannot offer the `RBRA` as
+a pair (`m_double_o`) before t=8, and why WRITE has nothing to do at t=9. One
+cycle of waiting for the device costs two cycles of loop.
+
+Two further things the diagram makes visible. FETCH issues nine
+instruction-memory requests per iteration and only five of them survive the
+branch, so the loop runs at well under half of the instruction bus's bandwidth —
+which is fine, because it is not what limits it. And `early_valid_o` never
+fires: the [early redirect](../src/cpu_main/README.md#Early-redirect) only
+resolves *unconditional* branches in DECODE, and this one is conditional on `Z`,
+so it has to travel all the way to WRITE. Changing the branch to `RBRA loop, 1`
+— which of course no longer polls anything — takes the iteration from ten cycles
+to eight.
+
 ## Self-modifying code
 Instruction and data memory are two ports of the same physical RAM, so a program
 can store into its own instruction stream. Doing so is fully supported, with no

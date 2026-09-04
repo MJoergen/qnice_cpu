@@ -180,7 +180,7 @@ $(ROM): $(ASM)
 # Every hand-written timing diagram in the tree.  Each is a standalone LaTeX
 # document that pulls in the shared macros from doc/timing.sty; both the .tex
 # and the rendered .png are committed.
-TIMINGS = src/cpu_main/timing src/interrupt/timing
+TIMINGS = src/cpu_main/timing src/interrupt/timing doc/loop_timing
 
 .PHONY: timing
 timing: $(addsuffix .png,$(TIMINGS))

@@ -475,6 +475,10 @@ has Vivado.
   only so that a change invalidating the diagram's quoted addresses and cycle counts fails the
   writes-log diff. The diagram itself is hand-written in `src/cpu_main/timing.tex` and rendered
   by `make timing`; nothing derives it from the simulation automatically.
+  `test/prog_poll.asm` is the same idea for the ten-cycle polling loop drawn in
+  [doc/loop_timing.tex](doc/loop_timing.tex), but it is deliberately **not** in `TESTS`: it is a
+  device-polling loop with no device, so it never halts and `make check TEST=prog_poll` would run
+  into the watchdog. Run it with an explicit `--stop-time`, as its own header says.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).
 - `formal/` — one `.psl`/`.sby`/`.gtkw` triplet per formally-verified module.
 - `doc/` — architecture overview and block diagram source (`cpu.drawio`/`cpu.png`).
