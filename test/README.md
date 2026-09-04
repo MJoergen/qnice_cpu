@@ -252,6 +252,16 @@ membership guards `prog_waveform.asm`'s, so a change to the pipeline that alters
 the loop's ten-cycle period will not fail CI — re-read the values and run `make
 timing` when the pipeline changes.
 
+`prog_poll_reg.asm` is its control, and carries all of the same warnings: it
+never halts either, and it is not in `TESTS`. It is the same five-word loop at
+the same addresses with `MOVE R1, R2` in place of `MOVE @R0, R2`, so it does no
+data access at all, and it runs in nine cycles per iteration rather than ten.
+That difference is the measurement quoted in
+[doc/README.md](../doc/README.md#Where-the-ten-cycles-go), and it is the reason
+the two programs have to stay word-for-word aligned — the header of
+`prog_poll_reg.asm` says which two lines differ and why each of them has to.
+Change one of the pair and change the other.
+
 ## Unimplemented instructions fail the run
 
 Independently of the verdict protocol above, `p_unimplemented` in

@@ -479,6 +479,10 @@ has Vivado.
   [doc/loop_timing.tex](doc/loop_timing.tex), but it is deliberately **not** in `TESTS`: it is a
   device-polling loop with no device, so it never halts and `make check TEST=prog_poll` would run
   into the watchdog. Run it with an explicit `--stop-time`, as its own header says.
+  `test/prog_poll_reg.asm` is that program's control — the same five-word loop at the same
+  addresses, reading a register instead of memory, and so nine cycles per iteration rather than
+  ten. That difference is the measured cost of the data access quoted in doc/README.md, so the
+  two must stay word-for-word aligned; it does not halt either, and is likewise not in `TESTS`.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).
 - `formal/` — one `.psl`/`.sby`/`.gtkw` triplet per formally-verified module.
 - `doc/` — architecture overview and block diagram source (`cpu.drawio`/`cpu.png`).

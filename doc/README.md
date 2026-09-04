@@ -302,10 +302,13 @@ That last step is what the reader sees as the bubble at t=9: WRITE is idle
 because the `RBRA` was decoded a cycle late, not because of anything happening
 in WRITE.
 
-The measurement agrees with the chain. Replace `MOVE @R0, R2` with a read of a
-register holding zero, changing nothing else about the loop, and the middle row
-of the table above shrinks from six cycles to five and the iteration from ten to
-**nine**. One cycle is the whole cost of the data access here.
+The measurement agrees with the chain.
+[`test/prog_poll_reg.asm`](../test/prog_poll_reg.asm) is the control: the same
+five-word loop at the same addresses, with `MOVE R1, R2` — a register holding
+zero — where `prog_poll.asm` has `MOVE @R0, R2`, and no data access anywhere.
+The middle row of the table above shrinks from six cycles to five, and the
+iteration from ten cycles to **nine**. One cycle is the whole cost of the data
+access here.
 
 One thing in the diagram is a red herring, and it is worth naming so that it is
 not mistaken for a fourth link in that chain. `FETCH/wb_stb_o` is low at t=6:
