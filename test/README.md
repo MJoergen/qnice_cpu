@@ -79,7 +79,7 @@ Two details of the mechanism are worth knowing:
 * `0x1FFF` is the top word of the 8 kW memory, and no test program uses it. It
   is an ordinary RAM location, not a decoded I/O register — the monitor watches
   the bus, so the write itself is harmless.
-* A `HALT` now stops the CPU. `src/cpu.vhd` gates the Icache-to-DECODE
+* A `HALT` now stops the CPU. `src/cpu.vhd` gates the ICACHE-to-DECODE
   handshake off as soon as a `HALT` is handed to DECODE (`p_halt_fetched`), so
   the `HALT` is the last instruction that ever enters the pipeline and the CPU
   idles instead of executing whatever data follows it in memory. Gating on the
@@ -181,7 +181,7 @@ banks that follows it is left commented out, since it dominates the simulation
 time of the whole program.
 
 `prog_self_modifying.asm` covers stores into the program's own instruction
-stream. The hazard is that FETCH, the Icache, DECODE and PREPARE have all read
+stream. The hazard is that FETCH, the ICACHE, DECODE and PREPARE have all read
 ahead of the instruction retiring in WRITE, so without the flush described in
 [Self-modifying code](../src/cpu_main/README.md#Self-modifying-code) the *old*
 instruction executes and nothing reports a problem.

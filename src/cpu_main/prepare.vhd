@@ -9,14 +9,14 @@ entity prepare is
       clk_i           : in  std_logic;
       rst_i           : in  std_logic;
 
-      -- From the Sequencer (instantiated alongside this module in
+      -- From the SEQUENCER (instantiated alongside this module in
       -- cpu_main.vhd): one beat per micro-operation, where DECODE emits one
       -- beat per instruction.
       seq_valid_i     : in  std_logic;
       seq_ready_o     : out std_logic;
       seq_stage_i     : in  t_stage;
 
-      -- Memory
+      -- MEMORY
       mem_src_valid_i : in  std_logic;
       mem_src_ready_o : out std_logic;                        -- combinatorial
       mem_src_data_i  : in  std_logic_vector(15 downto 0);

@@ -155,7 +155,7 @@ change architectural state *after* the return address, and `RTI` would replay it
 So WRITE holds its ready to PREPARE low for those two cycles. This is ordinary
 back-pressure — the same stall a memory access already applies — not new
 machinery. It is a different mechanism from `p_halt_fetched` in `cpu.vhd`, which
-gates the Icache-to-DECODE handshake instead; gating the feed is not enough here,
+gates the ICACHE-to-DECODE handshake instead; gating the feed is not enough here,
 because the instructions in question have already been fetched.
 
 **One instruction always runs between two ISRs.** `start_i` is gated on

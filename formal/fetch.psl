@@ -286,7 +286,7 @@ vunit i_fetch(fetch(synthesis))
    -- PROPERTIES OF THE DECODE INTERFACE
    --
    -- NOTE: "dc_" covers both directions. dc_valid_o/dc_addr_o/dc_data_o carry
-   -- instructions towards DECODE (via the Icache); dc_valid_i/dc_addr_i are the
+   -- instructions towards DECODE (via the ICACHE); dc_valid_i/dc_addr_i are the
    -- PC redirect, which comes from the WRITE stage, not from DECODE.
    ---------------------------------------
 

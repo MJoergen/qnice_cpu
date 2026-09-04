@@ -234,13 +234,13 @@ def main():
     main_ = cpu + "/i_cpu_main"
     modules = [
         ("FETCH",          h(cpu + "/i_fetch")),
-        ("CACHE (icache)", h(cpu + "/i_icache")),
+        ("ICACHE",         h(cpu + "/i_icache")),
         ("DECODE",         h(main_ + "/i_decode")),
         ("SEQUENCER",      h(main_ + "/i_sequencer")),
         ("PREPARE",        h(main_ + "/i_prepare")),
         ("WRITE",          h(main_ + "/i_write")),
-        ("Registers",      h(cpu + "/i_registers")),
-        ("Memory",         h(cpu + "/i_memory")),
+        ("REGISTERS",      h(cpu + "/i_registers")),
+        ("MEMORY",         h(cpu + "/i_memory")),
     ]
     glue = {
         "luts": h(cpu + "/(self)")["luts"] + h(main_ + "/(self)")["luts"],

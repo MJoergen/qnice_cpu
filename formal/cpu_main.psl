@@ -13,7 +13,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- INTERNAL ASSERTIONS
    --------------------------------------------
 
-   -- Payload stability on the DECODE -> Sequencer interface.
+   -- Payload stability on the DECODE -> SEQUENCER interface.
    --
    -- NOTE: this deliberately does NOT cover dec2seq_stage.src_val, .dst_val
    -- and .r14. Those three are combinational pass-throughs of the register file
@@ -369,7 +369,7 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    -- The three memory op bits are mutually exclusive by construction of the
    -- microcode ROM -- one access per micro-op is the whole reason instructions
-   -- are decomposed. Nothing downstream re-checks it, and the Memory module's
+   -- are decomposed. Nothing downstream re-checks it, and the MEMORY module's
    -- own formal environment assumes it (f_mreq_op in memory.psl), so assert it
    -- here where it is actually produced.
    --
@@ -623,7 +623,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    --
    -- SOUNDNESS: the redirect only ever goes out for an instruction that really
    -- is such a branch, and only on the cycle DECODE accepts it. The
-   -- fetch_ready_o term is the load-bearing one: the Icache's soft flush is
+   -- fetch_ready_o term is the load-bearing one: the ICACHE's soft flush is
    -- driven from this signal and discards everything it holds, so a redirect
    -- raised on a cycle where the branch is NOT taken into DECODE would throw
    -- the branch itself away.

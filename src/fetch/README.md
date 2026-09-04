@@ -120,7 +120,7 @@ Also stated in the file header:
 * The WISHBONE slave **must** acknowledge requests **in order**. Nothing on the
   bus says which request an `ACK` belongs to, so discarding what an abandoned
   request is owed means discarding the next `wb_stale` acknowledgements. The
-  Memory module makes the same assumption for the same reason, see
+  MEMORY module makes the same assumption for the same reason, see
   [memory/README.md](../memory/README.md).
 
 ## icache.vhd

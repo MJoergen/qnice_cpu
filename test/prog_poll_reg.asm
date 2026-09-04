@@ -7,7 +7,7 @@
 ; and doc/README.md#Where-the-ten-cycles-go quotes the comparison to show why:
 ; the read's latency hides inside the fetch of the loop's remaining instruction
 ; words, and all it actually costs is stalling DECODE long enough that the
-; two-deep Icache has to refuse a word.
+; two-deep ICACHE has to refuse a word.
 ;
 ; Keeping the two programs word-for-word aligned is the point of the file, so
 ; that the nine-versus-ten really does isolate the data access:

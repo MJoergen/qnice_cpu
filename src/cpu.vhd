@@ -101,7 +101,7 @@ architecture synthesis of cpu is
    signal wr2mem_req_addr  : std_logic_vector(15 downto 0);
    signal wr2mem_req_data  : std_logic_vector(15 downto 0);
 
-   -- Memory response back to PREPARE
+   -- MEMORY response back to PREPARE
    signal mem2prep_src_valid : std_logic;
    signal mem2prep_src_ready : std_logic;
    signal mem2prep_src_data  : std_logic_vector(15 downto 0);
@@ -154,7 +154,7 @@ begin
    -- Instruction ICACHE
    ------------------------------------------------------------
 
-   -- The hard flush, from WRITE, which must withdraw whatever the Icache is
+   -- The hard flush, from WRITE, which must withdraw whatever the ICACHE is
    -- offering DECODE in the same cycle. The early redirect from DECODE is the
    -- soft one, and deliberately must not: DECODE raises it because it is
    -- accepting the branch this cycle. See contract (d) in icache.vhd.
@@ -192,7 +192,7 @@ begin
    -- that ever enters the pipeline, so it is also the last one to retire.
    --
    -- Both directions of the handshake are gated by the same signal, so the
-   -- Icache and DECODE always agree on whether a beat was accepted. Only a
+   -- ICACHE and DECODE always agree on whether a beat was accepted. Only a
    -- reset restarts execution.
    icache2decode_valid_gated          <= icache2decode_valid          and not halt_fetched;
    icache2decode_ready_gated          <= icache2decode_ready          and not halt_fetched;
@@ -283,7 +283,7 @@ begin
    ------------------------------------------------------------
 
    -- halt_o is the level "this CPU has executed a HALT", as opposed to the
-   -- single-cycle pulse cpu_main reports when the HALT retires.
+   -- single-cycle pulse CPU_MAIN reports when the HALT retires.
    p_halt : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -326,7 +326,7 @@ begin
 
 
    ------------------------------------------------------------
-   -- Memory interface
+   -- MEMORY interface
    ------------------------------------------------------------
 
    i_memory : entity work.memory

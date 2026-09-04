@@ -7,9 +7,9 @@
 % keeping the source as text next to the RTL is the point.
 %
 % What it shows, and what it deliberately does not: the six pipeline stages in
-% pipeline order, the two shared modules they hang off (Registers on the left,
-% Memory on the right), the two Wishbone buses leaving on the right, and the
-% dotted boundary of the cpu_main entity. It does NOT show the valid/ready
+% pipeline order, the two shared modules they hang off (REGISTERS on the left,
+% MEMORY on the right), the two Wishbone buses leaving on the right, and the
+% dotted boundary of the CPU_MAIN entity. It does NOT show the valid/ready
 % handshaking, the redirect paths from WRITE and DECODE back to FETCH, or the
 % bank-switch signals -- those are described in doc/README.md and in the
 % per-module READMEs, and drawing them here would turn the picture into a net
@@ -70,33 +70,31 @@
    \draw[flow] (prepare) -- (write);
 
    %% ---------------------------------------------------------------
-   %% The cpu_main entity
+   %% The CPU_MAIN entity
    %% ---------------------------------------------------------------
 
-   % The extra coordinate stretches the box upwards only, clearing a band for
-   % the label that the incoming arrow head does not reach into. "fit" has a
-   % single inner sep for all four sides, so asymmetric padding has to be done
-   % this way round.
-   \coordinate (cpumaintop) at ([yshift = 6mm] decode.north);
+   % The label rides just above the top edge rather than inside it: the
+   % ICACHE-to-DECODE arrow comes down the centre line, and CPU_MAIN set inside
+   % the box is wide enough to run into its shaft.
    \node[draw, dotted, thick, rounded corners = 4pt, inner sep = 4mm,
-         fit = (cpumaintop) (decode) (seq) (prepare) (write)] (cpumain) {};
-   \node[anchor = north west, font = \sffamily\scriptsize\itshape]
-      at ([xshift = 2mm, yshift = -1.5mm] cpumain.north west) {cpu\_main};
+         fit = (decode) (seq) (prepare) (write)] (cpumain) {};
+   \node[anchor = south west, font = \sffamily\scriptsize\itshape]
+      at ([xshift = 1mm, yshift = 0.5mm] cpumain.north west) {CPU\_MAIN};
 
    %% ---------------------------------------------------------------
-   %% Shared modules: Registers on the left, Memory on the right
+   %% Shared modules: REGISTERS on the left, MEMORY on the right
    %% ---------------------------------------------------------------
 
-   % Registers spans DECODE down to WRITE: DECODE reads it, WRITE writes it.
+   % REGISTERS spans DECODE down to WRITE: DECODE reads it, WRITE writes it.
    \coordinate (regx) at ([xshift = -42mm] decode.center);
    \node[block, inner sep = 0pt,
-         fit = {(regx |- decode.north) (regx |- write.south)}] (regs) {Registers};
+         fit = {(regx |- decode.north) (regx |- write.south)}] (regs) {REGISTERS};
 
-   % Memory spans PREPARE down to WRITE: WRITE issues the requests, PREPARE
+   % MEMORY spans PREPARE down to WRITE: WRITE issues the requests, PREPARE
    % consumes the read responses.
    \coordinate (memx) at ([xshift = 42mm] decode.center);
    \node[block, inner sep = 0pt,
-         fit = {(memx |- prepare.north) (memx |- write.south)}] (memory) {Memory};
+         fit = {(memx |- prepare.north) (memx |- write.south)}] (memory) {MEMORY};
 
    %% ---------------------------------------------------------------
    %% Connections

@@ -95,7 +95,7 @@ entity icache is
       s_addr_i   : in  std_logic_vector(G_ADDR_SIZE-1 downto 0);
       s_data_i   : in  std_logic_vector(G_DATA_SIZE-1 downto 0);
 
-      -- To Decode
+      -- To DECODE
       -- m_valid_o and m_ready_i are the usual handshaking signals, m_addr_o is
       -- the address of the current instruction, and m_data_o contains one or
       -- two words of data, as indicated by m_double_o. In either case

@@ -54,7 +54,7 @@
 --    on the bus identifies which request an ACK belongs to, so discarding the
 --    acknowledgements owed to an abandoned request means discarding the next
 --    wb_stale of them. Against a slave that completed requests out of order
---    this would drop the wrong responses. The Memory module makes the same
+--    this would drop the wrong responses. The MEMORY module makes the same
 --    assumption for the same reason; see src/memory/README.md.
 --
 -- RESET
@@ -80,7 +80,7 @@ entity fetch is
       wb_ack_i   : in  std_logic;
       wb_data_i  : in  std_logic_vector(15 downto 0);
 
-      -- Send instruction to DECODE (i.e. to the Icache)
+      -- Send instruction to DECODE (i.e. to the ICACHE)
       dc_valid_o : out std_logic := '0';
       dc_ready_i : in  std_logic;
       dc_addr_o  : out std_logic_vector(15 downto 0);

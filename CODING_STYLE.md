@@ -106,6 +106,15 @@ exactly one of something, `i_<entity>` alone is enough (`i_alu`, `i_sequencer`).
 **Signals connecting two sub-modules in a structural entity** are named `<from>2<to>_<what>`:
 `fetch2icache_valid`, `wr2mem_req_addr`, `icache2decode_data`. See `src/cpu.vhd`.
 
+**In prose -- comments, READMEs, commit messages -- the blocks of the block diagram are written in
+ALL CAPS**: FETCH, ICACHE, DECODE, SEQUENCER, PREPARE, WRITE, ALU, REGISTERS, MEMORY, CPU_MAIN.
+That is exactly the set named in [doc/cpu.png](doc/cpu.png), and nothing else gets the treatment --
+a smaller module (`one_stage_buffer`, `dp_ram`, `microcode`) is written as the lower-case
+identifier it is. The caps mark "the block", so they never carry backticks and never appear in a
+path or a file name: MEMORY is the module, `memory.vhd` is its source, `src/memory/` its directory,
+and `i_memory` its instance. Ordinary English words keep their ordinary case -- a *memory* request,
+the *register* file, the Status *Register*.
+
 ## 3. Formatting
 
 * **Indent is 3 spaces.** No tabs.

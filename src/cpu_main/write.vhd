@@ -14,7 +14,7 @@ entity write is
       prep_ready_o    : out std_logic;
       prep_stage_i    : in  t_stage;
 
-      -- Memory
+      -- MEMORY
       mem_req_valid_o : out std_logic;                        -- combinatorial
       mem_req_ready_i : in  std_logic;
       mem_req_op_o    : out std_logic_vector(2 downto 0);     -- combinatorial
@@ -65,7 +65,7 @@ begin
 
    -- NOTE: prep_stage_i.r14 is used directly, with no bypass of this stage's own
    -- Status Register writes. There used to be one (a p_bypass process holding a
-   -- one-cycle-delayed copy of everything written to the Register module, and a
+   -- one-cycle-delayed copy of everything written to the REGISTERS module, and a
    -- priority mux in front of prep_stage_i.r14). It was removed as dead code: a
    -- probe on it never fired once in 8286 accepted beats of test/prog.asm, and
    -- removing it left every test program passing with the golden writes logs
@@ -380,7 +380,7 @@ begin
    ------------------------------------------------------------
 
    -- Instruction and data memory are the same physical RAM, so a store can
-   -- land on an instruction that FETCH, the Icache, DECODE or PREPARE has
+   -- land on an instruction that FETCH, the ICACHE, DECODE or PREPARE has
    -- already read. Nothing downstream would ever notice: the stale copy is
    -- decoded and executed exactly as if the store had not happened. The fix is
    -- the same flush used for a taken branch -- discard everything already read
@@ -397,8 +397,8 @@ begin
    -- Everything already read lies in [next_pc, next_pc + 8):
    --
    --    PREPARE and DECODE hold one instruction each, <= 2 words apiece, so
-   --    the word at the Icache output is at most next_pc + 4.
-   --    The Icache holds 2 words and FETCH at most C_MAX_PENDING = 2 more
+   --    the word at the ICACHE output is at most next_pc + 4.
+   --    The ICACHE holds 2 words and FETCH at most C_MAX_PENDING = 2 more
    --    (see src/fetch/README.md), so the highest address ever requested is
    --    at most 4 beyond that.
    --

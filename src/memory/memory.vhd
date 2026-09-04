@@ -149,7 +149,7 @@ begin
                   '0' when mreq_op_i(C_MEM_READ_DST) = '1' and tsb_dst_fill /= 0 else
                   tsf_req_in_ready;
 
-   -- Block incoming Memory request until ready
+   -- Block incoming memory request until ready
    --
    -- NOTE ON mreq_valid'S STABILITY: mreq_accept (and hence mreq_valid) can
    -- legitimately drop from '1' to '0' across a clock edge even while

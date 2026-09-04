@@ -89,14 +89,14 @@ Note that this is the *registered* `reg_sr`, not the forwarded value that
 a read issued in the same cycle as an `INCRB` still selects the old page.
 
 That is deliberate, and it is safe only because of an invariant maintained
-outside this module: when an instruction changes those upper bits, `cpu_main`
+outside this module: when an instruction changes those upper bits, CPU_MAIN
 guarantees that no read already issued against the outgoing page is ever
 *consumed*. It does that by flushing the instruction whose read has already
 happened and holding back the one whose read is going out in that very cycle —
 and it only has to do either when the instruction concerned actually uses a
 banked value. See
 [Register bank switch](../cpu_main/README.md#Register-bank-switch) in the
-`cpu_main` write-up for the details, including why forwarding the bank here
+CPU_MAIN write-up for the details, including why forwarding the bank here
 would not have been enough on its own: the read address reaches the RAM a cycle
 before the new bank exists.
 
@@ -110,7 +110,7 @@ general-purpose register, and an ordinary write to `R14`, which has
 That asymmetry — the read address uses the page in force when the read was
 *issued*, the write address the page in force when the write *retires* — is what
 makes writing a banked register harmless across a bank switch, and it is the
-reason `cpu_main` can leave `MOVE R8, R0` unflushed straight after an `INCRB`:
+reason CPU_MAIN can leave `MOVE R8, R0` unflushed straight after an `INCRB`:
 the value arrives carrying only a register number, and lands on the new page.
 
 ### Write-Before-Read on the dedicated SR port

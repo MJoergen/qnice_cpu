@@ -381,7 +381,7 @@ survive.
   PREPARE with `rst_i or fetch_valid_o`, so every flip-flop in those two stages
   is cleared by every flush — including the flush that interrupt entry itself
   causes. The in-ISR flag and the saved `R14`/`R15` must sit in WRITE, which is
-  not on that net, or outside `cpu_main` entirely.
+  not on that net, or outside CPU_MAIN entirely.
 
 * **The grant handshake is multi-cycle**, so it does not belong inline in WRITE.
   It should be a leaf module, `src/interrupt/interrupt.vhd`, presenting a
@@ -549,7 +549,7 @@ The reference halts on both.
   that follow it, and if one of them retired in that window `RTI` would replay
   it. So WRITE holds its ready to PREPARE low for those cycles. It is ordinary
   back-pressure, not new machinery, and it is *not* the same mechanism as
-  `p_halt_fetched` in `cpu.vhd` — gating the Icache feed does not help here,
+  `p_halt_fetched` in `cpu.vhd` — gating the ICACHE feed does not help here,
   because the instructions in question are already past it.
 * **T4. `RTI`.** Restore `R15` through the ordinary write port and `R14` through
   the SR port in one cycle; clear the in-ISR flag. The write to `R15` already
@@ -609,7 +609,7 @@ The reference halts on both.
   register file later would still be a rewrite, so the decision stays made.
 * **Golden-file churn.** T1's determinism choice is what protects against it.
 * **Interaction with the HALT gate.** `p_halt_fetched` in `cpu.vhd` gates the
-  Icache-to-DECODE handshake off when a `HALT` is handed to DECODE, and clears
+  ICACHE-to-DECODE handshake off when a `HALT` is handed to DECODE, and clears
   that gate on a flush. An interrupt grant is a new flush source, so check it
   cannot un-gate a `HALT` that has already been accepted.
 

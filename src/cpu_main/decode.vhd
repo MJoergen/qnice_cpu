@@ -34,7 +34,7 @@ entity decode is
       bank_switch_i  : in  std_logic;
       bank_stale_o   : out std_logic;                     -- combinatorial
 
-      -- To the Sequencer, and through it to PREPARE. One beat per instruction,
+      -- To the SEQUENCER, and through it to PREPARE. One beat per instruction,
       -- carrying its whole micro-op list; see cpu_main.vhd.
       seq_valid_o    : out std_logic;
       seq_ready_i    : in  std_logic;
@@ -101,7 +101,7 @@ architecture synthesis of decode is
 begin
 
    ------------------------------------------------------------
-   -- Back-pressure to Fetch module
+   -- Back-pressure to FETCH module
    ------------------------------------------------------------
 
    fetch_double_o <= immediate_src or immediate_dst;
@@ -205,7 +205,7 @@ begin
 
    -- A branch is normally resolved in WRITE, two stages further on, and the
    -- redirect it sends to FETCH costs four cycles: one to register the new PC,
-   -- one for the instruction memory's read latency, one in the Icache, and one
+   -- one for the instruction memory's read latency, one in the ICACHE, and one
    -- because the pipeline behind it is empty. For ONE class of branch none of
    -- that has to wait, because everything the redirect needs is already here:
    --
@@ -222,11 +222,11 @@ begin
    -- the branch in this stage's output register for an extra cycle and so
    -- overlaps one more cycle of the refill.
    --
-   -- WHAT THE EARLY REDIRECT MUST NOT FLUSH. It resets FETCH and the Icache
+   -- WHAT THE EARLY REDIRECT MUST NOT FLUSH. It resets FETCH and the ICACHE
    -- only, never this stage or PREPARE. The branch is in this stage's output
    -- register by the end of the cycle and everything downstream of it is
    -- OLDER, so the only wrong-path instructions in the machine are the ones
-   -- FETCH and the Icache are holding. That is also why the Icache needs a
+   -- FETCH and the ICACHE are holding. That is also why the ICACHE needs a
    -- soft flush rather than its ordinary reset -- see contract (d) in
    -- icache.vhd; the ordinary one would withdraw the very handshake that
    -- raises this signal.
@@ -242,11 +242,11 @@ begin
    -- fetch_double_i, and fetch_double_i is required below; its second needs
    -- uses_bank, which is '0' here because the source register is R15 and JMP
    -- has no destination operand. Using fetch_ready_o instead would put the
-   -- Icache's own output data in front of FETCH's address register, through
+   -- ICACHE's own output data in front of FETCH's address register, through
    -- this stage's whole ready cone -- the longest path in the design after the
-   -- ALU. seq_ready_i comes from the Sequencer, which passes on PREPARE's
+   -- ALU. seq_ready_i comes from the SEQUENCER, which passes on PREPARE's
    -- ready gated by its own chunk index register; behind that are PREPARE's
-   -- registers and the Memory module. So both legs of the AND below start at a
+   -- registers and the MEMORY module. So both legs of the AND below start at a
    -- flip-flop.
    early_jmp <= '1' when fetch_data_i(R_OPCODE) = C_OPCODE_JMP and
                          fetch_data_i(R_JMP_COND) = "000" and
@@ -255,7 +255,7 @@ begin
                 '0';
 
    -- fetch_double_i is what makes fetch_data_i(R_IMMEDIATE) meaningful: it says
-   -- the Icache is offering the second word, not just the instruction. It is
+   -- the ICACHE is offering the second word, not just the instruction. It is
    -- implied by the handshake for this class (fetch_ready_o holds the stage off
    -- until the operand arrives), but the target address is built from that word
    -- below, so it is named explicitly rather than left to be inferred.
