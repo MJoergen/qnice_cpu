@@ -18,8 +18,9 @@ variables** — see `src/sub/dp_ram.vhd` for why that constrains RAM inference. 
 machine-checked: see [Linting](#linting) below.
 
 Full architecture description: [doc/README.md](doc/README.md). Per-module design notes live next
-to the code: [src/fetch/README.md](src/fetch/README.md), [src/registers/README.md](src/registers/README.md),
-[src/memory/README.md](src/memory/README.md), [src/cpu_main/README.md](src/cpu_main/README.md).
+to the code: [src/fetch/README.md](src/fetch/README.md), [src/icache/README.md](src/icache/README.md),
+[src/registers/README.md](src/registers/README.md), [src/memory/README.md](src/memory/README.md),
+[src/cpu_main/README.md](src/cpu_main/README.md).
 
 ## Commands
 
@@ -464,7 +465,8 @@ has Vivado.
 ### Directory layout
 
 - `src/cpu_constants.vhd` — shared constants/types used across modules.
-- `src/fetch/` — instruction fetch + instruction cache.
+- `src/fetch/` — WISHBONE instruction fetcher.
+- `src/icache/` — two-word instruction buffer between FETCH and DECODE.
 - `src/registers/` — register file (dual-port RAM based, write-before-read).
 - `src/memory/` — Wishbone-facing memory arbiter (source/destination operand buffers).
 - `src/cpu_main/` — DECODE, SEQUENCER, PREPARE, WRITE, and the `sub/` microcode ROM and ALU. The

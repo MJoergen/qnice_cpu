@@ -28,7 +28,7 @@ single top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
 
 The ICACHE between FETCH and DECODE buffers up to two consecutive instruction
 words, which is what lets DECODE be offered an instruction and its immediate
-operand together. See [icache.vhd](../src/fetch/icache.vhd).
+operand together. See [icache.vhd](../src/icache/icache.vhd).
 
 The block diagram contains two additional blocks:
 * REGISTERS: Contains the CPU registers and supports two read ports (connected
@@ -92,6 +92,7 @@ There are three sources of back-pressure in the design:
 ## Detailed design description
 For more detailed information about the design look here:
 * [FETCH](../src/fetch/README.md)
+* [ICACHE](../src/icache/README.md)
 * [REGISTERS](../src/registers/README.md)
 * [MEMORY](../src/memory/README.md)
 * [DECODE/PREPARE/WRITE](../src/cpu_main/README.md)
@@ -458,7 +459,7 @@ between them is not worth the reset-duration assumption the second one needs.
 It also needs a soft-flush port on the ICACHE — the ordinary reset gates
 `m_valid_o`, which would withdraw the very handshake the flush is derived from.
 See [Early redirect](../src/cpu_main/README.md#Early-redirect) and
-[The soft flush](../src/fetch/README.md#The-soft-flush).
+[The soft flush](../src/icache/README.md#The-soft-flush).
 
 **Rejected: removing the register on `wbi_addr_o`.** The obvious way to take a
 cycle off *every* redirect is to put the branch target straight onto the

@@ -14,7 +14,7 @@ SOURCES += src/sub/two_stage_fifo.vhd
 
 SOURCES += src/cpu_constants.vhd
 SOURCES += src/fetch/fetch.vhd
-SOURCES += src/fetch/icache.vhd
+SOURCES += src/icache/icache.vhd
 SOURCES += src/registers/registers.vhd
 SOURCES += src/memory/memory.vhd
 SOURCES += src/debug.vhd

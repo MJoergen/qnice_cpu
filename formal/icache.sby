@@ -20,5 +20,5 @@ prep -top icache
 
 [files]
 icache.psl
-../src/fetch/icache.vhd
+../src/icache/icache.vhd
 
