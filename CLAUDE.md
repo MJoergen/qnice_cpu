@@ -143,13 +143,16 @@ Four-stage pipeline: **FETCH → DECODE → PREPARE → WRITE**, plus two shared
 (2 read ports from DECODE, 1 write port from WRITE) and **Memory** (2 read ports from PREPARE, 1
 write port from WRITE, backed by a Wishbone bus). DECODE, PREPARE, and WRITE are combined into a
 single VHDL entity `cpu_main` (in `src/cpu_main/cpu_main.vhd`) mainly to simplify formal
-verification of the interactions between them.
+verification of the interactions between them. `cpu_main` also instantiates the **Sequencer** on
+the DECODE→PREPARE link; it is not a stage (no payload registers, no latency) but a one-to-many
+adapter, and it shares the two stages' flush reset. The block diagram is
+[doc/cpu.tex](doc/cpu.tex), rendered to `doc/cpu.png` by `make timing`.
 
 Stage-to-stage handshaking uses an AXI-style `VALID`/`READY` protocol throughout (also on the
 Wishbone bus, via `stall`/`ack`). Two independent sources of back-pressure exist: an
-instruction may expand into up to three micro-ops, and the Sequencer in PREPARE issues one per
-cycle while holding its ready low, which stalls DECODE and in turn FETCH; and the Memory module
-stalls PREPARE while waiting on the Wishbone bus.
+instruction may expand into up to three micro-ops, and the Sequencer issues one per cycle while
+holding its ready low, which stalls DECODE and in turn FETCH; and the Memory module stalls PREPARE
+while waiting on the Wishbone bus.
 
 Instruction and data memory are separate interfaces (Harvard-style) but backed by the same
 physical dual-port RAM, since a program must be loadable and then executable from the same memory.
@@ -211,9 +214,10 @@ The core trick of this design: DECODE dynamically translates each CISC-like QNIC
 1-3 RISC-like micro-operations via a combinational ROM (`src/cpu_main/sub/microcode.vhd`), indexed
 by a 4-bit classification of the instruction (reads-from-dst / writes-to-dst / src-in-memory /
 dst-in-memory). DECODE emits that whole list in a single beat; the `Sequencer`
-(`src/cpu_main/sub/sequencer.vhd`), which lives in **PREPARE**, then issues it one micro-op per
-clock cycle. This exists because an instruction like `ADD @R0, @R1` needs two
-memory reads and one memory write, but only one memory operation is possible per cycle — the
+(`src/cpu_main/sub/sequencer.vhd`), instantiated by `cpu_main` **between DECODE and PREPARE**,
+then issues it one micro-op per clock cycle. This exists because an instruction like
+`ADD @R0, @R1` needs two memory reads and one memory write, but only one memory operation is
+possible per cycle — the
 micro-ops serialize that. Each micro-op is a 12-bit word (`LAST`, `REG_MOD_SRC`, `REG_MOD_DST`,
 `MEM_WAIT_SRC`, `MEM_WAIT_DST`, `REG_WRITE`, `MEM_READ_SRC`, `MEM_READ_DST`, `MEM_WRITE`); the
 three register-op bits are mutually exclusive, as are the three memory-op bits. Immediate operands
@@ -270,7 +274,7 @@ empty. Measured on `prog.asm`, the 731 redirects cost 3625 cycles — **24% of t
 `ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1` escapes most of that, because DECODE can resolve it without
 help: the condition selects `SR` bit 0, which reads as 1 always, and the target is the immediate
 word FETCH already delivered alongside the instruction (`decode.vhd` even computes the absolute
-address for the relative modes, for `prep_stage_o.immediate`). So `early_jmp` in
+address for the relative modes, for `seq_stage_o.immediate`). So `early_jmp` in
 `src/cpu_main/decode.vhd` drives `early_valid_o`/`early_addr_o` on the cycle DECODE accepts the
 instruction, two cycles before WRITE would have; `cpu.vhd` merges that with WRITE's redirect into
 the single port `fetch.vhd` sees. **Four cycles becomes two, and one for `ASUB`/`RSUB`**, whose
@@ -463,7 +467,8 @@ has Vivado.
 - `src/fetch/` — instruction fetch + instruction cache.
 - `src/registers/` — register file (dual-port RAM based, write-before-read).
 - `src/memory/` — Wishbone-facing memory arbiter (source/destination operand buffers).
-- `src/cpu_main/` — DECODE, PREPARE, WRITE, and the `sub/` microcode ROM, sequencer, ALU.
+- `src/cpu_main/` — DECODE, PREPARE, WRITE, and the `sub/` microcode ROM, Sequencer, ALU. The
+  Sequencer is instantiated by `cpu_main.vhd` itself, on the DECODE→PREPARE link.
 - `src/sub/` — reusable elastic-pipeline building blocks, see
   [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-src-sub) above.
 - `src/cpu.vhd` — top-level entity tying FETCH, Icache, Registers, Memory, and `cpu_main` together.
@@ -485,4 +490,5 @@ has Vivado.
   two must stay word-for-word aligned; it does not halt either, and is likewise not in `TESTS`.
 - `hw/` — Vivado XDC constraints / synthesis TCL (generated).
 - `formal/` — one `.psl`/`.sby`/`.gtkw` triplet per formally-verified module.
-- `doc/` — architecture overview and block diagram source (`cpu.drawio`/`cpu.png`).
+- `doc/` — architecture overview and block diagram source (`cpu.tex`/`cpu.png`, TikZ, rendered by
+  `make timing`; it replaced a diagrams.net `cpu.drawio` that could only be edited in the GUI).

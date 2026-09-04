@@ -236,6 +236,7 @@ def main():
         ("FETCH",          h(cpu + "/i_fetch")),
         ("CACHE (icache)", h(cpu + "/i_icache")),
         ("DECODE",         h(main_ + "/i_decode")),
+        ("SEQUENCER",      h(main_ + "/i_sequencer")),
         ("PREPARE",        h(main_ + "/i_prepare")),
         ("WRITE",          h(main_ + "/i_write")),
         ("Registers",      h(cpu + "/i_registers")),

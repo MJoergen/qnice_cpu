@@ -296,7 +296,7 @@ begin
    --
    --   I1, the one in DECODE's OUTPUT register. Its operands were read a cycle
    --       ago against the old bank, and decode.vhd passes the register file's
-   --       outputs straight through (prep_stage_o.src_val/dst_val are live
+   --       outputs straight through (seq_stage_o.src_val/dst_val are live
    --       wires, not flip-flops), so the values are already gone. Only a
    --       flush can undo that.
    --   I2, the one at DECODE's INPUT. Its read is going out in THIS cycle,

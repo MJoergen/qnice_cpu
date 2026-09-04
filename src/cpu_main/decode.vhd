@@ -34,10 +34,11 @@ entity decode is
       bank_switch_i  : in  std_logic;
       bank_stale_o   : out std_logic;                     -- combinatorial
 
-      -- To PREPARE
-      prep_valid_o   : out std_logic;
-      prep_ready_i   : in  std_logic;
-      prep_stage_o   : out t_stage
+      -- To the Sequencer, and through it to PREPARE. One beat per instruction,
+      -- carrying its whole micro-op list; see cpu_main.vhd.
+      seq_valid_o    : out std_logic;
+      seq_ready_i    : in  std_logic;
+      seq_stage_o    : out t_stage
    );
 end entity decode;
 
@@ -106,21 +107,21 @@ begin
    fetch_double_o <= immediate_src or immediate_dst;
    fetch_ready_o  <= '0' when fetch_double_o and not fetch_double_i else -- Wait for immediate value
                      '0' when bank_switch_i and uses_bank           else -- Wait for the new bank
-                     prep_ready_i;
+                     seq_ready_i;
 
 
    ------------------------------------------------------------
    -- Generate combinatorial output values
    ------------------------------------------------------------
 
-   reg_rd_en_o    <= prep_ready_i; -- Read when next stage is ready to process data.
+   reg_rd_en_o    <= seq_ready_i; -- Read when next stage is ready to process data.
    reg_src_addr_o <= fetch_data_i(R_SRC_REG);
    reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data_i(R_OPCODE) = C_OPCODE_JMP else
                      fetch_data_i(R_DST_REG);
 
-   prep_stage_o.src_val <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
-   prep_stage_o.dst_val <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
-   prep_stage_o.r14     <= reg_r14_i;
+   seq_stage_o.src_val <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
+   seq_stage_o.dst_val <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
+   seq_stage_o.r14     <= reg_r14_i;
 
 
    ------------------------------------------------------------
@@ -195,7 +196,7 @@ begin
    -- cycle before it got here, i.e. strictly before the bank switch now
    -- retiring in WRITE could reach the register file. If it uses a banked
    -- value, that value is from the outgoing bank and only a flush can undo it.
-   bank_stale_o <= prep_valid_o and uses_bank_d;
+   bank_stale_o <= seq_valid_o and uses_bank_d;
 
 
    ------------------------------------------------------------
@@ -231,10 +232,10 @@ begin
    -- raises this signal.
    --
    -- WRITE must then NOT redirect again when the branch retires, or it would
-   -- discard the correctly fetched target. prep_stage_o.early_jmp carries that
+   -- discard the correctly fetched target. seq_stage_o.early_jmp carries that
    -- down the pipeline; see "Writes to R15" in write.vhd.
    --
-   -- prep_ready_i rather than fetch_ready_o, although the condition being
+   -- seq_ready_i rather than fetch_ready_o, although the condition being
    -- tested is "this stage accepts the instruction this cycle" and that is
    -- fetch_valid_i and fetch_ready_o. The two are EQUAL for this instruction
    -- class: fetch_ready_o's first term needs fetch_double_o and not
@@ -243,8 +244,10 @@ begin
    -- has no destination operand. Using fetch_ready_o instead would put the
    -- Icache's own output data in front of FETCH's address register, through
    -- this stage's whole ready cone -- the longest path in the design after the
-   -- ALU. prep_ready_i comes from PREPARE's registers and the Memory module,
-   -- so both legs of the AND below start at a flip-flop.
+   -- ALU. seq_ready_i comes from the Sequencer, which passes on PREPARE's
+   -- ready gated by its own chunk index register; behind that are PREPARE's
+   -- registers and the Memory module. So both legs of the AND below start at a
+   -- flip-flop.
    early_jmp <= '1' when fetch_data_i(R_OPCODE) = C_OPCODE_JMP and
                          fetch_data_i(R_JMP_COND) = "000" and
                          fetch_data_i(R_JMP_NEG) = '0' and
@@ -256,9 +259,9 @@ begin
    -- implied by the handshake for this class (fetch_ready_o holds the stage off
    -- until the operand arrives), but the target address is built from that word
    -- below, so it is named explicitly rather than left to be inferred.
-   early_valid_o <= early_jmp and fetch_valid_i and fetch_double_i and prep_ready_i;
+   early_valid_o <= early_jmp and fetch_valid_i and fetch_double_i and seq_ready_i;
 
-   -- The same target p_output computes for prep_stage_o.immediate, which is
+   -- The same target p_output computes for seq_stage_o.immediate, which is
    -- where the branch would otherwise have picked it up two stages later: an
    -- absolute mode branches to the operand, a relative one to the operand plus
    -- the address of the word after it.
@@ -293,39 +296,39 @@ begin
    begin
       if rising_edge(clk_i) then
          -- Next stage has consumed output data
-         if prep_ready_i = '1' then
-            prep_valid_o <= '0';
+         if seq_ready_i = '1' then
+            seq_valid_o <= '0';
          end if;
 
          -- Ready to send new data to next stage
          if fetch_valid_i and fetch_ready_o then
-            prep_valid_o            <= '1';
-            prep_stage_o.microcodes <= microcode_value;
-            prep_stage_o.addr       <= fetch_addr_i;
-            prep_stage_o.immediate  <= fetch_data_i(R_IMMEDIATE);
-            prep_stage_o.inst       <= fetch_data_i(R_INSTRUCTION);
-            prep_stage_o.src_addr   <= reg_src_addr_o;
-            prep_stage_o.src_mode   <= fetch_data_i(R_SRC_MODE);
-            prep_stage_o.src_imm    <= immediate_src;
-            prep_stage_o.dst_addr   <= reg_dst_addr_o;
-            prep_stage_o.dst_mode   <= fetch_data_i(R_DST_MODE);
-            prep_stage_o.dst_imm    <= immediate_dst;
-            prep_stage_o.res_reg    <= reg_dst_addr_o;
-            prep_stage_o.is_crb     <= is_crb;
-            prep_stage_o.early_jmp  <= early_jmp;
-            uses_bank_d             <= uses_bank;
+            seq_valid_o            <= '1';
+            seq_stage_o.microcodes <= microcode_value;
+            seq_stage_o.addr       <= fetch_addr_i;
+            seq_stage_o.immediate  <= fetch_data_i(R_IMMEDIATE);
+            seq_stage_o.inst       <= fetch_data_i(R_INSTRUCTION);
+            seq_stage_o.src_addr   <= reg_src_addr_o;
+            seq_stage_o.src_mode   <= fetch_data_i(R_SRC_MODE);
+            seq_stage_o.src_imm    <= immediate_src;
+            seq_stage_o.dst_addr   <= reg_dst_addr_o;
+            seq_stage_o.dst_mode   <= fetch_data_i(R_DST_MODE);
+            seq_stage_o.dst_imm    <= immediate_dst;
+            seq_stage_o.res_reg    <= reg_dst_addr_o;
+            seq_stage_o.is_crb     <= is_crb;
+            seq_stage_o.early_jmp  <= early_jmp;
+            uses_bank_d            <= uses_bank;
 
             -- Treat jumps as a special case
             if fetch_data_i(R_OPCODE) = C_OPCODE_JMP then
                -- Write new address to PC
-               prep_stage_o.res_reg <= to_stdlogicvector(C_REG_PC, 4);
+               seq_stage_o.res_reg <= to_stdlogicvector(C_REG_PC, 4);
                if src_memory = '0' then
-                  prep_stage_o.microcodes <= std_logic_vector'(
+                  seq_stage_o.microcodes <= std_logic_vector'(
                                       C_VAL_LAST &
                                       C_VAL_LAST &
                                       (C_VAL_LAST or C_VAL_REG_WRITE));
                else
-                  prep_stage_o.microcodes <= std_logic_vector'(
+                  seq_stage_o.microcodes <= std_logic_vector'(
                                       C_VAL_LAST &
                                       (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
                                       (C_VAL_MEM_READ_SRC or C_VAL_REG_MOD_SRC));
@@ -334,15 +337,15 @@ begin
                -- Subroutine call
                if fetch_data_i(R_JMP_MODE) = C_JMP_ASUB or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB then
                   -- Artifically introduce a MOVE R15, @--R13
-                  prep_stage_o.dst_addr <= to_stdlogicvector(C_REG_SP, 4);
-                  prep_stage_o.dst_mode <= to_stdlogicvector(C_MODE_PRE, 2);
+                  seq_stage_o.dst_addr <= to_stdlogicvector(C_REG_SP, 4);
+                  seq_stage_o.dst_mode <= to_stdlogicvector(C_MODE_PRE, 2);
                   if src_memory = '0' then
-                     prep_stage_o.microcodes <= std_logic_vector'(
+                     seq_stage_o.microcodes <= std_logic_vector'(
                                          C_VAL_LAST &
                                          (C_VAL_LAST or C_VAL_REG_WRITE) &
                                          (C_VAL_REG_MOD_DST or C_VAL_MEM_WRITE));
                   else
-                     prep_stage_o.microcodes <= std_logic_vector'(
+                     seq_stage_o.microcodes <= std_logic_vector'(
                                          (C_VAL_LAST or C_VAL_MEM_WAIT_SRC or C_VAL_REG_WRITE) &
                                          (C_VAL_MEM_READ_SRC or C_VAL_REG_MOD_SRC) &
                                          (C_VAL_REG_MOD_DST or C_VAL_MEM_WRITE));
@@ -352,13 +355,13 @@ begin
                -- Relative jump
                if immediate_src = '1' and
                   (fetch_data_i(R_JMP_MODE) = C_JMP_RBRA or fetch_data_i(R_JMP_MODE) = C_JMP_RSUB) then
-                  prep_stage_o.immediate <= fetch_data_i(R_IMMEDIATE) + fetch_addr_i + 2;
+                  seq_stage_o.immediate <= fetch_data_i(R_IMMEDIATE) + fetch_addr_i + 2;
                end if;
             end if;
          end if;
 
          if rst_i = '1' then
-            prep_valid_o <= '0';
+            seq_valid_o <= '0';
          end if;
       end if;
    end process p_output;

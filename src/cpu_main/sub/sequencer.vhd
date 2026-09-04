@@ -2,6 +2,11 @@
 -- s_stage_i.microcodes) and sequences them into fixed-width chunks
 -- (in m_stage_o.microcodes), emitting one chunk per PREPARE beat.
 --
+-- It sits on the DECODE-to-PREPARE link, instantiated by cpu_main.vhd alongside
+-- the two stages it joins rather than inside either of them: it is an elastic
+-- one-to-many adapter, and has no part in either decoding an instruction or
+-- preparing its operands.
+--
 -- One DECODE beat (s_valid_i) is expanded into N PREPARE beats
 -- (m_valid_o), where N is the number of chunks up to and including the
 -- chunk whose C_LAST bit is set. A new DECODE beat is not accepted until

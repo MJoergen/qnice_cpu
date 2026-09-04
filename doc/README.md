@@ -7,14 +7,28 @@ This implementation is essentially a four-stage pipeline consisting of:
   (instruction plus immediate operand) at a time to the DECODE stage.
 * DECODE: Translates the instruction into a list of up to three
   micro-operations, and reads the operand registers.
-* PREPARE: Sequences that list into one micro-operation per clock cycle, and
-  prepares the input operands for the ALU.
+* PREPARE: Prepares the input operands for the ALU.
 * WRITE: Contains the ALU and performs write-back of the result to register
   and/or memory.
 
 See the following block diagram:
 
 ![Block Diagram](cpu.png)
+
+It is drawn by [cpu.tex](cpu.tex) and rendered by `make timing`; edit the LaTeX
+source rather than the `.png`.
+
+Between DECODE and PREPARE sits the [Sequencer](../src/cpu_main/sub/sequencer.vhd),
+which issues DECODE's list of micro-operations one per clock cycle. It is not a
+pipeline stage -- it holds no payload registers and adds no latency -- but a
+one-to-many adapter on the link between the two, and `cpu_main.vhd` instantiates
+it there. The dotted outline in the diagram is the `cpu_main` entity, which
+exists mainly to give the formal verification of DECODE, PREPARE and WRITE a
+single top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
+
+The ICACHE between FETCH and DECODE buffers up to two consecutive instruction
+words, which is what lets DECODE be offered an instruction and its immediate
+operand together. See [icache.vhd](../src/fetch/icache.vhd).
 
 The block diagram contains two additional blocks:
 * Registers: Contains the CPU registers and supports two read ports (connected
@@ -34,7 +48,7 @@ the only way the pipeline is cleared other than a global reset.
 The flow through the pipeline is that an instruction will spend one or two
 clock cycles in the FETCH stage (two cycles if it uses an immediate operand),
 and up to three clock cycles in DECODE -- one per micro-operation, because the
-Sequencer in PREPARE holds DECODE stalled until it has issued the last one. The
+Sequencer holds DECODE stalled until it has issued the last one. The
 PREPARE stage additionally waits for any memory operands to be read. The WRITE
 stage is entirely combinatorial, the ALU included; the only registers it drives
 are the outputs of the other blocks.
@@ -59,10 +73,10 @@ The thick arrows indicate the AXI-like pipeline handshake, consisting of a
 This handshake is used to control back-pressure.
 
 There are three sources of back-pressure in the design:
-* An instruction may expand into up to three micro-operations. The Sequencer in
-  the PREPARE stage issues one per clock cycle and holds its ready signal low
-  until the last one has been accepted, which stalls DECODE, which in turn
-  applies back-pressure to the FETCH stage.
+* An instruction may expand into up to three micro-operations. The Sequencer on
+  the DECODE-to-PREPARE link issues one per clock cycle and holds its ready
+  signal low until the last one has been accepted, which stalls DECODE, which in
+  turn applies back-pressure to the FETCH stage.
 * The Memory module will generate back-pressure while waiting for the result
   read from the memory bus. This is part of the Wishbone protocol and allows
   for an I/O device to take more than one clock cycle to respond.
@@ -233,10 +247,9 @@ the programs `make test` runs; its header says how to run it.
 * **t=3**: the Icache offers it and DECODE accepts `MOVE @R0, R2`. Note
   `m_double_o` is low — only one word is buffered so far — which is enough,
   because this instruction has no immediate operand.
-* **t=4**: the `MOVE` sits in DECODE's output register and the Sequencer in
-  PREPARE issues its first micro-operation, `0x084` (`MEM_READ_SRC` +
-  `REG_MOD_SRC`). It holds `prep_ready_i` low, because a second micro-operation
-  is still to come.
+* **t=4**: the `MOVE` sits in DECODE's output register and the Sequencer issues
+  its first micro-operation, `0x084` (`MEM_READ_SRC` + `REG_MOD_SRC`). It holds
+  `seq_ready_i` low, because a second micro-operation is still to come.
 * **t=5**: WRITE puts the read of the device word on the data bus
   (`mem_req_addr_o` = `0x000A`).
 * **t=6**: the device word returns on `msrc_data_o` and the Sequencer can
@@ -280,14 +293,14 @@ Not quite hidden, though. The one row in the diagram that the read is
 responsible for is the refusal at t=5, and that chain is worth spelling out,
 because it runs backwards through four modules:
 
-1. The `MOVE` expands into two micro-operations. The Sequencer in PREPARE issues
-   one per cycle and holds `DECODE/prep_ready_i` low until it has issued the
-   last of them.
+1. The `MOVE` expands into two micro-operations. The Sequencer issues one per
+   cycle and holds `DECODE/seq_ready_i` low until it has issued the last of
+   them.
 2. That second micro-operation carries `MEM_WAIT_SRC`, so it cannot be issued
-   until the device word arrives at t=6. `prep_ready_i` is therefore low for
+   until the device word arrives at t=6. `seq_ready_i` is therefore low for
    *two* cycles, t=4 and t=5, rather than one.
-3. DECODE cannot accept a new instruction while PREPARE is holding it, so it
-   leaves its `fetch_ready_o` low at t=4 and t=5. That is the row drawn as
+3. DECODE cannot accept a new instruction while the Sequencer is holding it, so
+   it leaves its `fetch_ready_o` low at t=4 and t=5. That is the row drawn as
    `ICACHE/m_ready_i`: the two are the same net, seen from the Icache's side.
 4. The Icache buffers two words, and by t=5 it is holding both — the `AND` and
    its immediate operand (`m_addr_o` = `0x0006`, `m_double_o` high). Nothing is
@@ -558,7 +571,7 @@ removable: the stage is a decoder, its logic is thin, and the Icache already
 presents its input from a register. What the register actually buys is not
 DECODE's own logic but the **Register module's one-cycle read latency**. DECODE
 drives `reg_src_addr_o`/`reg_dst_addr_o` combinationally off the instruction
-word and the values come back a cycle later, and `prep_stage_o.src_val`/
+word and the values come back a cycle later, and `seq_stage_o.src_val`/
 `.dst_val` are already live wires — so the register exists only to hold the
 instruction fields until its operands catch up.
 
@@ -630,7 +643,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `91ac9ff-dirty`.
+Measured with Vivado 2022.2 on commit `e08cea1-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -647,20 +660,20 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  948 |     63400 | 1.50 |
-| Slice Registers |  601 |    126800 | 0.47 |
-| Slices          |  325 |     15850 | 2.05 |
+| Slice LUTs      |  963 |     63400 | 1.52 |
+| Slice Registers |  606 |    126800 | 0.48 |
+| Slices          |  393 |     15850 | 2.48 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 7.25 ns constraint: **WNS +0.093 ns**, no failing endpoints. The
+Timing at the 7.25 ns constraint: **WNS +0.025 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[inst][13]` to
-`i_prepare/wr_stage_o_reg[dst_val][3]`: 7 logic levels, with 81% of the delay
+The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_dst_val][13]` to
+`i_prepare/wr_stage_o_reg[dst_val][4]`: 8 logic levels, with 80% of the delay
 in routing rather than logic.
 <!-- end -->
 
@@ -805,21 +818,22 @@ written:
 | Module          | LUTs | FFs |
 | --------------- | ---- | --- |
 | FETCH           |   63 |  92 |
-| CACHE (icache)  |   40 |  66 |
-| DECODE          |   59 |  76 |
-| PREPARE         |   79 | 132 |
-| WRITE           |  463 |   0 |
+| CACHE (icache)  |   44 |  66 |
+| DECODE          |   78 |  77 |
+| SEQUENCER       |    9 |   2 |
+| PREPARE         |   70 | 131 |
+| WRITE           |  465 |   0 |
 | Registers       |  166 | 142 |
 | Memory          |   59 |  74 |
-| Glue            |    8 |   1 |
-| **CPU total**   |  937 | 583 |
+| Glue            |   17 |   1 |
+| **CPU total**   |  971 | 585 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 49% of the CPU's LUTs**, and 247 of its 463 are the ALU
+* **WRITE dominates, at 48% of the CPU's LUTs**, and 247 of its 465 are the ALU
   (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
@@ -831,7 +845,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
 
-The two tables do not add up to each other (937 vs 948 LUTs). That is expected,
+The two tables do not add up to each other (971 vs 963 LUTs). That is expected,
 and note that the *sign* of the gap is not stable — it has landed both ways
 round across builds. The per-module figure comes first and stops after synthesis
 with `-flatten_hierarchy none`, which forbids optimisation across module

@@ -1,6 +1,6 @@
--- NOTE: The DECODE and PREPARE modules are explicitly reset (using fetch_valid_o)
--- following any update to the Program Counter (as determined by the WRITE module).
--- This flushes the entire pipeline.
+-- NOTE: The DECODE, Sequencer and PREPARE modules are explicitly reset (using
+-- fetch_valid_o) following any update to the Program Counter (as determined by
+-- the WRITE module). This flushes the entire pipeline.
 
 library ieee;
    use ieee.std_logic_1164.all;
@@ -74,10 +74,16 @@ end entity cpu_main;
 
 architecture synthesis of cpu_main is
 
-   -- DECODE to PREPARE
-   signal dec2prep_valid : std_logic;
-   signal dec2prep_ready : std_logic;
-   signal dec2prep_stage : t_stage;
+   -- DECODE to the Sequencer: one beat per instruction, carrying the whole
+   -- micro-op list.
+   signal dec2seq_valid : std_logic;
+   signal dec2seq_ready : std_logic;
+   signal dec2seq_stage : t_stage;
+
+   -- The Sequencer to PREPARE: one beat per micro-op.
+   signal seq2prep_valid : std_logic;
+   signal seq2prep_ready : std_logic;
+   signal seq2prep_stage : t_stage;
 
    -- PREPARE to WRITE
    signal prep2wr_valid : std_logic;
@@ -115,10 +121,34 @@ begin
          reg_r14_i      => reg_r14_i,
          bank_switch_i  => bank_switch,
          bank_stale_o   => bank_stale,
-         prep_valid_o   => dec2prep_valid,
-         prep_ready_i   => dec2prep_ready,
-         prep_stage_o   => dec2prep_stage
+         seq_valid_o    => dec2seq_valid,
+         seq_ready_i    => dec2seq_ready,
+         seq_stage_o    => dec2seq_stage
       ); -- i_decode
+
+
+   ------------------------------------------------------------
+   -- Sequencer
+   ------------------------------------------------------------
+
+   -- DECODE emits an instruction's whole micro-op list in one beat; the
+   -- Sequencer issues it one micro-op per clock cycle, holding dec2seq_ready
+   -- low until the last one has been accepted. It sits between the two stages
+   -- rather than inside PREPARE because that is what it is -- an elastic
+   -- one-to-many adapter on the DECODE/PREPARE link, with no part in preparing
+   -- the operands. It shares PREPARE's reset, so a pipeline flush abandons a
+   -- half-issued list.
+   i_sequencer : entity work.sequencer
+      port map (
+         clk_i     => clk_i,
+         rst_i     => rst_i or fetch_valid_o,
+         s_valid_i => dec2seq_valid,
+         s_ready_o => dec2seq_ready,
+         s_stage_i => dec2seq_stage,
+         m_valid_o => seq2prep_valid,
+         m_ready_i => seq2prep_ready,
+         m_stage_o => seq2prep_stage
+      ); -- i_sequencer
 
 
    ------------------------------------------------------------
@@ -129,9 +159,9 @@ begin
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i or fetch_valid_o,
-         dec_valid_i     => dec2prep_valid,
-         dec_ready_o     => dec2prep_ready,
-         dec_stage_i     => dec2prep_stage,
+         seq_valid_i     => seq2prep_valid,
+         seq_ready_o     => seq2prep_ready,
+         seq_stage_i     => seq2prep_stage,
          mem_src_valid_i => mem_src_valid_i,
          mem_src_ready_o => mem_src_ready_o,
          mem_src_data_i  => mem_src_data_i,

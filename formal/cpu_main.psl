@@ -13,9 +13,9 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- INTERNAL ASSERTIONS
    --------------------------------------------
 
-   -- Payload stability on the DECODE -> PREPARE interface.
+   -- Payload stability on the DECODE -> Sequencer interface.
    --
-   -- NOTE: this deliberately does NOT cover dec2prep_stage.src_val, .dst_val
+   -- NOTE: this deliberately does NOT cover dec2seq_stage.src_val, .dst_val
    -- and .r14. Those three are combinational pass-throughs of the register file
    -- read ports (see the concurrent assignments in decode.vhd), not part of the
    -- latched payload, and they are *required* to move while DECODE is stalled:
@@ -25,31 +25,31 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- Asserting stable() over the whole record instead fails BMC at depth 4,
    -- with reg_r14_i changing on the cycle after reg_r14_we_o was asserted.
    -- The five alu_* fields are not driven by DECODE at all.
-   f_dec2prep_valid_stable : assert always {dec2prep_valid and not dec2prep_ready and not rst_i and not fetch_valid_o} |=>
-      {stable(dec2prep_valid) and
-       stable(dec2prep_stage.microcodes) and
-       stable(dec2prep_stage.addr) and
-       stable(dec2prep_stage.inst) and
-       stable(dec2prep_stage.immediate) and
-       stable(dec2prep_stage.src_addr) and
-       stable(dec2prep_stage.src_mode) and
-       stable(dec2prep_stage.src_imm) and
-       stable(dec2prep_stage.dst_addr) and
-       stable(dec2prep_stage.dst_mode) and
-       stable(dec2prep_stage.dst_imm) and
-       stable(dec2prep_stage.res_reg) and
-       stable(dec2prep_stage.is_crb)};
+   f_dec2seq_valid_stable : assert always {dec2seq_valid and not dec2seq_ready and not rst_i and not fetch_valid_o} |=>
+      {stable(dec2seq_valid) and
+       stable(dec2seq_stage.microcodes) and
+       stable(dec2seq_stage.addr) and
+       stable(dec2seq_stage.inst) and
+       stable(dec2seq_stage.immediate) and
+       stable(dec2seq_stage.src_addr) and
+       stable(dec2seq_stage.src_mode) and
+       stable(dec2seq_stage.src_imm) and
+       stable(dec2seq_stage.dst_addr) and
+       stable(dec2seq_stage.dst_mode) and
+       stable(dec2seq_stage.dst_imm) and
+       stable(dec2seq_stage.res_reg) and
+       stable(dec2seq_stage.is_crb)};
 
    -- The three live fields really are pure pass-throughs. These hold in every
    -- cycle, stalled or not, and would catch someone registering them by
    -- mistake -- which would silently reintroduce the stale-operand hazards
    -- described above.
-   f_dec2prep_live_src : assert always {dec2prep_stage.src_val = reg_src_val_i};
-   f_dec2prep_live_dst : assert always {dec2prep_stage.dst_val = reg_dst_val_i};
-   f_dec2prep_live_r14 : assert always {dec2prep_stage.r14     = reg_r14_i};
+   f_dec2seq_live_src : assert always {dec2seq_stage.src_val = reg_src_val_i};
+   f_dec2seq_live_dst : assert always {dec2seq_stage.dst_val = reg_dst_val_i};
+   f_dec2seq_live_r14 : assert always {dec2seq_stage.r14     = reg_r14_i};
 
---   f_dec2prep_ready_stable : assert always {dec2prep_ready and not dec2prep_valid and not rst_i} |=>
---      {stable(dec2prep_ready)};
+--   f_dec2seq_ready_stable : assert always {dec2seq_ready and not dec2seq_valid and not rst_i} |=>
+--      {stable(dec2seq_ready)};
 
    f_prep2wr_valid_stable : assert always {prep2wr_valid and not prep2wr_ready and not rst_i and not fetch_valid_o} |=>
       {stable(prep2wr_valid) and stable(prep2wr_stage)};
@@ -536,16 +536,16 @@ vunit i_cpu_main(cpu_main(synthesis))
    signal f_fetch_uses_bank : std_logic;
 
    f_prep_uses_bank <= '1' when
-      (dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL and
-       dec2prep_stage.inst(11) = '0') or
-      (dec2prep_stage.inst(5) = '0' and
-       ((dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_MOVE and
-         dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_SWAP and
-         dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_NOT and
-         dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL and
-         dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP) or
-        (dec2prep_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP and
-         dec2prep_stage.inst(1 downto 0) /= work.cpu_constants.C_MODE_REG)))
+      (dec2seq_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL and
+       dec2seq_stage.inst(11) = '0') or
+      (dec2seq_stage.inst(5) = '0' and
+       ((dec2seq_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_MOVE and
+         dec2seq_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_SWAP and
+         dec2seq_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_NOT and
+         dec2seq_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL and
+         dec2seq_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP) or
+        (dec2seq_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP and
+         dec2seq_stage.inst(1 downto 0) /= work.cpu_constants.C_MODE_REG)))
       else '0';
 
    f_fetch_uses_bank <= '1' when
@@ -580,7 +580,7 @@ vunit i_cpu_main(cpu_main(synthesis))
       {rst_i = '0' and prep2wr_valid = '1' and
        ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
        f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
-       dec2prep_valid = '1' and f_prep_uses_bank = '1'}
+       dec2seq_valid = '1' and f_prep_uses_bank = '1'}
       |-> {fetch_valid_o = '1'};
 
    -- (2) THE SAME REQUIREMENT, one stage further back. The instruction at
@@ -611,7 +611,7 @@ vunit i_cpu_main(cpu_main(synthesis))
        prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
        (prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB or
         prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB) and
-       dec2prep_valid = '1' and f_prep_uses_bank = '1'}
+       dec2seq_valid = '1' and f_prep_uses_bank = '1'}
       |-> {fetch_valid_o = '1'};
 
    -- (5) THE EARLY REDIRECT. DECODE resolves an unconditional branch to an
@@ -638,7 +638,7 @@ vunit i_cpu_main(cpu_main(synthesis))
            fetch_data_i(7 downto 6) = work.cpu_constants.C_MODE_POST};
 
    -- COMPLETENESS, and the more dangerous direction of the two. DECODE sets
-   -- prep_stage_o.early_jmp from the same decode that raises early_valid_o, and
+   -- seq_stage_o.early_jmp from the same decode that raises early_valid_o, and
    -- WRITE suppresses its own redirect on that bit. So an accepted branch of
    -- this class that did NOT redirect here would never redirect at all: the
    -- CPU would fall through into whatever follows the branch. Nothing else in
@@ -655,7 +655,7 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    -- ...and it must be sent to the right place. Recomputed here from the
    -- instruction encoding, which is the same derivation WRITE would have
-   -- applied two cycles later via prep_stage_o.immediate: the absolute modes
+   -- applied two cycles later via seq_stage_o.immediate: the absolute modes
    -- branch to the operand, the relative ones to the operand plus the address
    -- of the word after it.
    f_early_addr_abs : assert always
@@ -828,7 +828,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    c_add_m_m_rd_dst : cover {prep2wr_valid = '1' and rst_i = '0' and f_add_modes = '1' and f_gp_regs = '1' and c_src_mode /= work.cpu_constants.C_MODE_REG and c_dst_mode /= work.cpu_constants.C_MODE_REG and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_DST) = '1'};
    c_add_m_m_write  : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_add_modes = '1' and f_gp_regs = '1' and c_src_mode /= work.cpu_constants.C_MODE_REG and c_dst_mode /= work.cpu_constants.C_MODE_REG};
 
-   -- Non-vacuity: the stall condition that f_dec2prep_valid_stable predicates
+   -- Non-vacuity: the stall condition that f_dec2seq_valid_stable predicates
    -- on must actually be reachable, otherwise that assertion proves nothing.
    -- The early redirect actually happening, for each of the two target
    -- computations. Without these, f_early_sound and the two address properties
@@ -840,12 +840,12 @@ vunit i_cpu_main(cpu_main(synthesis))
    c_early_redirect_rel : cover {early_valid_o = '1' and
                                  fetch_data_i(5 downto 4) = work.cpu_constants.C_JMP_RSUB};
 
-   c_dec2prep_stalled : cover {dec2prep_valid = '1' and dec2prep_ready = '0' and rst_i = '0' and fetch_valid_o = '0'};
+   c_dec2seq_stalled : cover {dec2seq_valid = '1' and dec2seq_ready = '0' and rst_i = '0' and fetch_valid_o = '0'};
 
    -- ... and the interesting case within it: a stall during which the Status
    -- Register is being rewritten, i.e. exactly the scenario that made the
    -- original whole-record stable() assertion fail.
-   c_dec2prep_stalled_sr : cover {dec2prep_valid = '1' and dec2prep_ready = '0' and rst_i = '0' and fetch_valid_o = '0' and reg_r14_we_o = '1'};
+   c_dec2seq_stalled_sr : cover {dec2seq_valid = '1' and dec2seq_ready = '0' and rst_i = '0' and fetch_valid_o = '0' and reg_r14_we_o = '1'};
 
    -- Non-vacuity of the three flush properties. Each antecedent has to be
    -- reachable, or the assertion above it proves nothing at all.
@@ -867,7 +867,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    c_flush_bank_used   : cover {rst_i = '0' and prep2wr_valid = '1' and
                                 ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
                                 f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
-                                dec2prep_valid = '1' and f_prep_uses_bank = '1'};
+                                dec2seq_valid = '1' and f_prep_uses_bank = '1'};
    c_hold_bank_used    : cover {rst_i = '0' and prep2wr_valid = '1' and
                                 ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
                                 f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
@@ -887,12 +887,12 @@ vunit i_cpu_main(cpu_main(synthesis))
                         (prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB or
                          prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB) and
                         fetch_valid_o = '0' and fetch_valid_i = '1' and fetch_double_o = '0' and
-                        dec2prep_ready = '1' and fetch_ready_o = '0'};
+                        dec2seq_ready = '1' and fetch_ready_o = '0'};
    c_crb_free  : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
                         prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
                         (prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INCRB or
                          prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB) and
-                        fetch_valid_o = '0' and fetch_valid_i = '1' and dec2prep_valid = '1' and
+                        fetch_valid_o = '0' and fetch_valid_i = '1' and dec2seq_valid = '1' and
                         fetch_ready_o = '1'};
    c_flush_smc         : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
                                 mem_req_valid_o = '1' and

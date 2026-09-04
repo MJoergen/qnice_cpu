@@ -1,0 +1,128 @@
+% Block diagram of the CPU, rendered to cpu.png by "make timing" (see the
+% DIAGRAMS variable in the top-level Makefile).
+%
+% This replaces an earlier cpu.drawio / cpu.png pair, which had no reproducible
+% source: it was built in the diagrams.net GUI and could only be edited there.
+% Anything that changes the module hierarchy has to change this file too, so
+% keeping the source as text next to the RTL is the point.
+%
+% What it shows, and what it deliberately does not: the six pipeline stages in
+% pipeline order, the two shared modules they hang off (Registers on the left,
+% Memory on the right), the two Wishbone buses leaving on the right, and the
+% dotted boundary of the cpu_main entity. It does NOT show the valid/ready
+% handshaking, the redirect paths from WRITE and DECODE back to FETCH, or the
+% bank-switch signals -- those are described in doc/README.md and in the
+% per-module READMEs, and drawing them here would turn the picture into a net
+% list.
+
+\documentclass[border=8pt]{standalone}
+
+\usepackage[T1]{fontenc}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.arrows, fit, calc}
+
+\begin{document}
+
+\begin{tikzpicture}[
+      font = \sffamily\footnotesize,
+      % A pipeline stage, or one of the two shared modules.
+      block/.style = {
+         draw,
+         rounded corners = 4pt,
+         minimum width   = 26mm,
+         minimum height  = 11mm,
+         align           = center
+      },
+      % The fat hollow arrows of the original diagram: the pipeline's data
+      % path, one instruction (or micro-operation) per beat. A doubled line
+      % with an open tip draws the same outlined block arrow that the
+      % diagrams.net original used.
+      flow/.style = {
+         draw,
+         double,
+         double distance = 4pt,
+         -{Triangle[open, length = 4mm, width = 7mm]}
+      },
+      % Thin arrows: everything that is not the pipeline data path.
+      wire/.style   = {draw, -{Stealth[length=2mm, width=2mm]}},
+      biwire/.style = {draw, {Stealth[length=2mm, width=2mm]}-{Stealth[length=2mm, width=2mm]}},
+      buslabel/.style = {midway, above, font = \sffamily\scriptsize}
+   ]
+
+   %% ---------------------------------------------------------------
+   %% The pipeline, top to bottom
+   %% ---------------------------------------------------------------
+
+   \node[block]                            (fetch)   {FETCH};
+   \node[block, below = 12mm of fetch]     (icache)  {ICACHE};
+   \node[block, below = 12mm of icache]    (decode)  {DECODE};
+   \node[block, below = 12mm of decode]    (seq)     {SEQUENCER};
+   \node[block, below = 12mm of seq]       (prepare) {PREPARE};
+   \node[block, below = 12mm of prepare]   (write)   {WRITE (ALU)};
+
+   \draw[flow] (fetch)   -- (icache);
+   \draw[flow] (icache)  -- (decode);
+   \draw[flow] (decode)  -- (seq);
+   \draw[flow] (seq)     -- (prepare);
+   \draw[flow] (prepare) -- (write);
+
+   %% ---------------------------------------------------------------
+   %% The cpu_main entity
+   %% ---------------------------------------------------------------
+
+   % The extra coordinate stretches the box upwards only, clearing a band for
+   % the label that the incoming arrow head does not reach into. "fit" has a
+   % single inner sep for all four sides, so asymmetric padding has to be done
+   % this way round.
+   \coordinate (cpumaintop) at ([yshift = 6mm] decode.north);
+   \node[draw, dotted, thick, rounded corners = 4pt, inner sep = 4mm,
+         fit = (cpumaintop) (decode) (seq) (prepare) (write)] (cpumain) {};
+   \node[anchor = north west, font = \sffamily\scriptsize\itshape]
+      at ([xshift = 2mm, yshift = -1.5mm] cpumain.north west) {cpu\_main};
+
+   %% ---------------------------------------------------------------
+   %% Shared modules: Registers on the left, Memory on the right
+   %% ---------------------------------------------------------------
+
+   % Registers spans DECODE down to WRITE: DECODE reads it, WRITE writes it.
+   \coordinate (regx) at ([xshift = -42mm] decode.center);
+   \node[block, inner sep = 0pt,
+         fit = {(regx |- decode.north) (regx |- write.south)}] (regs) {Registers};
+
+   % Memory spans PREPARE down to WRITE: WRITE issues the requests, PREPARE
+   % consumes the read responses.
+   \coordinate (memx) at ([xshift = 42mm] decode.center);
+   \node[block, inner sep = 0pt,
+         fit = {(memx |- prepare.north) (memx |- write.south)}] (memory) {Memory};
+
+   %% ---------------------------------------------------------------
+   %% Connections
+   %% ---------------------------------------------------------------
+
+   % Operand reads: the register numbers leave DECODE, the values come back a
+   % clock cycle later.
+   \draw[biwire] (regs.east |- decode.west) -- (decode.west);
+   % Result write-back, plus the pre/post-increment write-backs.
+   \draw[wire]   (write.west) -- (regs.east |- write.west);
+
+   % Read responses back into PREPARE, requests out of WRITE.
+   \draw[flow] (memory.west |- prepare.east) -- (prepare.east);
+   \draw[flow] (write.east) -- (memory.west |- write.east);
+
+   %% ---------------------------------------------------------------
+   %% The two Wishbone buses
+   %% ---------------------------------------------------------------
+
+   \coordinate (busx) at ([xshift = 20mm] memory.east);
+
+   \draw[wire]   (busx |- fetch.east) -- (fetch.east)
+      node[buslabel] {Instruction bus};
+   \draw[biwire] (memory.east |- write.east) -- (busx |- write.east)
+      node[buslabel] {Data bus};
+
+\end{tikzpicture}
+
+\end{document}

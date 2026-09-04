@@ -90,7 +90,7 @@ help:
 	@echo "  make system.bit : Run synthesis using Vivado"
 	@echo "  make utilization: Refresh the utilization numbers in doc/README.md (needs Vivado)"
 	@echo "  make synth      : Run synthesis using yosys"
-	@echo "  make timing     : Re-render every timing diagram to .png (needs pdflatex)"
+	@echo "  make timing     : Re-render every .tex diagram to .png (needs pdflatex)"
 	@echo "  make formal     : Run formal verification"
 	@echo "  make lint       : Run VSG style-guide linting on all source files"
 	@echo "  make clean      : Remove all generated files"
@@ -182,10 +182,19 @@ $(ROM): $(ASM)
 # and the rendered .png are committed.
 TIMINGS = src/cpu_main/timing src/interrupt/timing doc/loop_timing
 
-.PHONY: timing
-timing: $(addsuffix .png,$(TIMINGS))
+# Block diagrams: standalone TikZ, no shared macros. doc/cpu.tex replaced a
+# diagrams.net drawing that could only be edited in the GUI -- see its header.
+DIAGRAMS = doc/cpu
 
-%.png: %.tex doc/timing.sty
+.PHONY: timing
+timing: $(addsuffix .png,$(TIMINGS) $(DIAGRAMS))
+
+# doc/timing.sty is a prerequisite of the timing diagrams only, which is why it
+# is attached here rather than to the pattern rule: a block diagram that does
+# not use it must not be rebuilt when it changes.
+$(addsuffix .png,$(TIMINGS)): doc/timing.sty
+
+%.png: %.tex
 	TEXINPUTS=doc: pdflatex -interaction=nonstopmode -halt-on-error -output-directory=$(dir $@) $<
 	pdftoppm -r 150 -png -singlefile $*.pdf $*
 	rm -f $*.pdf $*.aux $*.log

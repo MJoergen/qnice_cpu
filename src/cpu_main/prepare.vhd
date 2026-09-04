@@ -9,10 +9,12 @@ entity prepare is
       clk_i           : in  std_logic;
       rst_i           : in  std_logic;
 
-      -- From DECODE
-      dec_valid_i     : in  std_logic;
-      dec_ready_o     : out std_logic;
-      dec_stage_i     : in  t_stage;
+      -- From the Sequencer (instantiated alongside this module in
+      -- cpu_main.vhd): one beat per micro-operation, where DECODE emits one
+      -- beat per instruction.
+      seq_valid_i     : in  std_logic;
+      seq_ready_o     : out std_logic;
+      seq_stage_i     : in  t_stage;
 
       -- Memory
       mem_src_valid_i : in  std_logic;
@@ -31,10 +33,6 @@ end entity prepare;
 
 architecture synthesis of prepare is
 
-   signal seq_valid : std_logic;
-   signal seq_ready : std_logic;
-   signal seq_stage : t_stage;
-
    signal wait_for_mem_req : std_logic;
    signal wait_for_mem_src : std_logic;
    signal wait_for_mem_dst : std_logic;
@@ -52,47 +50,34 @@ architecture synthesis of prepare is
 begin
 
    ------------------------------------------------------------
-   -- Sequencer
-   ------------------------------------------------------------
-
-   i_sequencer : entity work.sequencer
-      port map (
-         clk_i     => clk_i,
-         rst_i     => rst_i,
-         s_valid_i => dec_valid_i,
-         s_ready_o => dec_ready_o,
-         s_stage_i => dec_stage_i,
-         m_valid_o => seq_valid,
-         m_ready_i => seq_ready,
-         m_stage_o => seq_stage
-      ); -- i_sequencer
-
-
-   ------------------------------------------------------------
    -- Get values read from memory
    ------------------------------------------------------------
 
-   wait_for_mem_req <= seq_valid and or(seq_stage.microcodes(2 downto 0)) and not wr_ready_i;
-   wait_for_mem_src <= seq_valid and seq_stage.microcodes(C_MEM_WAIT_SRC) and not mem_src_valid_i;
-   wait_for_mem_dst <= seq_valid and seq_stage.microcodes(C_MEM_WAIT_DST) and not mem_dst_valid_i;
+   wait_for_mem_req <= seq_valid_i and or(seq_stage_i.microcodes(2 downto 0)) and not wr_ready_i;
+   wait_for_mem_src <= seq_valid_i and seq_stage_i.microcodes(C_MEM_WAIT_SRC) and
+                       not mem_src_valid_i;
+   wait_for_mem_dst <= seq_valid_i and seq_stage_i.microcodes(C_MEM_WAIT_DST) and
+                       not mem_dst_valid_i;
 
 
    ------------------------------------------------------------
    -- Back-pressure
    ------------------------------------------------------------
 
-   mem_src_ready_o <= seq_valid and seq_stage.microcodes(C_MEM_WAIT_SRC) and not wait_for_mem_dst;
-   mem_dst_ready_o <= seq_valid and seq_stage.microcodes(C_MEM_WAIT_DST) and not wait_for_mem_src;
-   seq_ready       <= wr_ready_i and not (wait_for_mem_req or wait_for_mem_src or wait_for_mem_dst);
+   mem_src_ready_o <= seq_valid_i and seq_stage_i.microcodes(C_MEM_WAIT_SRC) and
+                      not wait_for_mem_dst;
+   mem_dst_ready_o <= seq_valid_i and seq_stage_i.microcodes(C_MEM_WAIT_DST) and
+                      not wait_for_mem_src;
+   seq_ready_o     <= wr_ready_i and not (wait_for_mem_req or wait_for_mem_src or wait_for_mem_dst);
 
 
    ------------------------------------------------------------
    -- ALU
    ------------------------------------------------------------
 
-   alu_oper  <= seq_stage.inst(R_OPCODE);
-   alu_ctrl  <= seq_stage.inst(R_CTRL_CMD);
-   alu_flags <= seq_stage.r14;
+   alu_oper  <= seq_stage_i.inst(R_OPCODE);
+   alu_ctrl  <= seq_stage_i.inst(R_CTRL_CMD);
+   alu_flags <= seq_stage_i.r14;
    -- Reading R15 as an ordinary operand.
    --
    -- The working Program Counter lives in the FETCH stage; the register file's
@@ -118,18 +103,18 @@ begin
    -- This is the value of the register itself, so it applies in every
    -- addressing mode. @R15++ never reaches here: DECODE flags it as an
    -- immediate and FETCH supplies the value inline.
-   src_val_pc <= seq_stage.addr+1 when seq_stage.src_addr = C_REG_PC else
-                 seq_stage.src_val;
-   dst_val_pc <= seq_stage.addr+2 when seq_stage.dst_addr = C_REG_PC and
-                                       seq_stage.src_imm = '1'       else
-                 seq_stage.addr+1 when seq_stage.dst_addr = C_REG_PC else
-                 seq_stage.dst_val;
+   src_val_pc <= seq_stage_i.addr+1 when seq_stage_i.src_addr = C_REG_PC else
+                 seq_stage_i.src_val;
+   dst_val_pc <= seq_stage_i.addr+2 when seq_stage_i.dst_addr = C_REG_PC and
+                                         seq_stage_i.src_imm = '1'       else
+                 seq_stage_i.addr+1 when seq_stage_i.dst_addr = C_REG_PC else
+                 seq_stage_i.dst_val;
 
-   alu_src_val <= seq_stage.immediate when seq_stage.src_imm = '1'                    else
-                  mem_src_data_i      when seq_stage.microcodes(C_MEM_WAIT_SRC) = '1' else
+   alu_src_val <= seq_stage_i.immediate when seq_stage_i.src_imm = '1'                      else
+                  mem_src_data_i        when seq_stage_i.microcodes(C_MEM_WAIT_SRC) = '1' else
                   src_val_pc;
-   alu_dst_val <= seq_stage.immediate when seq_stage.dst_imm = '1'                    else
-                  mem_dst_data_i      when seq_stage.microcodes(C_MEM_WAIT_DST) = '1' else
+   alu_dst_val <= seq_stage_i.immediate when seq_stage_i.dst_imm = '1'                      else
+                  mem_dst_data_i        when seq_stage_i.microcodes(C_MEM_WAIT_DST) = '1' else
                   dst_val_pc;
 
 
@@ -146,9 +131,9 @@ begin
          end if;
 
          -- Ready to send new data to next stage
-         if seq_valid and seq_ready then
-            wr_valid_o             <= seq_valid;
-            wr_stage_o             <= seq_stage;
+         if seq_valid_i and seq_ready_o then
+            wr_valid_o             <= seq_valid_i;
+            wr_stage_o             <= seq_stage_i;
             wr_stage_o.src_val     <= src_val_pc;
             wr_stage_o.dst_val     <= dst_val_pc;
             wr_stage_o.alu_oper    <= alu_oper;
