@@ -464,23 +464,55 @@ See [Early redirect](../src/cpu_main/README.md#Early-redirect) and
 **Rejected: removing the register on `wbi_addr_o`.** The obvious way to take a
 cycle off *every* redirect is to put the branch target straight onto the
 instruction bus in the cycle WRITE computes it, rather than registering it in
-FETCH first. It cannot be done, and the reason is not the one you would guess
-from the RTL. `dp_ram`'s block-RAM read stages the array read through a
-**falling-edge** register (see its `G_RAM_STYLE` note), which Vivado absorbs into
-the RAMB36's address register. The instruction address therefore has **half a
-clock period**, not a whole one:
+FETCH first — visible in [loop_timing.png](loop_timing.png) as the one-cycle gap
+between `WRITE/fetch_addr_o` and `FETCH/wb_addr_o`. It cannot be done, and it is
+worth being precise about both sides of the ledger, because the gap looks like
+free money.
+
+*What it would buy.* One cycle per redirect, and every redirect goes through
+this port — WRITE's and DECODE's early one alike. Counted over the nine test
+programs: **904 redirects in 16678 cycles, 5.4%**; `prog.asm` alone is 731
+(658 from WRITE, 73 early) in 14883, **4.9%**. Wall time is cycles times period,
+so the clock may lengthen by at most **5.7%** — 7.05 ns to 7.45 ns against the
+measured minimum period — before the change costs more than it saves.
+
+*What it would cost.* Far more than that. `dp_ram`'s block-RAM read stages the
+array read through a **falling-edge** register (see its `G_RAM_STYLE` note),
+which Vivado absorbs into the RAMB36's address register, so the instruction
+address has **half a clock period**, not a whole one. Both legs of the path that
+would have to be merged, measured on the shipping routed build (WNS +0.025 ns at
+7.25 ns):
 
 ```
-fetch/wb_addr_o_reg[12]/C -> i_dp_ram/dp_ram_r_reg_1/ADDRBWRADDR[14]
-   2.774 ns of a 3.625 ns requirement   (slack 0.256, 0 logic levels, 84% route)
+A  i_prepare/wr_stage_o_reg[alu_dst_val][13]/C -> i_fetch/wb_addr_o_reg[15]/D
+      7.002 ns of 7.25   (slack +0.260, 8 logic levels, 79% route)
+B  i_fetch/wb_addr_o_reg[9]/C -> i_dp_ram/dp_ram_r_reg_1/ADDRBWRADDR[11]
+      2.698 ns of 3.625  (slack +0.166, 0 logic levels, 84% route)
 ```
 
-The bare register-to-RAM route already spends 2.774 ns of it, leaving 0.85 ns
-for the whole of branch resolution plus a 16-bit mux, with no routing budget at
-all. Nor does dropping the falling-edge staging rescue it: the branch target
-needs 6.587 ns just to reach FETCH's address register today
-(`i_prepare/wr_stage_o_reg[inst][13]` through six LUT levels), and 6.587 + 2.774
-does not fit in 7.25 ns either.
+Deleting the register concatenates them: **about 9.7 ns**, plus the 16-bit mux
+choosing between the redirect and the incremented address, into a **3.625 ns**
+budget. The falling-edge staging is not what makes it fail — drop it, the RAM
+gets the full period, and 9.7 ns still does not fit in 7.25 ns. Leg A is no
+slack-rich corner either: at +0.260 ns it is the second-tightest region in the
+design, 0.079 ns behind the critical path itself. And `wb_stb_o` would have to
+go combinational alongside the address; its own leg is 6.761 ns.
+
+Restricting the bypass to DECODE's early redirect, whose decision is made two
+stages sooner, does not rescue it: that leg still needs 6.019 ns to reach the
+same register (`i_decode/seq_stage_o_reg[microcodes][0]`, 7 levels), so 8.7 ns
+into 3.625 — and it would apply to only 111 of the 904 redirects, 0.7%.
+
+So the honest arithmetic is a period of at least 9.7 ns, **+38%**, to buy 5.4%
+of cycles: roughly **30% worse** in wall time. The RTL is no cheaper than the
+timing. A request issued in the redirect cycle has to push its address onto
+`i_two_stage_fifo_addr`, which is held in reset by that same `dc_valid_i` and
+gates `s_ready_o` while it is — the push is swallowed, and every later response
+pairs with the wrong address. `wb_stale := outstanding_v` in step 4 would mark
+the new request stale and discard its response. And WISHBONE B4 forbids altering
+an address while `STALL` is asserted, so the mux would need qualifying by
+`wb_stall_i` as well. Two of those reach into a formally verified primitive's
+documented reset contract.
 
 The ICACHE register is worse. Instruction-RAM data to the ICACHE input is
 4.373 ns, and from the ICACHE's `m_data` register it is 2.558 ns to the register

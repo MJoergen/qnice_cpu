@@ -311,10 +311,15 @@ of `prog.asm`'s 731 redirects are of this form (−1.0%), whereas the QNICE-FPGA
 
 Two things were measured and rejected, both defeated by the same fact — `dp_ram`'s block-RAM read
 stages through a **falling-edge** register, so a RAM address path gets **half a clock period**.
-Removing FETCH's `wbi_addr_o` register needs branch resolution plus a 16-bit mux inside the
-0.85 ns that the bare register-to-RAM route leaves of the 3.625 ns budget; making the ICACHE
-cut-through merges a 4.373 ns path with a 2.558 ns (also half-cycle) and a 6.565 ns one. Details
-and numbers in doc/README.md's Optimizations section — read them before trying either again.
+Removing FETCH's `wbi_addr_o` register — the one-cycle gap between `WRITE/fetch_addr_o` and
+`FETCH/wb_addr_o` in the loop timing diagram — concatenates a 7.002 ns leg (PREPARE to that
+register) with a 2.698 ns one (that register to the RAM), i.e. ~9.7 ns plus a mux into a 3.625 ns
+budget; it does not fit in a full 7.25 ns period either, and it would buy one cycle per redirect,
+5.4% of the suite. Making the ICACHE cut-through merges a 4.373 ns path with a 2.558 ns (also
+half-cycle) and a 6.565 ns one. Details and numbers in doc/README.md's Optimizations section —
+read them before trying either again. **The lever that works on a branch penalty is making the
+redirect DECISION arrive earlier, not moving the register**, which is what the early redirect
+above does.
 
 ### FETCH redirect (branch penalty)
 
