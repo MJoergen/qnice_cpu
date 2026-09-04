@@ -27,7 +27,7 @@ simplify the formal verification: `formal/cpu_main.psl` can then state
 properties about the interfaces *between* the stages, which is where most of
 the interesting behaviour is.
 
-CPU_MAIN also instantiates the [SEQUENCER](sub/sequencer.vhd), on the link
+CPU_MAIN also instantiates the [SEQUENCER](sequencer.vhd), on the link
 from DECODE to PREPARE. It is not a fourth stage: it holds no payload
 registers, adds no latency, and its only state is the index of the
 micro-operation it is currently presenting. It is a one-to-many adapter, taking
@@ -565,7 +565,7 @@ The latter two bits are de-asserted in the special case of `@R15++`.
 The microcode ROM returns (combinatorially) a list of up to three
 micro-operations, packed into the 36-bit `microcodes` element of `t_stage`.
 DECODE forwards that entire list in a single beat; it is the
-[SEQUENCER](sub/sequencer.vhd), sitting between DECODE and PREPARE, that splits
+[SEQUENCER](sequencer.vhd), sitting between DECODE and PREPARE, that splits
 (sequences) it into separate clock cycles.
 
 This implies a contract between DECODE and the SEQUENCER: the `LAST` bit must be
@@ -573,7 +573,7 @@ set no later than the top (third) chunk of the list. The SEQUENCER derives its c
 index range from the width of `microcodes`, so a fourth chunk would index past
 the end of the list. Every entry of the microcode ROM, and every one of the jump
 overrides in [decode.vhd](decode.vhd), sets `LAST` in the top chunk. The
-contract is stated in the header of [sequencer.vhd](sub/sequencer.vhd) and
+contract is stated in the header of [sequencer.vhd](sequencer.vhd) and
 assumed in `formal/sequencer.psl`.
 
 One additional complexity handled by the DECODE module is the special case of
@@ -615,7 +615,7 @@ set `Z` only if the two paths agree.
 
 #### Sequencing
 
-This stage's input comes from the [SEQUENCER](sub/sequencer.vhd), which expands
+This stage's input comes from the [SEQUENCER](sequencer.vhd), which expands
 the single beat DECODE emits into one beat per micro-operation. The SEQUENCER
 adds no latency (it is combinatorial in the forward direction), but it holds its
 `s_ready_o` low until the chunk marked `LAST` has been accepted downstream. That
@@ -633,6 +633,10 @@ program's writes log and cycle count is byte-identical across it, and a
 flip-flops for the CPU before and after, with PREPARE's 79/133 splitting
 exactly into 70/131 plus the SEQUENCER's 9/2 (see
 [Where the logic is](../../doc/README.md#Where-the-logic-is)).
+
+[sequencer.vhd](sequencer.vhd) later followed it out of `sub/` and now sits
+beside the stages it joins, which leaves `sub/` holding exactly what the stages
+instantiate internally: the microcode ROM and the ALU.
 
 Apart from that, this stage is quite small and mainly serves the function of
 adding some flip-flops in an otherwise very long combinatorial path. In other words, this

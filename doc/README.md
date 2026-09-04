@@ -18,7 +18,7 @@ See the following block diagram:
 It is drawn by [cpu.tex](cpu.tex) and rendered by `make timing`; edit the LaTeX
 source rather than the `.png`.
 
-Between DECODE and PREPARE sits the [SEQUENCER](../src/cpu_main/sub/sequencer.vhd),
+Between DECODE and PREPARE sits the [SEQUENCER](../src/cpu_main/sequencer.vhd),
 which issues DECODE's list of micro-operations one per clock cycle. It is not a
 pipeline stage -- it holds no payload registers and adds no latency -- but a
 one-to-many adapter on the link between the two, and `cpu_main.vhd` instantiates

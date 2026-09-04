@@ -214,7 +214,7 @@ The core trick of this design: DECODE dynamically translates each CISC-like QNIC
 1-3 RISC-like micro-operations via a combinational ROM (`src/cpu_main/sub/microcode.vhd`), indexed
 by a 4-bit classification of the instruction (reads-from-dst / writes-to-dst / src-in-memory /
 dst-in-memory). DECODE emits that whole list in a single beat; the SEQUENCER
-(`src/cpu_main/sub/sequencer.vhd`), instantiated by CPU_MAIN **between DECODE and PREPARE**,
+(`src/cpu_main/sequencer.vhd`), instantiated by CPU_MAIN **between DECODE and PREPARE**,
 then issues it one micro-op per clock cycle. This exists because an instruction like
 `ADD @R0, @R1` needs two memory reads and one memory write, but only one memory operation is
 possible per cycle — the
@@ -467,8 +467,9 @@ has Vivado.
 - `src/fetch/` — instruction fetch + instruction cache.
 - `src/registers/` — register file (dual-port RAM based, write-before-read).
 - `src/memory/` — Wishbone-facing memory arbiter (source/destination operand buffers).
-- `src/cpu_main/` — DECODE, PREPARE, WRITE, and the `sub/` microcode ROM, SEQUENCER, ALU. The
-  SEQUENCER is instantiated by `cpu_main.vhd` itself, on the DECODE→PREPARE link.
+- `src/cpu_main/` — DECODE, SEQUENCER, PREPARE, WRITE, and the `sub/` microcode ROM and ALU. The
+  SEQUENCER sits beside the stages rather than in `sub/` because `cpu_main.vhd` instantiates it
+  itself, on the DECODE→PREPARE link.
 - `src/sub/` — reusable elastic-pipeline building blocks, see
   [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-src-sub) above.
 - `src/cpu.vhd` — top-level entity tying FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN together.
