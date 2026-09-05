@@ -24,14 +24,14 @@
 cpu_main.clk_i
 cpu_main.rst_i
 [color] 2
-cpu_main.fetch_valid_i
+cpu_main.icache_valid_i
 [color] 7
-cpu_main.fetch_ready_o
-cpu_main.fetch_double_i
-cpu_main.fetch_double_o
+cpu_main.icache_ready_o
+cpu_main.icache_double_i
+cpu_main.icache_double_o
 @22
-cpu_main.fetch_addr_i[15:0]
-cpu_main.fetch_data_i[31:0]
+cpu_main.icache_addr_i[15:0]
+cpu_main.icache_data_i[31:0]
 @28
 cpu_main.reg_rd_en_o
 @22
@@ -97,14 +97,14 @@ cpu_main.i_cpu_main.f_mem_dst_oustanding
 cpu_main.i_decode.clk_i
 cpu_main.i_decode.rst_i
 [color] 2
-cpu_main.i_decode.fetch_valid_i
+cpu_main.i_decode.icache_valid_i
 [color] 7
-cpu_main.i_decode.fetch_ready_o
-cpu_main.i_decode.fetch_double_i
-cpu_main.i_decode.fetch_double_o
+cpu_main.i_decode.icache_ready_o
+cpu_main.i_decode.icache_double_i
+cpu_main.i_decode.icache_double_o
 @22
-cpu_main.i_decode.fetch_addr_i[15:0]
-cpu_main.i_decode.fetch_data_i[31:0]
+cpu_main.i_decode.icache_addr_i[15:0]
+cpu_main.i_decode.icache_data_i[31:0]
 @28
 cpu_main.i_decode.reg_rd_en_o
 @22

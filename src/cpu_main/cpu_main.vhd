@@ -18,13 +18,13 @@ entity cpu_main is
       clk_i           : in  std_logic;
       rst_i           : in  std_logic;
 
-      -- From FETCH
-      fetch_valid_i   : in  std_logic;
-      fetch_ready_o   : out std_logic;
-      fetch_double_i  : in  std_logic;
-      fetch_addr_i    : in  std_logic_vector(15 downto 0);
-      fetch_data_i    : in  std_logic_vector(31 downto 0); -- 2 words from instruction memory
-      fetch_double_o  : out std_logic;
+      -- From ICACHE
+      icache_valid_i  : in  std_logic;
+      icache_ready_o  : out std_logic;
+      icache_double_i : in  std_logic;
+      icache_addr_i   : in  std_logic_vector(15 downto 0);
+      icache_data_i   : in  std_logic_vector(31 downto 0); -- 2 words from instruction memory
+      icache_double_o : out std_logic;
 
       -- DECODE: early redirect to FETCH, for an unconditional branch with an
       -- immediate target. Mutually exclusive with fetch_valid_o below; see
@@ -108,24 +108,24 @@ begin
 
    i_decode : entity work.decode
       port map (
-         clk_i          => clk_i,
-         rst_i          => rst_i or fetch_valid_o,
-         fetch_valid_i  => fetch_valid_i,
-         fetch_ready_o  => fetch_ready_o,
-         fetch_double_i => fetch_double_i,
-         fetch_addr_i   => fetch_addr_i,
-         fetch_data_i   => fetch_data_i,
-         fetch_double_o => fetch_double_o,
-         early_valid_o  => early_valid_o,
-         early_addr_o   => early_addr_o,
-         reg_rd_en_o    => reg_rd_en_o,
-         reg_src_addr_o => reg_src_reg_o,
-         reg_dst_addr_o => reg_dst_reg_o,
-         bank_switch_i  => bank_switch,
-         bank_stale_o   => bank_stale,
-         seq_valid_o    => dec2seq_valid,
-         seq_ready_i    => dec2seq_ready,
-         seq_stage_o    => dec2seq_stage
+         clk_i           => clk_i,
+         rst_i           => rst_i or fetch_valid_o,
+         icache_valid_i  => icache_valid_i,
+         icache_ready_o  => icache_ready_o,
+         icache_double_i => icache_double_i,
+         icache_addr_i   => icache_addr_i,
+         icache_data_i   => icache_data_i,
+         icache_double_o => icache_double_o,
+         early_valid_o   => early_valid_o,
+         early_addr_o    => early_addr_o,
+         reg_rd_en_o     => reg_rd_en_o,
+         reg_src_addr_o  => reg_src_reg_o,
+         reg_dst_addr_o  => reg_dst_reg_o,
+         bank_switch_i   => bank_switch,
+         bank_stale_o    => bank_stale,
+         seq_valid_o     => dec2seq_valid,
+         seq_ready_i     => dec2seq_ready,
+         seq_stage_o     => dec2seq_stage
       ); -- i_decode
 
 

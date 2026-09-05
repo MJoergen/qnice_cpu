@@ -282,19 +282,19 @@ simulation run; `make diagrams` regenerates `timing.png` from it.
 In the following I'll describe in detail the interfaces to the various
 surrounding blocks.
 
-### From FETCH to DECODE
+### From ICACHE to DECODE
 ```
-fetch_valid_i  : in  std_logic;
-fetch_ready_o  : out std_logic;
-fetch_double_i : in  std_logic;
-fetch_addr_i   : in  std_logic_vector(15 downto 0);
-fetch_data_i   : in  std_logic_vector(31 downto 0);
-fetch_double_o : out std_logic;
+icache_valid_i  : in  std_logic;
+icache_ready_o  : out std_logic;
+icache_double_i : in  std_logic;
+icache_addr_i   : in  std_logic_vector(15 downto 0);
+icache_data_i   : in  std_logic_vector(31 downto 0);
+icache_double_o : out std_logic;
 ```
-This AXI-interface accepts one or two words from FETCH. The signal
-`fetch_double_i` from FETCH indicates whether the signal `fetch_data_i`
-contains one or two words. Correspondingly, the signal `fetch_double_o` back to
-FETCH indicates whether we wish to consume one or two words.
+This AXI-interface accepts one or two words from ICACHE. The signal
+`icache_double_i` from ICACHE indicates whether the signal `icache_data_i`
+contains one or two words. Correspondingly, the signal `icache_double_o` back to
+ICACHE indicates whether we wish to consume one or two words.
 
 The idea behind this is that some instructions contain an immediate operand.
 Transferring two words (i.e. instruction and immediate operand) simultaneously
@@ -304,7 +304,7 @@ resulting in higher performance.
 
 The instruction is always present in bits 15-0 and any immediate operand (or
 possibly the next instruction) is optionally present in bits 31-16. The signal
-`fetch_addr_i` contains the address (i.e. Program Counter) of the instruction.
+`icache_addr_i` contains the address (i.e. Program Counter) of the instruction.
 
 It is here worth noting that even though REGISTERS contains all the CPU
 registers, the Program Counter (`R15`) is instead stored in FETCH and forwarded
@@ -896,7 +896,7 @@ outgoing bank by the time the switch retires in WRITE:
 | | Where it is | What its register read did | Remedy |
 |---|---|---|---|
 | I1 | DECODE's output register | Issued a cycle ago, against the old bank. SEQUENCER joins `src_reg_val`/`dst_reg_val` onto the record as *live* wires, so the values are already gone. | Flush. |
-| I2 | DECODE's input | Being issued in this very cycle, still against the old bank: `reg_sr` does not take the new value until this cycle's clock edge. But nothing has accepted it yet. | Hold `fetch_ready_o` low for one cycle, so it reads again from the new bank. |
+| I2 | DECODE's input | Being issued in this very cycle, still against the old bank: `reg_sr` does not take the new value until this cycle's clock edge. But nothing has accepted it yet. | Hold `icache_ready_o` low for one cycle, so it reads again from the new bank. |
 
 Anything further back issues its read at least one cycle from now and picks up
 the new bank by itself, which is why the list stops at two.
@@ -1056,7 +1056,7 @@ The assertions fall into four groups:
   register consumes a banked value, `fetch_valid_o` must assert.
   `f_hold_on_bank_change` is the same requirement one stage further back, where
   refusing the instruction is an alternative to flushing it: on such a cycle,
-  DECODE must either flush or hold `fetch_ready_o` low. Both derive "consumes a
+  DECODE must either flush or hold `icache_ready_o` low. Both derive "consumes a
   banked value" from the raw instruction encoding rather than from `uses_bank`,
   which is the signal under test, so they check the over-approximation instead
   of restating it — sabotaging either half of `uses_bank` fails one of them.

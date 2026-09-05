@@ -415,7 +415,7 @@ because it runs backwards through four modules:
    until the device word arrives at t=6. `seq_ready_i` is therefore low for
    *two* cycles, t=4 and t=5, rather than one.
 3. DECODE cannot accept a new instruction while SEQUENCER is holding it, so it
-   leaves its `fetch_ready_o` low at t=4 and t=5. That is the row drawn as
+   leaves its `icache_ready_o` low at t=4 and t=5. That is the row drawn as
    `ICACHE/m_ready_i`: the two are the same net, seen from ICACHE's side.
 4. ICACHE buffers two words, and by t=5 it is holding both — the `AND` and its
    immediate operand (`m_addr_o` = `0x0006`, `m_double_o` high). Nothing is

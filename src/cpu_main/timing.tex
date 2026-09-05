@@ -12,10 +12,10 @@
 % low, or whenever they belong to a neighbouring instruction rather than to the
 % ADD being followed here.
 \begin{wave}{27}{6}
- \nextwave{DECODE/fetch\_valid\_i}           \bit{1}{5} \bit{0}{1}
- \nextwave{DECODE/fetch\_ready\_o}           \bit{1}{1} \bit{0}{3} \bit{1}{2}
- \nextwave{DECODE/fetch\_addr\_i}            \known{0006}{1} \unknown[x]{5}
- \nextwave{DECODE/fetch\_data\_i}            \known{1082}{1} \unknown[x]{5}
+ \nextwave{DECODE/icache\_valid\_i}          \bit{1}{5} \bit{0}{1}
+ \nextwave{DECODE/icache\_ready\_o}          \bit{1}{1} \bit{0}{3} \bit{1}{2}
+ \nextwave{DECODE/icache\_addr\_i}           \known{0006}{1} \unknown[x]{5}
+ \nextwave{DECODE/icache\_data\_i}           \known{1082}{1} \unknown[x]{5}
  \nextwave{DECODE/seq\_valid\_o}             \bit{1}{6}
  \nextwave{DECODE/seq\_ready\_i}             \bit{1}{1} \bit{0}{3} \bit{1}{2}
  \nextwave{DECODE/seq\_stage\_o.addr}        \unknown[x]{1} \known{0006}{4} \unknown[x]{1}

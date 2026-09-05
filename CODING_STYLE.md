@@ -173,8 +173,8 @@ the *register* file, the Status *Register*.
 
   ```vhdl
      immediate_src <= has_src_operand when
-                      fetch_data_i(R_SRC_REG)  = C_REG_PC and
-                      fetch_data_i(R_SRC_MODE) = C_MODE_POST else
+                      icache_data_i(R_SRC_REG)  = C_REG_PC and
+                      icache_data_i(R_SRC_MODE) = C_MODE_POST else
                       '0';
   ```
 
