@@ -148,7 +148,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    --
    --   R14 -> ALU : the carry-in comes from the Status Register, so a stale or
    --                mis-selected SR changes the RESULT, not just the flags.
-   --   ALU -> R14 : all four of V, N, Z and C are written back, and the bits
+   --   ALU -> R14 : all four of V, N, Z, and C are written back, and the bits
    --                the instruction does not touch must be preserved.
    --
    -- Checking the sum is what makes the first direction observable: if the
@@ -259,7 +259,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- read from memory is the one written back.
    --
    -- The addressing mode is an anyconst rather than three copies of each
-   -- property: @R, @R++ and @--R differ only in the address offset and the
+   -- property: @R, @R++, and @--R differ only in the address offset and the
    -- pointer write-back, so proving it for an arbitrary mode covers all three
    -- and keeps the expected-value arithmetic in one place.
    --
@@ -287,7 +287,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    --
    -- The opcode is not ignored entirely: JMP and CTRL are excluded, because
    -- they re-purpose the operand fields. For a JMP, inst(5 downto 2) holds the
-   -- jump mode, the negate flag and part of the condition -- not a destination
+   -- jump mode, the negate flag, and part of the condition -- not a destination
    -- register -- and DECODE synthesises a destination of its own: ASUB and RSUB
    -- push a return address, so their destination is @--R13 regardless of what
    -- the instruction word says. Generalising without this exclusion fails
@@ -506,7 +506,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- it retires, which is the new one.
    --
    -- Both of these are written from the INSTRUCTION ENCODING -- the raw
-   -- opcode, source register, destination register and destination mode
+   -- opcode, source register, destination register, and destination mode
    -- fields -- and not from decode.vhd's uses_bank, nor from the src_addr /
    -- dst_addr fields DECODE derives from them. That is deliberate: uses_bank
    -- is the thing under test. Narrowing it (forgetting that ADD reads its

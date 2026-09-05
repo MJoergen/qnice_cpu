@@ -1,4 +1,4 @@
--- NOTE: The DECODE, SEQUENCER and PREPARE modules are explicitly reset (using
+-- NOTE: The DECODE, SEQUENCER, and PREPARE modules are explicitly reset (using
 -- fetch_valid_o) following any update to the Program Counter (as determined by
 -- the WRITE module). This flushes the entire pipeline.
 

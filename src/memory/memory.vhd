@@ -129,7 +129,7 @@ begin
    --   outside this file. It is also worth nothing: dropping it left the
    --   cycle count of every test program of the time (nine of them)
    --   bit-identical, while the synthesised CPU got SMALLER (929 -> 903
-   --   LUTs, this module 57 -> 56, with FETCH, ICACHE, DECODE, PREPARE and
+   --   LUTs, this module 57 -> 56, with FETCH, ICACHE, DECODE, PREPARE, and
    --   WRITE all shrinking as the shorter path lets synthesis simplify)
    --   and 0.18 ns faster at the 8.50 ns constraint.
    --

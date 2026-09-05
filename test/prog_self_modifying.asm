@@ -2,7 +2,7 @@
 ; The purpose is specifically to test the pipelining, i.e. that the pipeline
 ; gets updated correctly when instructions immediately following are updated.
 ;
-; T1, T2, T4, T5 and T7 are the regression tests: each one fails without the
+; T1, T2, T4, T5, and T7 are the regression tests: each one fails without the
 ; store-hits-fetch-window flush in src/cpu_main/write.vhd, verified by stashing
 ; that change and running each sub-test on its own.
 ;

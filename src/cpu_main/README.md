@@ -315,7 +315,7 @@ It is here worth noting that even though the REGISTERS module contains all the
 CPU registers, the Program Counter (`R15`) is instead stored in the FETCH
 module and forwarded through the pipeline as a separate signal.
 
-### Between DECODE, the SEQUENCER and REGISTERS
+### Between DECODE, the SEQUENCER, and REGISTERS
 ```
 -- driven by DECODE
 reg_rd_en_o   : out std_logic;
@@ -600,7 +600,7 @@ movement in between is harmless. Freezing them — or latching them anywhere on
 the way — would silently reintroduce stale-operand hazards.
 
 The remaining six elements of `t_prep2wr` — `src_val_pc`, `dst_val_pc`,
-`alu_oper`, `alu_ctrl`, `alu_src_val` and `alu_dst_val` — are filled in by
+`alu_oper`, `alu_ctrl`, `alu_src_val`, and `alu_dst_val` — are filled in by
 PREPARE and so exist only on the PREPARE-to-WRITE link. They are the operands,
 resolved: everything the ALU and the write-back need.
 
@@ -763,7 +763,7 @@ was therefore always bit-identical; the two have been coalesced.
 Any update of the Program Counter invalidates whatever DECODE and PREPARE have
 already speculatively fetched and decoded from the fall-through path. Rather
 than adding a separate flush signal, CPU_MAIN reuses `fetch_valid_o`: in
-[cpu_main.vhd](cpu_main.vhd) the DECODE, SEQUENCER and PREPARE instances are
+[cpu_main.vhd](cpu_main.vhd) the DECODE, SEQUENCER, and PREPARE instances are
 reset with `rst_i or fetch_valid_o`, while WRITE gets the plain `rst_i`.
 
 So every branch, and every other write to `R15`, clears everything upstream in
@@ -802,7 +802,7 @@ register for an extra cycle and so overlaps one more cycle of the refill.
 
 This matters far more than the test suite suggests. Only 73 of `prog.asm`'s 731
 redirects are of this form, but counting branches in the QNICE-FPGA monitor
-sources gives 328 `RSUB <label>, 1`, 182 `RBRA <label>, 1` and 308 conditional
+sources gives 328 `RSUB <label>, 1`, 182 `RBRA <label>, 1`, and 308 conditional
 `RBRA` — **62% unconditional with an immediate target**, because that is what
 every subroutine call and every unconditional jump assembles to.
 `test/prog_subroutine.asm` exists to keep an honest figure in the suite: it
@@ -961,7 +961,7 @@ happens when it must (`INCRB`/`DECRB`, an ordinary write to `R14`, and a write t
 after the switch is neither flushed nor left in the old bank, and `H16`-`H17`
 that a destination read and a pointer read are still caught. Simulation of the
 CPU shows all three outcomes occurring: of the eighteen bank switches in that
-program, three flush, eight hold and seven are free.
+program, three flush, eight hold, and seven are free.
 
 What the test programs cannot show is that the over-approximation is *complete*.
 That is `f_flush_on_bank_change` and `f_hold_on_bank_change` in
@@ -977,7 +977,7 @@ fails them. Verified by doing exactly that: dropping the destination half of
 ### Self-modifying code
 The third thing that flushes the pipeline is a store into the instruction stream.
 Instruction and data memory are the same physical RAM, so `MOVE R1, @R0` can land
-on an address that FETCH, the ICACHE, DECODE or PREPARE has already read — and
+on an address that FETCH, the ICACHE, DECODE, or PREPARE has already read — and
 the stale copy would then execute with nothing noticing.
 
 `smc_hit` in [write.vhd](write.vhd) detects this and joins `fetch_valid_o`. The
@@ -1036,7 +1036,7 @@ The assertions fall into four groups:
   `MOVE Rs, Rd` (with `Rs /= R15`) issues the matching register read in that
   same cycle, and that whenever such a MOVE *completes* in WRITE it writes `Rd`
   with the value read for `Rs`, updates the flags, and issues no memory request.
-  `c_mov_read`, `c_mov_write`, `c_mov_write_pc` and `c_mov_write_gp` cover both
+  `c_mov_read`, `c_mov_write`, `c_mov_write_pc`, and `c_mov_write_gp` cover both
   triggers, including the `Rd = R15` case where the MOVE doubles as a jump.
 
   These two replace an earlier single property of the shape
@@ -1094,7 +1094,7 @@ The SEQUENCER is additionally verified standalone in `formal/sequencer.psl`,
 where `prove` (k-induction) passes: output valid is a pure pass-through of input
 valid, the payload is stable while stalled, no new DECODE beat is accepted
 before the `LAST` chunk has been accepted, and the chunk index advances,
-restarts and holds correctly. The `LAST`-in-the-top-chunk contract described
+restarts, and holds correctly. The `LAST`-in-the-top-chunk contract described
 under [DECODE](#decode) is an *assume* there, not an assert - it is a
 requirement on the microcode ROM, not a property of the SEQUENCER.
 

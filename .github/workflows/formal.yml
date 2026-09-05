@@ -16,7 +16,7 @@ jobs:
       - name: Check out the CPU
         uses: actions/checkout@v4
 
-      # SymbiYosys, Yosys with the GHDL plugin, GHDL itself and the SMT solvers
+      # SymbiYosys, Yosys with the GHDL plugin, GHDL itself, and the SMT solvers
       # all come out of this one tarball, which is how YosysHQ ships them.
       # The date is pinned rather than tracking "latest", so that an upstream
       # nightly cannot turn this job red on its own; bump it deliberately.

@@ -149,7 +149,7 @@ begin
 
    -- Port B: the write (sole driver of dp_ram_r) together with port B's read,
    -- at the shared address b_addr_i. They MUST stay in this one process, on
-   -- this one edge and on this one address, or they stop sharing a physical RAM
+   -- this one edge, and on this one address, or they stop sharing a physical RAM
    -- port and the array is duplicated -- see the header.
    --
    -- Read-first ordering falls out of signal semantics rather than statement

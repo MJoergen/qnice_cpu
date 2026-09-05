@@ -43,7 +43,7 @@ jobs:
       - name: Check the VHDL style
         run: make lint
 
-      # vsg reports the file, the line and the fix for every violation, so the
+      # vsg reports the file, the line, and the fix for every violation, so the
       # job log is already the full report and there is nothing to upload.
       # What is not obvious from it is that most of this is machine-fixable.
       - name: How to fix these

@@ -59,7 +59,7 @@ WRITE's combinational logic, not as a CDC synchroniser.
   captures `isr_addr_i` on the edge that ends the cycle.
 * **t=5** `igrant_n_o` returns high, `done_o` pulses, `addr_o` holds the address.
   WRITE asserts `fetch_valid_o` in this same cycle, redirecting FETCH to the ISR,
-  and drops `int_wait`. The device sees the grant released, stops driving the bus
+  and drops `int_wait`. The device sees the grant released, stops driving the bus,
   and raises `int_n_i`; the CPU already has the address in a register and no
   longer watches either.
 * **t=6** The first ISR instruction is on its way. Total cost from commit to

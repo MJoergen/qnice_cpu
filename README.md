@@ -71,13 +71,13 @@ memory write against a committed reference copy.
 
 [`test/README.md`](test/README.md) describes both checks in full.
 
-CI runs `make test`, `make formal` and `make lint` on every push to `main` and
+CI runs `make test`, `make formal`, and `make lint` on every push to `main` and
 every pull request, as three independent workflows so that each can go red on
 its own: [`test.yml`](.github/workflows/test.yml) builds the QNICE assembler
 from the upstream project (only `qasm` and `qasm2rom` are needed, not the whole
 toolchain) and points the Makefile at it with `ASSEMBLER=<path>`;
 [`formal.yml`](.github/workflows/formal.yml) takes SymbiYosys, Yosys with the
-GHDL plugin, GHDL and the SMT solvers from a pinned
+GHDL plugin, GHDL, and the SMT solvers from a pinned
 [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release; and
 [`lint.yml`](.github/workflows/lint.yml) runs VSG from a pinned release. The two
 badges above are `test.yml` and `formal.yml`.

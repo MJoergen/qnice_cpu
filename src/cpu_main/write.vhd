@@ -115,7 +115,7 @@ begin
    -- is 0 and the ROM returns entry 0 -- three bare C_VAL_LAST, i.e. a single
    -- micro-op that does nothing at all. alu_flags acts only on INCRB/DECRB and
    -- leaves the Status Register alone otherwise (its "when others => null").
-   -- The result is that RTI, INT and EXC currently RETIRE AS NO-OPS, and the
+   -- The result is that RTI, INT, and EXC currently RETIRE AS NO-OPS, and the
    -- assembler emits them without complaint: "RTI" assembles to 0xE040 and
    -- executes as nothing whatsoever.
    --
@@ -342,7 +342,7 @@ begin
    -- FETCH: cpu_main.vhd resets DECODE and PREPARE with "rst_i or
    -- fetch_valid_o", so it drives the reset pin of every flip-flop in two
    -- stages. Feeding it from reg_val_o puts the ALU result, an 8-bit
-   -- comparator and two more levels of logic in front of that high-fanout net.
+   -- comparator, and two more levels of logic in front of that high-fanout net.
    -- Measured at commit b987964: WNS +0.344 ns -> +0.010 ns and +44 LUTs, with
    -- the worst path landing on i_prepare/wr_stage_o_reg[alu_src_val]. The
    -- syntactic version below gives +0.246 ns and 4 LUTs FEWER than baseline.
@@ -382,7 +382,7 @@ begin
    ------------------------------------------------------------
 
    -- Instruction and data memory are the same physical RAM, so a store can
-   -- land on an instruction that FETCH, the ICACHE, DECODE or PREPARE has
+   -- land on an instruction that FETCH, the ICACHE, DECODE, or PREPARE has
    -- already read. Nothing downstream would ever notice: the stale copy is
    -- decoded and executed exactly as if the store had not happened. The fix is
    -- the same flush used for a taken branch -- discard everything already read

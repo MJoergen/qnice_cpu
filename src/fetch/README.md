@@ -130,7 +130,7 @@ FETCH and the ICACHE have a job each, and both are in `DUTS` in
 
 ### fetch.sby
 
-`bmc`, `cover` and `prove` all pass. Unlike `memory.sby`, this job also loads
+`bmc`, `cover`, and `prove` all pass. Unlike `memory.sby`, this job also loads
 the `.psl` of every sub-block it instantiates and then runs
 
 ```
@@ -139,7 +139,7 @@ chformal -assume2assert fetch/* %M
 
 which converts each sub-block's *assumptions about its inputs* into *assertions
 on `fetch`*. So the job proves not only that `fetch` behaves, but that it drives
-`two_stage_fifo`, `two_stage_buffer` and `pipe_concat` legally. That is worth
+`two_stage_fifo`, `two_stage_buffer`, and `pipe_concat` legally. That is worth
 keeping in mind when editing the sub-block `.psl` files: an assumption written
 there becomes an obligation here.
 
@@ -201,7 +201,7 @@ Two invariants carry the induction proof across the change:
 
 ### Reset and flush escapes
 
-`fetch` resets its address FIFO, data buffer and `pipe_concat` with
+`fetch` resets its address FIFO, data buffer, and `pipe_concat` with
 `rst_i or dc_valid_i`, so a PC redirect from WRITE flushes them mid-stream.
 Combined with the fact that `one_stage_buffer`/`two_stage_buffer` gate
 `m_valid_o` and `s_ready_o` combinationally with `and not rst_i`, this means a

@@ -15,7 +15,7 @@ vunit i_fetch(fetch(synthesis))
    -- bmc mode; to get it through prove mode, add matching invariants inside
    -- two_stage_fifo.psl and two_stage_buffer.psl, or comment out this
    -- declaration block together with f_const_addr_stable, f_const_data_stable,
-   -- f_wb_slave_data and f_dc_data_integrity -- nothing else depends on them.
+   -- f_wb_slave_data, and f_dc_data_integrity -- nothing else depends on them.
    signal f_const_addr : std_logic_vector(15 downto 0);
    signal f_const_data : std_logic_vector(15 downto 0);
 

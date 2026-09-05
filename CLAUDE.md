@@ -68,7 +68,7 @@ regenerate both with `make golden` and read the `git diff` carefully.
 
 A run can also fail before any of that, on `p_unimplemented` in `src/cpu_main/write.vhd`: a
 simulation-only assertion that kills the run if an instruction retires that nothing decodes. Today
-that means the control commands `RTI`, `INT` and `EXC`, and reserved opcode `0xD`. Without it they
+that means the control commands `RTI`, `INT`, and `EXC`, and reserved opcode `0xD`. Without it they
 are **silent no-ops** — DECODE classifies every CTRL instruction as no-operand/no-read/no-write, so
 the microcode ROM returns entry 0, three bare `C_VAL_LAST`, and `alu_flags` leaves the SR alone via
 its `when others => null`. The assembler emits them regardless (`RTI` is `0xE040`). This matters
@@ -120,7 +120,7 @@ pinned OSS CAD Suite release and using `make -C formal -k` so one failing DUT do
 rest. All twelve DUTs are currently enabled and **the whole suite
 passes** (35 tasks); if you want to narrow scope while iterating, comment lines out there — but
 put them back. The Makefile tracks each job with a `<dut>.stamp` file whose prerequisites are read
-from that job's own `[files]` section, so `make` re-runs exactly the jobs whose `.sby`, `.psl` or
+from that job's own `[files]` section, so `make` re-runs exactly the jobs whose `.sby`, `.psl`, or
 VHDL sources changed, and nothing otherwise. A stamp exists only if that job's last run passed
 (the recipe deletes it before invoking `sby`), so a failure is always retried. Note `make` still
 stops at the first failing job — pass `-k` to attempt the whole suite. To run/inspect a single

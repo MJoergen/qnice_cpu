@@ -105,7 +105,7 @@ def parse_timing(path):
     """Return (WNS in ns, number of failing setup endpoints).
 
     The row wanted is the first numeric line of the "Design Timing Summary"
-    table, whose leading columns are WNS, TNS, TNS Failing Endpoints and
+    table, whose leading columns are WNS, TNS, TNS Failing Endpoints, and
     TNS Total Endpoints. More columns follow (hold, pulse width), so the match
     deliberately does not anchor the end of the line.
     """

@@ -126,7 +126,7 @@ very handshake the flush is derived from, and the combinational loop settles on
 the same asymmetry `two_stage_fifo` documents in its own contract (b), and for
 the same reason: the consumer shares the flush, so it discards what it must.
 
-`f_flush_comb`, `f_flush_offers` and `f_cover_flush_handshake` in
+`f_flush_comb`, `f_flush_offers`, and `f_cover_flush_handshake` in
 [icache.psl](../../formal/icache.psl) state both halves and make the mistake
 visible. Note also the `flush_i = '0'` term in the trigger of `f_stable_double`
 and `f_stable_single` there, where `rst_i` needs none: `rst_i` gates `m_valid_o`
@@ -141,7 +141,7 @@ FETCH's own job; see
 [fetch/README.md](../fetch/README.md#formal-verification) for what the two
 together do *not* prove.
 
-`bmc`, `cover` and `prove` (k-induction), depth 10, elaborated with the small
+`bmc`, `cover`, and `prove` (k-induction), depth 10, elaborated with the small
 generics `G_ADDR_SIZE=4`, `G_DATA_SIZE=8`. Self-contained — `icache.vhd` has no
 sub-instances. [formal/icache.psl](../../formal/icache.psl) pins down the
 combinational `count`, that buffered addresses are consecutive, output stability

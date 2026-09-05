@@ -12,7 +12,7 @@
 # A handful of files carry inline `-- vsg_off <rule_id>...` / `-- vsg_on
 # <rule_id>...` markers (vsg's own local-suppression syntax) around a
 # specific deliberate table, rather than a global override here -- see
-# cpu_constants.vhd, decode.vhd, microcode.vhd, alu_data.vhd, alu_flags.vhd
+# cpu_constants.vhd, decode.vhd, microcode.vhd, alu_data.vhd, alu_flags.vhd,
 # and pipe_concat.vhd. Prefer that over a config change when the deviation is
 # local to one construct in one file; reach for a `rule:` entry below only
 # when the same deviation is a repo-wide convention.

@@ -282,7 +282,7 @@ the *register* file, the Status *Register*.
 * Signal initializers (`:= '0'`, `:= (others => '0')`) are used on registers whose power-up state
   matters for simulation or for the formal environment. They are not a substitute for `rst_i`; see
   the note in `one_stage_buffer.vhd`'s header.
-* Every `process`, instantiation and `generate` carries a label, and the label is repeated on the
+* Every `process`, instantiation, and `generate` carries a label, and the label is repeated on the
   closing keyword (`end process p_fsm;`, `end generate gen_block_ram;`).
 * **No shared variables.** VHDL-2008 requires a shared variable to be of a protected type, and a
   protected type is not synthesisable, so a plain one compiles only under GHDL's `-frelaxed` —
@@ -380,7 +380,7 @@ VSG's own markers rather than weakening `vsg.yml` for the whole repo:
 ```
 
 Written at column 0, like the pragma guards in section 5, and preceded by a comment saying *why*.
-`cpu_constants.vhd`, `decode.vhd`, `microcode.vhd`, `alu_data.vhd`, `alu_flags.vhd` and
+`cpu_constants.vhd`, `decode.vhd`, `microcode.vhd`, `alu_data.vhd`, `alu_flags.vhd`, and
 `pipe_concat.vhd` all use this — for an instruction-format table, an opcode matrix, an aligned
 two-row boolean expression, a handshake written as a matrix. Reach for a `vsg.yml` entry only when
 the deviation is a repo-wide convention.

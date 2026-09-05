@@ -1,7 +1,7 @@
 ; This program exists to generate the pipeline timing diagram in
 ; src/cpu_main/README.md#Waveforms. That diagram follows the single instruction
 ; "ADD @R0++, @R0++" at address 0x0006, and quotes concrete addresses, register
-; values and cycle numbers taken from a simulation run of this program. The
+; values, and cycle numbers taken from a simulation run of this program. The
 ; blocks of "MOVE R1, R1" around it are padding, so that the ADD is entered and
 ; left with a full pipeline and is not perturbed by its neighbours.
 ;

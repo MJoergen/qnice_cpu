@@ -20,7 +20,7 @@
 ; test/prog_subroutine.stats.golden.
 ;
 ; It is deliberately CONSERVATIVE about that mix. Per loop iteration it issues
-; two unconditional calls, two returns and one conditional branch; the returns
+; two unconditional calls, two returns, and one conditional branch; the returns
 ; are "MOVE @R13++, R15", whose target comes out of memory and so can never be
 ; resolved early. Two of five redirects benefit, against the monitor's rather
 ; higher share.

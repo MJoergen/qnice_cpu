@@ -85,7 +85,7 @@ begin
    -- BOTH the ALU inputs below and the copies latched into the stage record --
    -- the latter matters because the WRITE stage derives the memory address and
    -- the pre/post-increment write-back from src_val_pc/dst_val_pc, so @R15,
-   -- @--R15 and R15 as a plain operand all have to agree.
+   -- @--R15, and R15 as a plain operand all have to agree.
    --
    -- The value is the address of the next word to be fetched at the point the
    -- operand is read, matching the reference implementation (qnice.c advances

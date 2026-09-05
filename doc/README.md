@@ -361,7 +361,7 @@ the programs `make test` runs; its header says how to run it.
 * **t=1**: FETCH issues the first instruction-memory request of the new stream,
   for `0x0005`.
 * **t=2**: that word (`0x0048`) comes back and is handed to the ICACHE. The
-  pipeline is empty: DECODE, PREPARE and WRITE all have nothing.
+  pipeline is empty: DECODE, PREPARE, and WRITE all have nothing.
 * **t=3**: the ICACHE offers it and DECODE accepts `MOVE @R0, R2`. Note
   `m_double_o` is low — only one word is buffered so far — which is enough,
   because this instruction has no immediate operand.
@@ -463,7 +463,7 @@ latency requirement: an instruction may be rewritten by the store immediately
 before it.
 
 That did not use to be true, and the failure was silent. FETCH, the ICACHE,
-DECODE and PREPARE have all read ahead of the instruction retiring in WRITE, so
+DECODE, and PREPARE have all read ahead of the instruction retiring in WRITE, so
 a store landing on one of those addresses changed the RAM but not the copy about
 to execute — the *old* instruction ran, with nothing anywhere reporting a
 problem. Five instructions of padding, or a branch, was enough to hide it,
@@ -482,7 +482,7 @@ Two things are worth knowing:
 
 * **The check is deliberately over-approximate.** It flushes on any store within
   32 words after the current instruction, where the real read-ahead is at most 8
-  (2 words each for PREPARE and DECODE, 2 in the ICACHE and `C_MAX_PENDING` = 2
+  (2 words each for PREPARE and DECODE, 2 in the ICACHE, and `C_MAX_PENDING` = 2
   in FETCH; probing the fetch pointer against the ICACHE output over the whole
   of `prog.asm` gives a maximum of 4 for the last two together). The slack is
   what makes the comparison cheap enough to sit on the flush net at all — see
@@ -552,7 +552,7 @@ more cycle of the refill.
 The test suite understates this badly, and deliberately so: it is a correctness
 suite, and only 73 of `prog.asm`'s 731 redirects are of this form, worth −1.0%.
 Real QNICE code is not shaped like that. Counting the branches in the
-QNICE-FPGA monitor sources gives 328 `RSUB <label>, 1`, 182 `RBRA <label>, 1`
+QNICE-FPGA monitor sources gives 328 `RSUB <label>, 1`, 182 `RBRA <label>, 1`,
 and 308 conditional `RBRA` — **62% unconditional with an immediate target**,
 since that is what every subroutine call and every unconditional jump assembles
 to. `test/prog_subroutine.asm` was added to keep an honest number in the suite,
@@ -569,7 +569,7 @@ operand muxing, which none of this touches — so the cost is the placement
 sensitivity [The critical path](#the-critical-path) already describes, not logic
 added to the path. Four builds, all closing: +0.093 (baseline), +0.036 (early
 redirect with no reset guard, which is unsafe), +0.002 (guard in `write.vhd`,
-twice, Vivado being deterministic) and +0.007 (guard in `prepare.vhd`'s reset
+twice, Vivado being deterministic), and +0.007 (guard in `prepare.vhd`'s reset
 instead). The last two are the same design measured two ways; the 0.005 ns
 between them is not worth the reset-duration assumption the second one needs.
 
@@ -670,7 +670,7 @@ uses:
 | zero-latency slave (`READ_REG=false`) | 10.70 ns (+0.005) | 10.60 ns (−0.131) | **10.70 ns** | 93.5 MHz |
 
 The registered figure is new; only the 8.50 ns constraint the design ships at
-had been measured before. It closes at 7.05, 7.10 (+0.023) and 7.20 (+0.043),
+had been measured before. It closes at 7.05, 7.10 (+0.023), and 7.20 (+0.043),
 and fails at 7.00 and at every tighter constraint tried, down to 6.00. The
 zero-latency figure is the branch's own, reproduced here to check it: +0.005 ns
 at 10.70 and −0.308 at 10.00, and at the shipping 8.50 ns constraint it misses
@@ -701,7 +701,7 @@ from WNS at a loose constraint: −1.084 ns at 8.50 implies 9.58 ns, and the
 zero-latency design actually needs 10.70. And a single failing build well above
 the floor means nothing — this design's placement noise is ±0.284 ns (see
 [The critical path](#the-critical-path) below), so isolated failures at 7.15,
-7.45 and 7.55 sit between builds that close at 7.05. What identifies the floor
+7.45, and 7.55 sit between builds that close at 7.05. What identifies the floor
 is the point below which *every* constraint fails, not the first one that does.
 The 3.65 ns gap between the two configurations is an order of magnitude beyond
 that noise.
@@ -777,7 +777,7 @@ Remaining ideas:
   modules, thirty-five tasks). What is still missing is a `prove` (k-induction)
   task for `cpu_main`, and closing the last open property of `memory`'s
   inductive proof.
-* Add interrupts. `RTI`, `INT` and `EXC` are not decoded anywhere today, and
+* Add interrupts. `RTI`, `INT`, and `EXC` are not decoded anywhere today, and
   without help they retire as silent no-ops; `p_unimplemented` in
   [write.vhd](../src/cpu_main/write.vhd) fails the simulation on them instead,
   so a half-finished implementation cannot look like a working one. Two
@@ -836,7 +836,7 @@ PREPARE. (That leg used to be declared in DECODE; moving the register file's
 read data to the SEQUENCER renamed the module it belongs to without changing the
 net.) It is not always: some builds instead put a Block RAM
 clock-to-out path inside the register file on top, with zero logic levels,
-nothing to optimise and nothing this design controls.
+nothing to optimise, and nothing this design controls.
 
 Which of the two wins is not a durable property, and neither is the number
 attached to it, nor which leg of the loop the listing happens to run through --
@@ -909,7 +909,7 @@ flight reads a banked register (see
 logic rather than adding it — 971 LUTs to 948 — and still gave back +0.165 ns to
 +0.093 ns at the 7.25 ns constraint, on the same PREPARE loop as always, which
 the new logic is nowhere near. The first attempt gave back *all* of it: +0.165
-to −0.036 ns, four failing endpoints and no bitstream, at 914 LUTs — smaller
+to −0.036 ns, four failing endpoints, and no bitstream, at 914 LUTs — smaller
 still. What bought the margin back was moving the `INCRB`/`DECRB` decode two
 stages earlier, out of `fetch_valid_o`'s cone and into a stage-record bit: ten bits
 of compare and two levels of logic off that net, in exchange for one flip-flop
@@ -923,7 +923,7 @@ Two things to know before trying to optimise it further:
   reductions in logic depth will buy much less than the level count suggests.
   The largest single item is the very first hop: `alu_src_val` bit 0 has a
   fanout of about 75 — it feeds the adder, both barrel shifters' shift-amount
-  decode, the comparators and every bitwise operation — and that one net costs
+  decode, the comparators, and every bitwise operation — and that one net costs
   roughly 1.4 ns, a sixth of the whole budget.
 
   Reducing that fanout is the obvious next lever, and both easy ways of doing

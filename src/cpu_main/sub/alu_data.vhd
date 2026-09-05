@@ -92,7 +92,7 @@ begin
    -- case over every opcode.
    --
    -- The addition is by far the slowest input to that mux -- it carries a
-   -- 16-bit ripple -- while every other operation is a shift, a permutation or
+   -- 16-bit ripple -- while every other operation is a shift, a permutation, or
    -- a bitwise function of signals that are already stable. Selecting over all
    -- of them at once puts the whole 16-way mux, three levels of logic, in
    -- series with the adder. Worse, the Zero flag is a 16-bit reduction of this

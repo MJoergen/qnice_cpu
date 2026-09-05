@@ -7,7 +7,7 @@ work should happen in. Nothing here is measured yet except where it says so.
 
 ## What exists today
 
-Nothing decodes `RTI`, `INT` or `EXC`. Without help they would retire as silent
+Nothing decodes `RTI`, `INT`, or `EXC`. Without help they would retire as silent
 no-ops: DECODE classifies every CTRL instruction as no-operand/no-read/no-write,
 the microcode ROM returns entry 0, and `alu_flags` leaves the SR alone through
 its `when others => null`. The assembler emits them regardless — `RTI` is
@@ -74,7 +74,7 @@ that most needs writing down.
 document mentions `EXC` — not the instruction table, not the control-command bit
 table. Neither does the programming card, nor the emulator, whose
 `control_mnemonics` array stops at `DECRB`. Nor does the reference CPU:
-`vhdl/cpu_constants.vhd` defines `ctrlHALT`, `ctrlRTI`, `ctrlINT`, `ctrlINCRB`
+`vhdl/cpu_constants.vhd` defines `ctrlHALT`, `ctrlRTI`, `ctrlINT`, `ctrlINCRB`,
 and `ctrlDECRB` and stops there, so the encoding falls into the `Ctrl_Cmd` case's
 `when others` arm, commented "illegal command: HALT". `EXC` exists in exactly one
 place in the whole upstream project: the assembler, which knows the mnemonic and
@@ -139,7 +139,7 @@ narrowest set.** This is the disagreement that changed most under `dev-V1.61`.
 | `vhdl/qnice_cpu.vhd` (rule 3) | `R13`, `R14`, `R15` |
 | `emulator/qnice.c` | `R14`, `R15` |
 
-The reference keeps `SP_org`, `SR_org` and `PC_org` in the CPU itself — the
+The reference keeps `SP_org`, `SR_org`, and `PC_org` in the CPU itself — the
 declarations are commented `(R13)`, `(R14)`, `(R15)` — mirrors all three
 continuously while `Int_Active = '0'`, and reverts all three in the `ctrlRTI`
 arm. So it saves one register more than the slides do, and the programming card
@@ -156,7 +156,7 @@ An earlier draft of this note recorded this disagreement as slides-say-two versu
 `register_file.vhd`-reverts-`R8`-`R15`, describing a register file that
 continuously mirrors the upper registers into shadow copies. **No such code
 exists in `dev-V1.61`.** `vhdl/register_file.vhd` is 102 lines with no shadow
-array, no `revert_en` and no `Int_Active` port at all; `R8`-`R12` are ordinary
+array, no `revert_en`, and no `Int_Active` port at all; `R8`-`R12` are ordinary
 registers, and `R13`/`R14`/`R15` are not in the file — they are driven in from
 the CPU. The shadow file is `dev-cpu-pipeline`-only, from commit `87f9d4b` "WIP
 CPU and Register File: Refactoring R13..R15", and even there the loop body reads
@@ -268,7 +268,7 @@ now, since it was drawn ahead of the implementation rather than off a simulation
 * **`R14` (SR) and `R15` (PC) are saved** into latches invisible to software.
   The reference saves `R13` as well; this design follows the document. See
   [Where the sources disagree](#where-the-sources-disagree).
-* **`RTI`** restores them, clears the in-ISR state and resumes.
+* **`RTI`** restores them, clears the in-ISR state, and resumes.
 * **`INT <dst op>`** is a software interrupt; the destination operand supplies
   the ISR address. The reference accepts all four addressing modes — the
   `Dst_Mode` case inside the `ctrlINT` arm.
@@ -304,7 +304,7 @@ now, since it was drawn ahead of the implementation rather than off a simulation
 
 The evidence is under
 [Where the sources disagree](#where-the-sources-disagree): `EXC` appears nowhere
-in the ISA document, the programming card, the reference CPU or the emulator —
+in the ISA document, the programming card, the reference CPU, or the emulator —
 only in the assembler, which is the one place in the project that knows the
 mnemonic. So `EXC` has never been implemented in QNICE hardware, and no document
 has ever specified what it should do. Keep its arm of `p_unimplemented` armed,
@@ -392,8 +392,8 @@ survive.
 ### The timing problem
 
 `fetch_valid_o` has three terms already: a write to `R14`/`R15` (`reg_we_o` and
-three address bits), a register bank switch (`inst_done_o`, `prep_stage_i.is_crb`
-and `bank_stale_i`) and a store into the instruction stream (see the "Register
+three address bits), a register bank switch (`inst_done_o`, `prep_stage_i.is_crb`,
+and `bank_stale_i`), and a store into the instruction stream (see the "Register
 bank switch" note in [write.vhd](../src/cpu_main/write.vhd)). It used to fit a
 single 6-input LUT and no longer does. An interrupt grant is a fourth term on a
 net that is the reset pin of two entire pipeline stages, and the bank-switch work
@@ -508,9 +508,9 @@ The reference halts on both.
   `igrant_n_o` out, `isr_addr_i` sampled, ISR address out to WRITE. Plus
   `formal/interrupt.{psl,sby,gtkw}`. **The specification is
   [src/interrupt/README.md](../src/interrupt/README.md)**, written at T2b: read
-  the port table, the ten-obligation contract and the walkthrough before writing
+  the port table, the ten-obligation contract, and the walkthrough before writing
   any VHDL, and take the device's five obligations as PSL assumptions and the
-  CPU's five as assertions. **Done when** `sby` passes bmc, cover and prove, and
+  CPU's five as assertions. **Done when** `sby` passes bmc, cover, and prove, and
   the diagram still matches.
 * **T2b. Protocol timing diagram. DONE, ahead of T2.** Drawn first rather than
   last, because the bus protocol was the part of this feature the upstream
@@ -575,8 +575,8 @@ The reference halts on both.
   as free, so T0's headroom result stands as an upper bound rather than needing a
   re-run — but re-measure at T12 regardless, as T0 already says.
 
-  Graduates test cases 4, 5 and 7 from `TESTS_PENDING`.
-* **T7. Top-level ports.** `int_n_i`, `igrant_n_o` and `isr_addr_i` on
+  Graduates test cases 4, 5, and 7 from `TESTS_PENDING`.
+* **T7. Top-level ports.** `int_n_i`, `igrant_n_o`, and `isr_addr_i` on
   [cpu.vhd](../src/cpu.vhd) and `system.vhd`.
 
 ### Phase 3 — close it out

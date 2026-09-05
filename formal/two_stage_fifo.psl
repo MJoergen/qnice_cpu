@@ -382,7 +382,7 @@ vunit i_two_stage_fifo(two_stage_fifo(synthesis))
    -- newly valid output implies an accepted handshake that sets the flag in
    -- the same cycle, or from s_data_r, which carries its own invariant across.
    -- For the input slot: s_ready_r can only fall from '1' to '0' when
-   -- m_valid_r = '1', m_ready_i = '0' and s_valid_i = '1' -- a genuine input
+   -- m_valid_r = '1', m_ready_i = '0', and s_valid_i = '1' -- a genuine input
    -- handshake -- and p_s_data captures s_data_i on that same edge, so the
    -- flag is set exactly when the slot becomes occupied.
 
