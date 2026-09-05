@@ -912,7 +912,7 @@ logic rather than adding it — 971 LUTs to 948 — and still gave back +0.165 n
 the new logic is nowhere near. The first attempt gave back *all* of it: +0.165
 to −0.036 ns, four failing endpoints and no bitstream, at 914 LUTs — smaller
 still. What bought the margin back was moving the `INCRB`/`DECRB` decode two
-stages earlier, out of `fetch_valid_o`'s cone and into a `t_stage` bit: ten bits
+stages earlier, out of `fetch_valid_o`'s cone and into a stage-record bit: ten bits
 of compare and two levels of logic off that net, in exchange for one flip-flop
 per stage. Three builds, three placements, the same critical path throughout.
 

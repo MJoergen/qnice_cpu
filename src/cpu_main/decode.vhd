@@ -39,7 +39,7 @@ entity decode is
       -- carrying its whole micro-op list; see cpu_main.vhd.
       seq_valid_o    : out std_logic;
       seq_ready_i    : in  std_logic;
-      seq_stage_o    : out t_stage
+      seq_stage_o    : out t_dec2seq
    );
 end entity decode;
 
@@ -181,7 +181,7 @@ begin
                 ((reads_from_dst or dst_memory) and not reg_dst_addr_o(3));
 
    -- Is this a bank switch? Decoded here and carried down the pipeline in
-   -- t_stage rather than re-derived from prep_stage_i.inst in WRITE: it lands
+   -- the stage record rather than re-derived from prep_stage_i.inst in WRITE: it lands
    -- on fetch_valid_o, and that net cannot afford a ten-bit compare in front
    -- of it. See "Register bank switch" in write.vhd.
    is_crb <= '1' when fetch_data_i(R_OPCODE) = C_OPCODE_CTRL and

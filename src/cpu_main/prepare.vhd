@@ -14,7 +14,7 @@ entity prepare is
       -- beat per instruction.
       seq_valid_i     : in  std_logic;
       seq_ready_o     : out std_logic;
-      seq_stage_i     : in  t_stage;
+      seq_stage_i     : in  t_seq2prep;
 
       -- MEMORY
       mem_src_valid_i : in  std_logic;
@@ -27,7 +27,7 @@ entity prepare is
       -- To WRITE
       wr_valid_o      : out std_logic;
       wr_ready_i      : in  std_logic;
-      wr_stage_o      : out t_stage
+      wr_stage_o      : out t_prep2wr
    );
 end entity prepare;
 
@@ -53,10 +53,10 @@ begin
    -- Get values read from memory
    ------------------------------------------------------------
 
-   wait_for_mem_req <= seq_valid_i and or(seq_stage_i.microcodes(2 downto 0)) and not wr_ready_i;
-   wait_for_mem_src <= seq_valid_i and seq_stage_i.microcodes(C_MEM_WAIT_SRC) and
+   wait_for_mem_req <= seq_valid_i and or(seq_stage_i.microcode(2 downto 0)) and not wr_ready_i;
+   wait_for_mem_src <= seq_valid_i and seq_stage_i.microcode(C_MEM_WAIT_SRC) and
                        not mem_src_valid_i;
-   wait_for_mem_dst <= seq_valid_i and seq_stage_i.microcodes(C_MEM_WAIT_DST) and
+   wait_for_mem_dst <= seq_valid_i and seq_stage_i.microcode(C_MEM_WAIT_DST) and
                        not mem_dst_valid_i;
 
 
@@ -64,9 +64,9 @@ begin
    -- Back-pressure
    ------------------------------------------------------------
 
-   mem_src_ready_o <= seq_valid_i and seq_stage_i.microcodes(C_MEM_WAIT_SRC) and
+   mem_src_ready_o <= seq_valid_i and seq_stage_i.microcode(C_MEM_WAIT_SRC) and
                       not wait_for_mem_dst;
-   mem_dst_ready_o <= seq_valid_i and seq_stage_i.microcodes(C_MEM_WAIT_DST) and
+   mem_dst_ready_o <= seq_valid_i and seq_stage_i.microcode(C_MEM_WAIT_DST) and
                       not wait_for_mem_src;
    seq_ready_o     <= wr_ready_i and not (wait_for_mem_req or wait_for_mem_src or wait_for_mem_dst);
 
@@ -86,8 +86,8 @@ begin
    -- value. src_val_pc/dst_val_pc substitute the real PC, and are then used for
    -- BOTH the ALU inputs below and the copies latched into the stage record --
    -- the latter matters because the WRITE stage derives the memory address and
-   -- the pre/post-increment write-back from src_val/dst_val, so @R15, @--R15
-   -- and R15 as a plain operand all have to agree.
+   -- the pre/post-increment write-back from src_val_pc/dst_val_pc, so @R15,
+   -- @--R15 and R15 as a plain operand all have to agree.
    --
    -- The value is the address of the next word to be fetched at the point the
    -- operand is read, matching the reference implementation (qnice.c advances
@@ -104,17 +104,17 @@ begin
    -- addressing mode. @R15++ never reaches here: DECODE flags it as an
    -- immediate and FETCH supplies the value inline.
    src_val_pc <= seq_stage_i.addr+1 when seq_stage_i.src_addr = C_REG_PC else
-                 seq_stage_i.src_val;
+                 seq_stage_i.src_reg_val;
    dst_val_pc <= seq_stage_i.addr+2 when seq_stage_i.dst_addr = C_REG_PC and
                                          seq_stage_i.src_imm = '1'       else
                  seq_stage_i.addr+1 when seq_stage_i.dst_addr = C_REG_PC else
-                 seq_stage_i.dst_val;
+                 seq_stage_i.dst_reg_val;
 
    alu_src_val <= seq_stage_i.immediate when seq_stage_i.src_imm = '1'                      else
-                  mem_src_data_i        when seq_stage_i.microcodes(C_MEM_WAIT_SRC) = '1' else
+                  mem_src_data_i        when seq_stage_i.microcode(C_MEM_WAIT_SRC) = '1' else
                   src_val_pc;
    alu_dst_val <= seq_stage_i.immediate when seq_stage_i.dst_imm = '1'                      else
-                  mem_dst_data_i        when seq_stage_i.microcodes(C_MEM_WAIT_DST) = '1' else
+                  mem_dst_data_i        when seq_stage_i.microcode(C_MEM_WAIT_DST) = '1' else
                   dst_val_pc;
 
 
@@ -132,10 +132,31 @@ begin
 
          -- Ready to send new data to next stage
          if seq_valid_i and seq_ready_o then
-            wr_valid_o             <= seq_valid_i;
-            wr_stage_o             <= seq_stage_i;
-            wr_stage_o.src_val     <= src_val_pc;
-            wr_stage_o.dst_val     <= dst_val_pc;
+            wr_valid_o <= seq_valid_i;
+
+            -- Forwarded unchanged. One assignment per element: the input and
+            -- output records are different types, so that this stage cannot
+            -- hand on an operand value it has not resolved.
+            wr_stage_o.microcode <= seq_stage_i.microcode;
+            wr_stage_o.addr      <= seq_stage_i.addr;
+            wr_stage_o.inst      <= seq_stage_i.inst;
+            wr_stage_o.immediate <= seq_stage_i.immediate;
+            wr_stage_o.src_addr  <= seq_stage_i.src_addr;
+            wr_stage_o.src_mode  <= seq_stage_i.src_mode;
+            wr_stage_o.src_imm   <= seq_stage_i.src_imm;
+            wr_stage_o.dst_addr  <= seq_stage_i.dst_addr;
+            wr_stage_o.dst_mode  <= seq_stage_i.dst_mode;
+            wr_stage_o.dst_imm   <= seq_stage_i.dst_imm;
+            wr_stage_o.res_reg   <= seq_stage_i.res_reg;
+            wr_stage_o.is_crb    <= seq_stage_i.is_crb;
+            wr_stage_o.early_jmp <= seq_stage_i.early_jmp;
+            wr_stage_o.r14       <= seq_stage_i.r14;
+
+            -- Resolved here. src_val_pc/dst_val_pc are the register values with
+            -- the real Program Counter substituted for R15, which is why they
+            -- do not carry the names they had on the way in.
+            wr_stage_o.src_val_pc  <= src_val_pc;
+            wr_stage_o.dst_val_pc  <= dst_val_pc;
             wr_stage_o.alu_oper    <= alu_oper;
             wr_stage_o.alu_ctrl    <= alu_ctrl;
             wr_stage_o.alu_flags   <= alu_flags;

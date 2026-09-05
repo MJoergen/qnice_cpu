@@ -4,9 +4,9 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- set all declarations to run on clk
    default clock is rising_edge(clk_i);
 
-   -- NOTE: cpu_main.vhd deliberately imports only 't_stage' from cpu_constants,
-   -- so the constants below are referenced by selected name rather than relying
-   -- on a 'use work.cpu_constants.all' in the architecture.
+   -- NOTE: cpu_main.vhd deliberately imports only the three stage record types
+   -- from cpu_constants, so the constants below are referenced by selected name
+   -- rather than relying on a 'use work.cpu_constants.all' in the architecture.
 
 
    --------------------------------------------
@@ -15,25 +15,15 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    -- Payload stability on the DECODE -> SEQUENCER interface.
    --
-   -- NOTE: this deliberately does NOT cover dec2seq_stage.src_val, .dst_val
-   -- and .r14, because DECODE does not drive them at all: the register file's
-   -- read data is wired straight to the SEQUENCER, which joins it onto the
-   -- stage record on its way past (see sequencer.vhd). The five alu_* fields are
-   -- likewise not driven by DECODE; PREPARE fills those in.
+   -- This is stable() over the WHOLE record, which it could not be while one
+   -- t_stage served all three links: back then the record also carried the
+   -- register-file and alu_* elements, which DECODE does not drive and which
+   -- are required to move while DECODE is stalled, so this property had to
+   -- enumerate the latched elements one by one and was quietly missing
+   -- early_jmp. t_dec2seq contains exactly what DECODE latches, so the whole
+   -- record is stable and nothing can be left out by accident.
    f_dec2seq_valid_stable : assert always {dec2seq_valid and not dec2seq_ready and not rst_i and not fetch_valid_o} |=>
-      {stable(dec2seq_valid) and
-       stable(dec2seq_stage.microcodes) and
-       stable(dec2seq_stage.addr) and
-       stable(dec2seq_stage.inst) and
-       stable(dec2seq_stage.immediate) and
-       stable(dec2seq_stage.src_addr) and
-       stable(dec2seq_stage.src_mode) and
-       stable(dec2seq_stage.src_imm) and
-       stable(dec2seq_stage.dst_addr) and
-       stable(dec2seq_stage.dst_mode) and
-       stable(dec2seq_stage.dst_imm) and
-       stable(dec2seq_stage.res_reg) and
-       stable(dec2seq_stage.is_crb)};
+      {stable(dec2seq_valid) and stable(dec2seq_stage)};
 
    -- The register file's read ports reach PREPARE live, with nothing latching
    -- them on the way. These hold in every cycle, stalled or not, and would
@@ -45,8 +35,8 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- update made by the first. Asserting stable() over the whole seq2prep_stage
    -- record instead fails BMC at depth 4, with reg_r14_i changing on the cycle
    -- after reg_r14_we_o was asserted.
-   f_seq2prep_live_src : assert always {seq2prep_stage.src_val = reg_src_val_i};
-   f_seq2prep_live_dst : assert always {seq2prep_stage.dst_val = reg_dst_val_i};
+   f_seq2prep_live_src : assert always {seq2prep_stage.src_reg_val = reg_src_val_i};
+   f_seq2prep_live_dst : assert always {seq2prep_stage.dst_reg_val = reg_dst_val_i};
    f_seq2prep_live_r14 : assert always {seq2prep_stage.r14     = reg_r14_i};
 
 --   f_dec2seq_ready_stable : assert always {dec2seq_ready and not dec2seq_valid and not rst_i} |=>
@@ -346,7 +336,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    f_mem_src_addr : assert always {prep2wr_valid = '1' and rst_i = '0' and
                                    f_operand_modes = '1' and f_gp_regs = '1' and
                                    c_src_mode /= work.cpu_constants.C_MODE_REG and
-                                   prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'} |->
+                                   prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_SRC) = '1'} |->
                                   {mem_req_valid_o = '1' and
                                    mem_req_op_o(work.cpu_constants.C_MEM_READ_SRC) = '1' and
                                    mem_req_addr_o = f_src_mem_addr};
@@ -388,7 +378,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- access.
    f_mem_src_ptr : assert always {prep2wr_valid = '1' and prep2wr_ready = '1' and rst_i = '0' and
                                   f_operand_modes = '1' and f_gp_regs = '1' and
-                                  prep2wr_stage.microcodes(work.cpu_constants.C_REG_MOD_SRC) = '1' and
+                                  prep2wr_stage.microcode(work.cpu_constants.C_REG_MOD_SRC) = '1' and
                                   (c_src_mode = work.cpu_constants.C_MODE_POST or
                                    c_src_mode = work.cpu_constants.C_MODE_PRE)} |->
                                  {reg_we_o = '1' and
@@ -397,8 +387,8 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    f_mem_dst_ptr : assert always {prep2wr_valid = '1' and prep2wr_ready = '1' and rst_i = '0' and
                                   f_operand_modes = '1' and f_gp_regs = '1' and
-                                  prep2wr_stage.microcodes(work.cpu_constants.C_REG_MOD_DST) = '1' and
-                                  prep2wr_stage.microcodes(work.cpu_constants.C_REG_WRITE) = '0' and
+                                  prep2wr_stage.microcode(work.cpu_constants.C_REG_MOD_DST) = '1' and
+                                  prep2wr_stage.microcode(work.cpu_constants.C_REG_WRITE) = '0' and
                                   (c_dst_mode = work.cpu_constants.C_MODE_POST or
                                    c_dst_mode = work.cpu_constants.C_MODE_PRE)} |->
                                  {reg_we_o = '1' and
@@ -410,7 +400,7 @@ vunit i_cpu_main(cpu_main(synthesis))
                                      f_operand_modes = '1' and f_gp_regs = '1' and
                                      c_src_mode = work.cpu_constants.C_MODE_MEM and
                                      c_dst_mode = work.cpu_constants.C_MODE_MEM and
-                                     prep2wr_stage.microcodes(work.cpu_constants.C_REG_WRITE) = '0'} |->
+                                     prep2wr_stage.microcode(work.cpu_constants.C_REG_WRITE) = '0'} |->
                                     {reg_we_o = '0'};
 
    -- (4) DESTINATION ADDRESS ON A READ. ADD-like instructions read the
@@ -422,7 +412,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    f_mem_dst_addr : assert always {prep2wr_valid = '1' and rst_i = '0' and
                                    f_operand_modes = '1' and f_gp_regs = '1' and
                                    c_dst_mode /= work.cpu_constants.C_MODE_REG and
-                                   prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_DST) = '1'} |->
+                                   prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_DST) = '1'} |->
                                   {mem_req_valid_o = '1' and
                                    mem_req_op_o(work.cpu_constants.C_MEM_READ_DST) = '1' and
                                    mem_req_addr_o = f_dst_mem_addr};
@@ -678,7 +668,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- See the derivation in write.vhd above smc_delta.
    --
    -- This deliberately measures mem_req_addr_o, the address the store really
-   -- goes to, and not prep2wr_stage.dst_val, which is what smc_hit subtracts.
+   -- goes to, and not prep2wr_stage.dst_val_pc, which is what smc_hit subtracts.
    -- The two differ by the pre-decrement mux, so this is a check on the
    -- implementation's window and not a copy of it: smc_hit's 32 has to be wide
    -- enough to absorb that offset, and if someone tightens it to the "exact"
@@ -808,9 +798,9 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    -- Non-vacuity of the addressing-mode properties. Each mode must be reachable
    -- on each side, otherwise the anyconst mode silently collapses to one case.
-   c_mode_src_mem  : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_MEM  and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'};
-   c_mode_src_post : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_POST and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'};
-   c_mode_src_pre  : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_PRE  and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'};
+   c_mode_src_mem  : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_MEM  and prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_SRC) = '1'};
+   c_mode_src_post : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_POST and prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_SRC) = '1'};
+   c_mode_src_pre  : cover {prep2wr_valid = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_PRE  and prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_SRC) = '1'};
    c_mode_dst_mem  : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_REG and c_dst_mode = work.cpu_constants.C_MODE_MEM};
    c_mode_dst_post : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_REG and c_dst_mode = work.cpu_constants.C_MODE_POST};
    c_mode_dst_pre  : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_move_modes = '1' and f_gp_regs = '1' and c_src_mode = work.cpu_constants.C_MODE_REG and c_dst_mode = work.cpu_constants.C_MODE_PRE};
@@ -825,8 +815,8 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    -- ADD <MEM>,<MEM>: each of the three micro-ops must be reachable, or the
    -- three-beat sequence is only ever checked in part.
-   c_add_m_m_rd_src : cover {prep2wr_valid = '1' and rst_i = '0' and f_add_modes = '1' and f_gp_regs = '1' and c_src_mode /= work.cpu_constants.C_MODE_REG and c_dst_mode /= work.cpu_constants.C_MODE_REG and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_SRC) = '1'};
-   c_add_m_m_rd_dst : cover {prep2wr_valid = '1' and rst_i = '0' and f_add_modes = '1' and f_gp_regs = '1' and c_src_mode /= work.cpu_constants.C_MODE_REG and c_dst_mode /= work.cpu_constants.C_MODE_REG and prep2wr_stage.microcodes(work.cpu_constants.C_MEM_READ_DST) = '1'};
+   c_add_m_m_rd_src : cover {prep2wr_valid = '1' and rst_i = '0' and f_add_modes = '1' and f_gp_regs = '1' and c_src_mode /= work.cpu_constants.C_MODE_REG and c_dst_mode /= work.cpu_constants.C_MODE_REG and prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_SRC) = '1'};
+   c_add_m_m_rd_dst : cover {prep2wr_valid = '1' and rst_i = '0' and f_add_modes = '1' and f_gp_regs = '1' and c_src_mode /= work.cpu_constants.C_MODE_REG and c_dst_mode /= work.cpu_constants.C_MODE_REG and prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_DST) = '1'};
    c_add_m_m_write  : cover {prep2wr_valid = '1' and inst_done_o = '1' and rst_i = '0' and f_add_modes = '1' and f_gp_regs = '1' and c_src_mode /= work.cpu_constants.C_MODE_REG and c_dst_mode /= work.cpu_constants.C_MODE_REG};
 
    -- Non-vacuity: the stall condition that f_dec2seq_valid_stable predicates

@@ -490,51 +490,71 @@ This section describes the interfaces interfaces between the three stages
 DECODE, PREPARE, and WRITE.
 
 The interface from DECODE to the SEQUENCER, from the SEQUENCER to PREPARE, and
-from PREPARE to WRITE is a standard AXI-interface accompanied by the following
-record data structure. The SEQUENCER passes the record through unchanged apart
-from the low 12 bits of `microcodes` and the three register-file elements it
-joins on itself (`src_val`, `dst_val`, `r14` — see below), so the
-DECODE-to-PREPARE path really is one interface with an adapter in the middle:
+from PREPARE to WRITE is a standard AXI-interface, each carrying a record of its
+own. There used to be a single `t_stage` for all three, holding the union of
+what the three links need, so every link also carried the elements belonging to
+stages further down — undriven, and documented as such. One record per link
+means a link cannot name an element that is not meaningful on it: the compiler
+rejects it rather than the reader having to know.
 ```
-type t_stage is record
-   microcodes  : std_logic_vector(35 downto 0); -- [D] SEQUENCER narrows it to one chunk
-   addr        : std_logic_vector(15 downto 0); -- [D]
-   inst        : std_logic_vector(15 downto 0); -- [D]
-   immediate   : std_logic_vector(15 downto 0); -- [D]
-   src_addr    : std_logic_vector(3 downto 0);  -- [D]
-   src_mode    : std_logic_vector(1 downto 0);  -- [D]
-   src_val     : std_logic_vector(15 downto 0); -- [S] PREPARE swaps in the PC for R15
-   src_imm     : std_logic;                     -- [D]
-   dst_addr    : std_logic_vector(3 downto 0);  -- [D]
-   dst_mode    : std_logic_vector(1 downto 0);  -- [D]
-   dst_val     : std_logic_vector(15 downto 0); -- [S] PREPARE swaps in the PC for R15
-   dst_imm     : std_logic;                     -- [D]
-   res_reg     : std_logic_vector(3 downto 0);  -- [D]
-   r14         : std_logic_vector(15 downto 0); -- [S]
-   is_crb      : std_logic;                     -- [D] INCRB/DECRB, decoded early (decode.vhd)
-   early_jmp   : std_logic;                     -- [D] Redirect already issued (decode.vhd)
-   alu_oper    : std_logic_vector(3 downto 0);  -- [P]
-   alu_ctrl    : std_logic_vector(5 downto 0);  -- [P]
-   alu_flags   : std_logic_vector(15 downto 0); -- [P]
-   alu_src_val : std_logic_vector(15 downto 0); -- [P]
-   alu_dst_val : std_logic_vector(15 downto 0); -- [P]
-end record t_stage;
-```
+type t_dec2seq is record                       -- DECODE -> SEQUENCER
+   microcodes : std_logic_vector(35 downto 0); -- Up to three 12-bit micro-ops
+   addr       : std_logic_vector(15 downto 0);
+   inst       : std_logic_vector(15 downto 0);
+   immediate  : std_logic_vector(15 downto 0);
+   src_addr   : std_logic_vector(3 downto 0);
+   src_mode   : std_logic_vector(1 downto 0);
+   src_imm    : std_logic;
+   dst_addr   : std_logic_vector(3 downto 0);
+   dst_mode   : std_logic_vector(1 downto 0);
+   dst_imm    : std_logic;
+   res_reg    : std_logic_vector(3 downto 0);
+   is_crb     : std_logic;
+   early_jmp  : std_logic;
+end record t_dec2seq;
 
-No link carries all of it: an element stays undriven until the stage that fills
-it in has run, and the marker on each line says which stage that is — `[D]`
-DECODE, so live on all three links; `[S]` the SEQUENCER, so live from
-SEQUENCER-to-PREPARE onwards; `[P]` PREPARE, so live on PREPARE-to-WRITE only.
-Read the other way round, the SEQUENCER looks at `microcodes` alone, PREPARE at
-eleven of the `[D]`/`[S]` elements, and WRITE at all 21. The markers are kept in
-step with the copy in [cpu_constants.vhd](../cpu_constants.vhd), which is
-authoritative.
+type t_seq2prep is record                       -- SEQUENCER -> PREPARE
+   microcode   : std_logic_vector(11 downto 0); -- The selected micro-op alone
+   ...                                          -- the twelve above, unchanged
+   src_reg_val : std_logic_vector(15 downto 0); -- Straight off the register file
+   dst_reg_val : std_logic_vector(15 downto 0);
+   r14         : std_logic_vector(15 downto 0);
+end record t_seq2prep;
+
+type t_prep2wr is record                        -- PREPARE -> WRITE
+   microcode   : std_logic_vector(11 downto 0);
+   ...                                          -- the twelve above, unchanged
+   src_val_pc  : std_logic_vector(15 downto 0); -- Register value, PC in for R15
+   dst_val_pc  : std_logic_vector(15 downto 0);
+   r14         : std_logic_vector(15 downto 0);
+   alu_oper    : std_logic_vector(3 downto 0);
+   alu_ctrl    : std_logic_vector(5 downto 0);
+   alu_flags   : std_logic_vector(15 downto 0);
+   alu_src_val : std_logic_vector(15 downto 0);
+   alu_dst_val : std_logic_vector(15 downto 0);
+end record t_prep2wr;
+```
+The twelve elements from `addr` to `early_jmp` are DECODE's: latched once in its
+output register and forwarded unchanged all the way to WRITE. They are elided
+above rather than repeated three times; [cpu_constants.vhd](../cpu_constants.vhd)
+is authoritative.
+
+**Two elements change meaning in flight, so they do not carry the same name
+twice.** `microcodes` is the whole list; `microcode` is the single one the
+SEQUENCER has selected out of it. `src_reg_val`/`dst_reg_val` are the register
+file's read data as it stands; `src_val_pc`/`dst_val_pc` are those values with
+the real Program Counter substituted for a read of `R15`, which is what every
+consumer downstream of PREPARE must use. Under the old single record both pairs
+shared one name, and the second of each was a `--` comment away from being
+misread.
 
 The element `microcodes` carries the whole list of up to three 12-bit
 micro-operations produced by the microcode ROM (3 x 12 = 36 bits). The SEQUENCER
-presents them one at a time by overwriting bits 11-0 with the selected chunk, so
-from PREPARE onwards the micro-operation to be performed is in bits 11-0. The upper bits still hold the raw, unselected list and must not
-be consumed downstream.
+presents them one at a time, slicing the selected chunk out into the 12-bit
+`microcode` of `t_seq2prep`. It used to overwrite bits 11-0 of a 36-bit element
+and pass the raw list along in the upper bits, obliging every reader downstream
+to slice before use; the narrower element on the narrower record removes that
+obligation rather than restating it.
 
 The elements `addr`, `inst`, and `immediate` are the address, instruction, and
 immediate operand passed on from the FETCH module.
@@ -542,9 +562,9 @@ immediate operand passed on from the FETCH module.
 The flags `src_imm` and `dst_imm` indicate whether the source or destination
 operand should use the immediate value passed on.
 
-The elements `src_addr`, `src_mode`, and `src_val` indicate the source register
-number, the source operand addressing mode, and the source register value (from
-REGISTERS module). Similarly for the destination register.
+The elements `src_addr` and `src_mode` indicate the source register number and
+the source operand addressing mode; the value itself is `src_reg_val` on the way
+into PREPARE and `src_val_pc` on the way out. Similarly for the destination.
 
 The element `res_reg` indicates which register to write the result back into.
 It equals the destination register for all ordinary instructions. The exception
@@ -563,14 +583,14 @@ neither re-derivation fits in front of it: see
 [Register bank switch](#Register-bank-switch) and
 [Early redirect](#Early-redirect).
 
-**The `[D]` elements are latched; the `[S]` ones are not.** DECODE registers its
-eleven in its output process, and `is_crb`/`early_jmp` with them. The three
-marked `[S]` are *concurrent* assignments straight from the register file read
-ports, made in the SEQUENCER. DECODE issues the read — it owns the register
-numbers — but the values come back a clock cycle later, by which time the
-instruction is already in DECODE's output register and being presented to the
-SEQUENCER, so they are wired from REGISTERS to there directly rather than
-through DECODE.
+**`t_dec2seq` is latched in full; the three register-file elements are not.**
+DECODE registers the whole of `t_dec2seq` in its output process. The three
+elements `t_seq2prep` adds are *concurrent* assignments straight from the
+register file read ports, made in the SEQUENCER. DECODE issues the read — it
+owns the register numbers — but the values come back a clock cycle later, by
+which time the instruction is already in DECODE's output register and being
+presented to the SEQUENCER, so they are wired from REGISTERS to there directly
+rather than through DECODE.
 
 They therefore keep moving while the pipeline is stalled, and that is
 deliberate: it is how a stalled instruction picks up a register or Status
@@ -599,7 +619,7 @@ classification is encoded in the following four bits:
 The latter two bits are de-asserted in the special case of `@R15++`.
 
 The microcode ROM returns (combinatorially) a list of up to three
-micro-operations, packed into the 36-bit `microcodes` element of `t_stage`.
+micro-operations, packed into the 36-bit `microcodes` element of `t_dec2seq`.
 DECODE forwards that entire list in a single beat; it is the
 [SEQUENCER](sequencer.vhd), sitting between DECODE and PREPARE, that splits
 (sequences) it into separate clock cycles.
@@ -808,7 +828,7 @@ tripwires for anyone "fixing" it.
 
 **WRITE must not redirect again when the branch retires**, or it would discard
 exactly the instructions the early redirect went to fetch. `prep_stage_i.early_jmp`
-carries that down the pipeline, in `t_stage` beside `is_crb` and for the same
+carries that down the pipeline, beside `is_crb` and for the same
 reason — it is decoded where the instruction word already is, rather than in
 front of `fetch_valid_o`. Note the `rst_i` term next to it in
 [write.vhd](write.vhd): `p_reg` forces a write of `R15 = 0` during reset and
@@ -918,7 +938,7 @@ instruction immediately after it reads `R0`-`R7`, one cycle when the one after
 
 One implementation note that is easy to undo: `bank_switch_o` reads
 `prep_stage_i.is_crb`, a bit DECODE decodes from the instruction word and
-carries down in `t_stage`, rather than re-deriving "opcode is `CTRL` and
+carries down the stage records, rather than re-deriving "opcode is `CTRL` and
 command is `INCRB`/`DECRB`" in WRITE. That test is ten bits and two levels of
 logic sitting directly in front of `fetch_valid_o`; moving it two stages earlier
 trades one flip-flop per stage for two levels off the design's most
@@ -989,11 +1009,13 @@ The assertions fall into four groups:
   check that the payload and valid of each internal stage interface hold stable
   while stalled. Both carry an explicit `not fetch_valid_o` escape clause,
   because a pipeline flush (see above) legitimately drops valid mid-transfer.
-  `f_dec2seq_valid_stable` enumerates the eleven *latched* elements of
-  `t_stage` rather than asserting `stable()` over the whole record, because
-  DECODE does not drive `src_val`, `dst_val` and `r14` at all — the SEQUENCER
-  joins those on live, straight from the register file (see
-  [Internal interfaces](#Internal-interfaces) above). `f_seq2prep_live_src` /
+  `f_dec2seq_valid_stable` is `stable()` over the whole record, which it could
+  not be while one `t_stage` served all three links: that record also held the
+  register-file elements, which DECODE does not drive and which must move while
+  DECODE is stalled, so the property had to enumerate the latched elements one
+  by one — and was quietly missing `early_jmp`. `t_dec2seq` holds exactly what
+  DECODE latches (see [Internal interfaces](#Internal-interfaces) above), so
+  nothing can be left out by accident. `f_seq2prep_live_src` /
   `_dst` / `_r14` assert the complementary fact — that they reach PREPARE
   unlatched — so that registering one by mistake is caught too. The same pair of
   facts is checked one level down in
@@ -1090,5 +1112,7 @@ runs in under ten.) K-induction (`prove`) is not attempted for `cpu_main`.
 the property, not in the RTL: it asserted `stable()` over the entire `t_stage`
 record, including the three live pass-through elements, so BMC found a trace
 where `reg_r14_i` changed on the cycle after `reg_r14_we_o` was asserted while
-DECODE was stalled — legitimate bypass behaviour. The property now enumerates
-the latched elements only.
+DECODE was stalled — legitimate bypass behaviour. The property then enumerated
+the latched elements only. Since the split it is `stable()` over the whole
+record again, and correctly so: `t_dec2seq` holds nothing but what DECODE
+latches.

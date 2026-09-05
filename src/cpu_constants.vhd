@@ -107,41 +107,101 @@ package cpu_constants is
    -- instruction check in cpu_main/write.vhd names the offender with it too.
    function ctrl_str(cmd : std_logic_vector) return string;
 
-   -- The payload on all three pipeline links: DECODE -> SEQUENCER -> PREPARE ->
-   -- WRITE. Not every element is live on every link -- each stays undriven
-   -- until the stage that fills it in has run -- so the marker on each line
-   -- below says which stage that is, and so which links carry it:
+   -- The pipeline payload, one record per link: DECODE -> SEQUENCER ->
+   -- PREPARE -> WRITE. There used to be a single t_stage carrying the union of
+   -- all three, with each stage filling in its own share and every earlier link
+   -- carrying the later stages' fields undriven. Three records instead means a
+   -- link cannot name an element that is not yet meaningful on it -- the
+   -- compiler rejects it rather than the reader having to know.
    --
-   --   [D] filled in by DECODE        -- live on all three links
-   --   [S] filled in by the SEQUENCER -- live from SEQUENCER -> PREPARE on
-   --   [P] filled in by PREPARE       -- live on PREPARE -> WRITE only
+   -- Two elements would otherwise change meaning in flight, so they are not
+   -- given the same name twice:
    --
-   -- Read back the other way round: the SEQUENCER looks at 'microcodes' alone,
-   -- PREPARE at eleven of the [D]/[S] elements, and WRITE at all 21.
+   --   * 'microcodes' is the whole list of up to three micro-operations;
+   --     'microcode' is the single one the SEQUENCER has selected out of it.
+   --   * 'src_reg_val'/'dst_reg_val' are the register file's read data as it
+   --     stands; 'src_val_pc'/'dst_val_pc' are those values with the real
+   --     Program Counter substituted for a read of R15, which is what every
+   --     consumer downstream of PREPARE has to use (see prepare.vhd).
+   --
+   -- The twelve elements common to all three are DECODE's, latched once in its
+   -- output register and passed along unchanged.
 
-   type t_stage is record
-      microcodes  : std_logic_vector(35 downto 0); -- [D] SEQUENCER narrows it to one chunk
-      addr        : std_logic_vector(15 downto 0); -- [D]
-      inst        : std_logic_vector(15 downto 0); -- [D]
-      immediate   : std_logic_vector(15 downto 0); -- [D]
-      src_addr    : std_logic_vector(3 downto 0);  -- [D]
-      src_mode    : std_logic_vector(1 downto 0);  -- [D]
-      src_val     : std_logic_vector(15 downto 0); -- [S] PREPARE swaps in the PC for R15
-      src_imm     : std_logic;                     -- [D]
-      dst_addr    : std_logic_vector(3 downto 0);  -- [D]
-      dst_mode    : std_logic_vector(1 downto 0);  -- [D]
-      dst_val     : std_logic_vector(15 downto 0); -- [S] PREPARE swaps in the PC for R15
-      dst_imm     : std_logic;                     -- [D]
-      res_reg     : std_logic_vector(3 downto 0);  -- [D]
-      r14         : std_logic_vector(15 downto 0); -- [S]
-      is_crb      : std_logic;                     -- [D] INCRB/DECRB, decoded early (decode.vhd)
-      early_jmp   : std_logic;                     -- [D] Redirect already issued (decode.vhd)
-      alu_oper    : std_logic_vector(3 downto 0);  -- [P]
-      alu_ctrl    : std_logic_vector(5 downto 0);  -- [P]
-      alu_flags   : std_logic_vector(15 downto 0); -- [P]
-      alu_src_val : std_logic_vector(15 downto 0); -- [P]
-      alu_dst_val : std_logic_vector(15 downto 0); -- [P]
-   end record t_stage;
+   -- DECODE -> SEQUENCER: one beat per instruction, carrying the whole
+   -- micro-op list. The register file's read data is not here yet: DECODE
+   -- issues the read, but the values arrive a cycle later, at the SEQUENCER.
+
+   type t_dec2seq is record
+      microcodes : std_logic_vector(35 downto 0); -- Up to three 12-bit micro-ops
+      addr       : std_logic_vector(15 downto 0);
+      inst       : std_logic_vector(15 downto 0);
+      immediate  : std_logic_vector(15 downto 0);
+      src_addr   : std_logic_vector(3 downto 0);
+      src_mode   : std_logic_vector(1 downto 0);
+      src_imm    : std_logic;
+      dst_addr   : std_logic_vector(3 downto 0);
+      dst_mode   : std_logic_vector(1 downto 0);
+      dst_imm    : std_logic;
+      res_reg    : std_logic_vector(3 downto 0);
+      is_crb     : std_logic;                     -- INCRB/DECRB, decoded early (decode.vhd)
+      early_jmp  : std_logic;                     -- Redirect already issued (decode.vhd)
+   end record t_dec2seq;
+
+   -- SEQUENCER -> PREPARE: one beat per micro-operation. The SEQUENCER selects
+   -- one chunk out of 'microcodes' and joins on the register file read ports,
+   -- live and unregistered -- see the header of cpu_main/sequencer.vhd.
+
+   type t_seq2prep is record
+      microcode   : std_logic_vector(11 downto 0); -- The selected micro-op alone
+      addr        : std_logic_vector(15 downto 0);
+      inst        : std_logic_vector(15 downto 0);
+      immediate   : std_logic_vector(15 downto 0);
+      src_addr    : std_logic_vector(3 downto 0);
+      src_mode    : std_logic_vector(1 downto 0);
+      src_imm     : std_logic;
+      dst_addr    : std_logic_vector(3 downto 0);
+      dst_mode    : std_logic_vector(1 downto 0);
+      dst_imm     : std_logic;
+      res_reg     : std_logic_vector(3 downto 0);
+      is_crb      : std_logic;
+      early_jmp   : std_logic;
+      src_reg_val : std_logic_vector(15 downto 0); -- Straight off the register file
+      dst_reg_val : std_logic_vector(15 downto 0); -- Straight off the register file
+      r14         : std_logic_vector(15 downto 0); -- Status Register, live
+   end record t_seq2prep;
+
+   -- PREPARE -> WRITE: the same micro-operation with its operands resolved --
+   -- R15 substituted, memory responses and immediates selected, ALU inputs
+   -- prepared.
+   --
+   -- NOTE: 'r14' and 'alu_flags' are the same value on this link. PREPARE
+   -- latches both from seq_stage_i.r14 in the same cycle; WRITE reads 'r14' for
+   -- the branch condition and 'alu_flags' for the ALU. Left as two elements
+   -- because the two readers are unrelated, not because the values differ.
+
+   type t_prep2wr is record
+      microcode   : std_logic_vector(11 downto 0);
+      addr        : std_logic_vector(15 downto 0);
+      inst        : std_logic_vector(15 downto 0);
+      immediate   : std_logic_vector(15 downto 0);
+      src_addr    : std_logic_vector(3 downto 0);
+      src_mode    : std_logic_vector(1 downto 0);
+      src_imm     : std_logic;
+      dst_addr    : std_logic_vector(3 downto 0);
+      dst_mode    : std_logic_vector(1 downto 0);
+      dst_imm     : std_logic;
+      res_reg     : std_logic_vector(3 downto 0);
+      is_crb      : std_logic;
+      early_jmp   : std_logic;
+      src_val_pc  : std_logic_vector(15 downto 0); -- Register value, PC swapped in for R15
+      dst_val_pc  : std_logic_vector(15 downto 0); -- Register value, PC swapped in for R15
+      r14         : std_logic_vector(15 downto 0);
+      alu_oper    : std_logic_vector(3 downto 0);
+      alu_ctrl    : std_logic_vector(5 downto 0);
+      alu_flags   : std_logic_vector(15 downto 0);
+      alu_src_val : std_logic_vector(15 downto 0);
+      alu_dst_val : std_logic_vector(15 downto 0);
+   end record t_prep2wr;
 
 end package cpu_constants;
 

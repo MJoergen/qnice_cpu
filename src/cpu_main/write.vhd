@@ -12,7 +12,7 @@ entity write is
       -- From PREPARE
       prep_valid_i    : in  std_logic;
       prep_ready_o    : out std_logic;
-      prep_stage_i    : in  t_stage;
+      prep_stage_i    : in  t_prep2wr;
 
       -- MEMORY
       mem_req_valid_o : out std_logic;                        -- combinatorial
@@ -176,30 +176,30 @@ begin
 
       if prep_valid_i and prep_ready_o and update_reg then
          -- Handle pre- and post increment here.
-         if prep_stage_i.microcodes(C_REG_MOD_SRC) = '1' and
+         if prep_stage_i.microcode(C_REG_MOD_SRC) = '1' and
             (prep_stage_i.src_mode = C_MODE_POST or prep_stage_i.src_mode = C_MODE_PRE) then
             reg_addr_o <= prep_stage_i.src_addr;
             if prep_stage_i.src_mode = C_MODE_POST then
-               reg_val_o <= prep_stage_i.src_val + 1;
+               reg_val_o <= prep_stage_i.src_val_pc + 1;
             else
-               reg_val_o <= prep_stage_i.src_val - 1;
+               reg_val_o <= prep_stage_i.src_val_pc - 1;
             end if;
             reg_we_o <= '1';
          end if;
 
-         if prep_stage_i.microcodes(C_REG_MOD_DST) = '1' and
+         if prep_stage_i.microcode(C_REG_MOD_DST) = '1' and
             (prep_stage_i.dst_mode = C_MODE_POST or prep_stage_i.dst_mode = C_MODE_PRE) then
             reg_addr_o <= prep_stage_i.dst_addr;
             if prep_stage_i.dst_mode = C_MODE_POST then
-               reg_val_o <= prep_stage_i.dst_val + 1;
+               reg_val_o <= prep_stage_i.dst_val_pc + 1;
             else
-               reg_val_o <= prep_stage_i.dst_val - 1;
+               reg_val_o <= prep_stage_i.dst_val_pc - 1;
             end if;
             reg_we_o <= '1';
          end if;
 
          -- Handle ordinary register writes here.
-         if prep_stage_i.microcodes(C_REG_WRITE) then
+         if prep_stage_i.microcode(C_REG_WRITE) then
             reg_addr_o <= prep_stage_i.res_reg;
             reg_val_o  <= alu_res_val;
             reg_we_o   <= '1';
@@ -348,7 +348,7 @@ begin
    -- syntactic version below gives +0.246 ns and 4 LUTs FEWER than baseline.
    --
    -- Everything below comes from stage REGISTERS instead -- prep_stage_i.is_crb
-   -- and prep_stage_i.microcodes, and reg_addr_o/reg_we_o, which p_reg builds
+   -- and prep_stage_i.microcode, and reg_addr_o/reg_we_o, which p_reg builds
    -- out of prep_stage_i.src_addr/dst_addr/res_reg and the microcodes. None of
    -- it depends on the ALU, so the flush condition is ready early in the cycle.
    --
@@ -413,7 +413,7 @@ begin
    -- are probed by test/prog_self_modifying.asm -- T1-T5 and T7 from inside,
    -- T3 from outside.
    --
-   -- The comparison subtracts two RAW stage registers, prep_stage_i.dst_val
+   -- The comparison subtracts two RAW stage registers, prep_stage_i.dst_val_pc
    -- and prep_stage_i.addr, rather than the values actually used for the store
    -- and the re-fetch address. That matters a lot. Writing the exact form,
    --
@@ -441,7 +441,7 @@ begin
    -- stale R15 copy in that case, so the subtraction would be meaningless.
 
 
-   smc_delta <= prep_stage_i.dst_val - prep_stage_i.addr;
+   smc_delta <= prep_stage_i.dst_val_pc - prep_stage_i.addr;
    smc_hit   <= '1' when smc_delta(15 downto 5) = "00000000000" or
                          prep_stage_i.dst_addr = to_stdlogicvector(C_REG_PC, 4) else
                 '0';
@@ -455,7 +455,7 @@ begin
    -- test is "opcode = CTRL and command in {INCRB, DECRB}", ten bits and two
    -- levels of logic, and it used to sit right in front of fetch_valid_o.
    -- DECODE has the instruction word two stages earlier and nothing else to do
-   -- with it, so it decodes the bit there and carries it down in t_stage. It
+   -- with it, so it decodes the bit there and carries it down the records. It
    -- is one flip-flop per stage against two levels off the design's most
    -- timing-critical net.
    bank_switch_o <= inst_done_o and prep_stage_i.is_crb;
@@ -464,7 +464,7 @@ begin
    -- register-write terms collapse into one: reg_we_o and three address bits.
    fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1)) and not wr_early) or
                     (bank_switch_o and bank_stale_i) or
-                    (inst_done_o and prep_stage_i.microcodes(C_MEM_WRITE) and smc_hit);
+                    (inst_done_o and prep_stage_i.microcode(C_MEM_WRITE) and smc_hit);
 
 
    ------------------------------------------------------------
@@ -472,28 +472,28 @@ begin
    ------------------------------------------------------------
 
    reg_r14_o    <= alu_res_flags;
-   reg_r14_we_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcodes(C_LAST);
+   reg_r14_we_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcode(C_LAST);
 
 
    ------------------------------------------------------------
    -- Update memory
    ------------------------------------------------------------
 
-   mem_addr <= prep_stage_i.src_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' and prep_stage_i.src_mode = C_MODE_PRE else
-               prep_stage_i.src_val   when prep_stage_i.microcodes(C_MEM_READ_SRC) = '1' else
-               prep_stage_i.dst_val-1 when prep_stage_i.microcodes(C_MEM_READ_SRC) = '0' and prep_stage_i.dst_mode = C_MODE_PRE else
-               prep_stage_i.dst_val;
+   mem_addr <= prep_stage_i.src_val_pc-1 when prep_stage_i.microcode(C_MEM_READ_SRC) = '1' and prep_stage_i.src_mode = C_MODE_PRE else
+               prep_stage_i.src_val_pc   when prep_stage_i.microcode(C_MEM_READ_SRC) = '1' else
+               prep_stage_i.dst_val_pc-1 when prep_stage_i.microcode(C_MEM_READ_SRC) = '0' and prep_stage_i.dst_mode = C_MODE_PRE else
+               prep_stage_i.dst_val_pc;
    -- The address of the instruction following this one: the return address that
    -- ASUB/RSUB pushes, and the address a bank switch re-fetches from.
    next_pc   <= prep_stage_i.addr + 2 when (prep_stage_i.src_imm = '1' or prep_stage_i.dst_imm = '1') else
                 prep_stage_i.addr + 1;
    mem_data  <= next_pc;
-   mem_valid <= '1' when or(prep_stage_i.microcodes(2 downto 0)) = '1' and prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP else
+   mem_valid <= '1' when or(prep_stage_i.microcode(2 downto 0)) = '1' and prep_stage_i.inst(R_OPCODE) = C_OPCODE_JMP else
                 '0';
 
 
    mem_req_valid_o <= prep_valid_i and or(mem_req_op_o);
-   mem_req_op_o    <= prep_stage_i.microcodes(2 downto 0);
+   mem_req_op_o    <= prep_stage_i.microcode(2 downto 0);
    mem_req_data_o  <= mem_data when mem_valid = '1' else
                       alu_res_val;
    mem_req_addr_o  <= mem_addr;
@@ -505,7 +505,7 @@ begin
 
    -- One pulse per instruction, on its LAST micro-op. Used by the debug log,
    -- by halt_o, and by the bank-switch flush above.
-   inst_done_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcodes(C_LAST);
+   inst_done_o <= prep_valid_i and prep_ready_o and prep_stage_i.microcode(C_LAST);
 
 
    ------------------------------------------------------------

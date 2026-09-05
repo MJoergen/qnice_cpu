@@ -188,7 +188,7 @@ register, holds DECODE for one cycle when the one at its input does, and costs n
 which is the case for the standard `INCRB` / `MOVE R8, R0` prologue and `DECRB` /
 `MOVE @R13++, R15` epilogue. All ten bank switches in `prog.asm` are now free (15070 → 15030
 cycles, i.e. a 4-cycle branch penalty apiece). One detail is load-bearing for TIMING rather than
-function: `is_crb` is decoded in DECODE and carried in `t_stage`, not re-derived from
+function: `is_crb` is decoded in DECODE and carried in the stage records, not re-derived from
 `prep_stage_i.inst` in WRITE. Deriving it there puts a ten-bit compare in front of `fetch_valid_o`
 and the design **does not build** (WNS −0.036 ns at 7.25 ns, 4 failing endpoints); with the
 precomputed bit it closes at +0.093 ns.
@@ -299,7 +299,7 @@ Three things are load-bearing:
   same asymmetry `two_stage_fifo` documents in its contract (b). `f_flush_offers` and
   `f_cover_flush_handshake` in `formal/icache.psl` are the tripwires.
 * **WRITE must not redirect again**, or it discards what the early redirect went to fetch.
-  `prep_stage_i.early_jmp` carries that in `t_stage` beside `is_crb`. Its `rst_i` companion term in
+  `prep_stage_i.early_jmp` carries that in the stage records beside `is_crb`. Its `rst_i` companion term in
   `write.vhd` is not decoration: `p_reg` forces the `R15 = 0` write that gives FETCH its initial PC
   during reset, and PREPARE's output register is *not* cleared by reset, so a stale `early_jmp`
   would suppress it.

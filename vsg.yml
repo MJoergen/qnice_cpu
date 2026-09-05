@@ -122,12 +122,12 @@ rule:
   # A selective import (`use work.cpu_constants.C_REG_SR;`, Section 4) names
   # a declaration that already has a case convention of its own, so this
   # rule has to follow Section 2's table rather than vsg's default
-  # lowercase. vsg can only impose ONE case per rule, so the one type
-  # imported this way (t_stage, which is correctly lowercase) is listed as
-  # an explicit exception.
+  # lowercase. vsg can only impose ONE case per rule, so the types imported
+  # this way (the three pipeline stage records, correctly lowercase under the
+  # t_ prefix rule below) are listed as explicit exceptions.
   use_clause_502:
     case: upper
-    case_exceptions: ['t_stage']
+    case_exceptions: ['t_dec2seq', 't_seq2prep', 't_prep2wr']
 
   # | Type                                      | t_ prefix    |
   type_015:

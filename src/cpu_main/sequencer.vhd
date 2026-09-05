@@ -34,7 +34,8 @@
 library ieee;
    use ieee.std_logic_1164.all;
 
-   use work.cpu_constants.t_stage;
+   use work.cpu_constants.t_dec2seq;
+   use work.cpu_constants.t_seq2prep;
    use work.cpu_constants.C_LAST;
    use work.cpu_constants.C_UCODE_BITS;
 
@@ -45,7 +46,7 @@ entity sequencer is
       -- Connect to DECODE
       s_valid_i     : in  std_logic;
       s_ready_o     : out std_logic;
-      s_stage_i     : in  t_stage;
+      s_stage_i     : in  t_dec2seq;
       -- Connect to REGISTERS. Values only; DECODE drives the read ports.
       reg_src_val_i : in  std_logic_vector(15 downto 0);
       reg_dst_val_i : in  std_logic_vector(15 downto 0);
@@ -53,7 +54,7 @@ entity sequencer is
       -- Connect to PREPARE
       m_valid_o     : out std_logic;
       m_ready_i     : in  std_logic;
-      m_stage_o     : out t_stage
+      m_stage_o     : out t_seq2prep
    );
 end entity sequencer;
 
@@ -84,7 +85,7 @@ begin
    -- Accept a new sequence only when the microcode chunk marked 'last' is
    -- being accepted. While a non-last chunk is presented, hold s_ready_o
    -- low so DECODE keeps the same list stable across the whole sequence.
-   s_ready_o <= '0' when m_valid_o = '1' and m_stage_o.microcodes(C_LAST) = '0' else
+   s_ready_o <= '0' when m_valid_o = '1' and m_stage_o.microcode(C_LAST) = '0' else
                 m_ready_i;
 
    -- Advance the chunk index on every accepted PREPARE beat, wrapping back
@@ -93,7 +94,7 @@ begin
    begin
       if rising_edge(clk_i) then
          if m_valid_o = '1' and m_ready_i = '1' then
-            if m_stage_o.microcodes(C_LAST) = '1' then
+            if m_stage_o.microcode(C_LAST) = '1' then
                index <= 0;
             else
                index <= index + 1;
@@ -109,27 +110,43 @@ begin
 
    -- Combinatorial output, to avoid inserting latency into the pipeline.
    --
-   -- The full input stage is forwarded first (this also carries any fields
-   -- other than 'microcodes'), then the low C_UCODE_BITS slice of
-   -- 'microcodes' is overwritten with the selected chunk. NOTE: the upper
-   -- bits of m_stage_o.microcodes still hold the raw, unselected list;
-   -- downstream logic MUST consume only bits (C_UCODE_BITS-1 downto 0).
+   -- 'microcode' is the one chunk this beat carries, sliced out of the list on
+   -- the input; the input and output records are different types precisely so
+   -- that the unselected chunks cannot leave this module. They used to: the
+   -- output was a copy of the input with the low C_UCODE_BITS overwritten, and
+   -- the upper bits still held the raw list, with a comment obliging every
+   -- reader downstream to slice before use.
    --
-   -- The three operand-value fields are filled in from the register file here,
-   -- one clock cycle after DECODE presented reg_src_addr_o/reg_dst_addr_o.
-   -- DECODE leaves them undriven (as it does the alu_* fields, which PREPARE
-   -- fills in), so these assignments are the only drivers.
+   -- The twelve elements after it are DECODE's, forwarded unchanged. They are
+   -- copied one by one rather than by a whole-record assignment, which the two
+   -- types no longer allow -- the price of the split.
+   --
+   -- The last three are filled in from the register file here, one clock cycle
+   -- after DECODE presented reg_src_addr_o/reg_dst_addr_o; they do not exist on
+   -- the DECODE link at all.
    p_output : process (all)
    begin
       m_valid_o <= s_valid_i;
-      m_stage_o <= s_stage_i;
 
-      m_stage_o.microcodes(C_UCODE_BITS - 1 downto 0) <=
+      m_stage_o.microcode <=
          s_stage_i.microcodes((index + 1) * C_UCODE_BITS - 1 downto index * C_UCODE_BITS);
 
-      m_stage_o.src_val <= reg_src_val_i;
-      m_stage_o.dst_val <= reg_dst_val_i;
-      m_stage_o.r14     <= reg_r14_i;
+      m_stage_o.addr      <= s_stage_i.addr;
+      m_stage_o.inst      <= s_stage_i.inst;
+      m_stage_o.immediate <= s_stage_i.immediate;
+      m_stage_o.src_addr  <= s_stage_i.src_addr;
+      m_stage_o.src_mode  <= s_stage_i.src_mode;
+      m_stage_o.src_imm   <= s_stage_i.src_imm;
+      m_stage_o.dst_addr  <= s_stage_i.dst_addr;
+      m_stage_o.dst_mode  <= s_stage_i.dst_mode;
+      m_stage_o.dst_imm   <= s_stage_i.dst_imm;
+      m_stage_o.res_reg   <= s_stage_i.res_reg;
+      m_stage_o.is_crb    <= s_stage_i.is_crb;
+      m_stage_o.early_jmp <= s_stage_i.early_jmp;
+
+      m_stage_o.src_reg_val <= reg_src_val_i;
+      m_stage_o.dst_reg_val <= reg_dst_val_i;
+      m_stage_o.r14         <= reg_r14_i;
    end process p_output;
 
 end architecture synthesis;

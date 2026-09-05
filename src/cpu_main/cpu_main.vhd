@@ -9,7 +9,9 @@ library ieee;
    -- this context clause), which subtracts two std_logic_vector signals.
    use ieee.numeric_std_unsigned.all;
 
-   use work.cpu_constants.t_stage;
+   use work.cpu_constants.t_dec2seq;
+   use work.cpu_constants.t_seq2prep;
+   use work.cpu_constants.t_prep2wr;
 
 entity cpu_main is
    port (
@@ -81,17 +83,17 @@ architecture synthesis of cpu_main is
    -- micro-op list.
    signal dec2seq_valid : std_logic;
    signal dec2seq_ready : std_logic;
-   signal dec2seq_stage : t_stage;
+   signal dec2seq_stage : t_dec2seq;
 
    -- The SEQUENCER to PREPARE: one beat per micro-op.
    signal seq2prep_valid : std_logic;
    signal seq2prep_ready : std_logic;
-   signal seq2prep_stage : t_stage;
+   signal seq2prep_stage : t_seq2prep;
 
    -- PREPARE to WRITE
    signal prep2wr_valid : std_logic;
    signal prep2wr_ready : std_logic;
-   signal prep2wr_stage : t_stage;
+   signal prep2wr_stage : t_prep2wr;
 
    -- WRITE to DECODE and back: register bank switch. See the "Register bank
    -- switch" comment in write.vhd.

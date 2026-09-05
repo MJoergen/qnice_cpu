@@ -16,17 +16,21 @@ vunit i_sequencer(sequencer(synthesis))
 
    -- Output payload/valid are held stable while stalled downstream.
    --
-   -- The three register-file fields are excluded, and enumerating the rest is
+   -- The three register-file elements are excluded, and enumerating the rest is
    -- the price of that. This module joins reg_src_val_i / reg_dst_val_i /
    -- reg_r14_i onto the record live, and they are *required* to move while a
    -- sequence is being issued: that is how the second micro-op of e.g.
    -- ADD @R0++, @R0++ sees the R0 update the first one made, and how a stalled
    -- instruction picks up a Status Register write from the instruction still in
    -- WRITE. f_live_* below pins those three down instead.
+   --
+   -- The list is now the whole of t_seq2prep bar those three. It used to carry
+   -- five alu_* terms as well, which this module neither produced nor consumed
+   -- and which were on the record only because one type served all three links.
    f_stable : assert always
       {m_valid_o and not m_ready_i and not rst_i} |=>
       {stable(m_valid_o) and
-       stable(m_stage_o.microcodes) and
+       stable(m_stage_o.microcode) and
        stable(m_stage_o.addr) and
        stable(m_stage_o.inst) and
        stable(m_stage_o.immediate) and
@@ -38,27 +42,22 @@ vunit i_sequencer(sequencer(synthesis))
        stable(m_stage_o.dst_imm) and
        stable(m_stage_o.res_reg) and
        stable(m_stage_o.is_crb) and
-       stable(m_stage_o.early_jmp) and
-       stable(m_stage_o.alu_oper) and
-       stable(m_stage_o.alu_ctrl) and
-       stable(m_stage_o.alu_flags) and
-       stable(m_stage_o.alu_src_val) and
-       stable(m_stage_o.alu_dst_val)};
+       stable(m_stage_o.early_jmp)};
 
    -- The register file's read data is joined on live, with nothing latching it
-   -- here. This is what makes excluding the three fields above safe rather than
-   -- a hole: they are not unconstrained, they are pinned to their sources in
+   -- here. This is what makes excluding the three above safe rather than a
+   -- hole: they are not unconstrained, they are pinned to their sources in
    -- every cycle.
-   f_live_src : assert always {m_stage_o.src_val = reg_src_val_i};
-   f_live_dst : assert always {m_stage_o.dst_val = reg_dst_val_i};
-   f_live_r14 : assert always {m_stage_o.r14     = reg_r14_i};
+   f_live_src : assert always {m_stage_o.src_reg_val = reg_src_val_i};
+   f_live_dst : assert always {m_stage_o.dst_reg_val = reg_dst_val_i};
+   f_live_r14 : assert always {m_stage_o.r14         = reg_r14_i};
 
    -- Output valid is a pure pass-through of input valid
    f_valid_follows : assert always {m_valid_o = s_valid_i};
 
    -- No new input is accepted before the last chunk has been presented
    f_hold_until_last : assert always
-      {m_valid_o = '1' and m_stage_o.microcodes(C_LAST) = '0'} |-> {s_ready_o = '0'};
+      {m_valid_o = '1' and m_stage_o.microcode(C_LAST) = '0'} |-> {s_ready_o = '0'};
 
 
    ----------------------------------------------
@@ -67,12 +66,12 @@ vunit i_sequencer(sequencer(synthesis))
 
    -- Advance by one on an accepted non-last beat
    f_index_advance : assert always
-      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcodes(C_LAST) = '0' and rst_i = '0'} |=>
+      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcode(C_LAST) = '0' and rst_i = '0'} |=>
       {index = prev(index) + 1};
 
    -- Restart at 0 after an accepted last beat
    f_index_restart : assert always
-      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcodes(C_LAST) = '1' and rst_i = '0'} |=>
+      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcode(C_LAST) = '1' and rst_i = '0'} |=>
       {index = 0};
 
    -- Hold index when no beat is accepted
@@ -98,7 +97,7 @@ vunit i_sequencer(sequencer(synthesis))
    -- overflows its 0..C_NUM_CHUNKS-1 subtype and the chunk slice runs past the
    -- end of 'microcodes' (see CONTRACT note in sequencer.vhd).
    assume always
-      {index = C_NUM_CHUNKS - 1 and m_valid_o = '1'} |-> {m_stage_o.microcodes(C_LAST) = '1'};
+      {index = C_NUM_CHUNKS - 1 and m_valid_o = '1'} |-> {m_stage_o.microcode(C_LAST) = '1'};
 
 
    --------------------------------------------
@@ -107,11 +106,11 @@ vunit i_sequencer(sequencer(synthesis))
 
    -- A non-last (multi-chunk) beat is reachable
    c_multi_chunk : cover
-      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcodes(C_LAST) = '0'};
+      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcode(C_LAST) = '0'};
 
    -- A sequence completes (last beat accepted)
    c_last_chunk : cover
-      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcodes(C_LAST) = '1'};
+      {m_valid_o = '1' and m_ready_i = '1' and m_stage_o.microcode(C_LAST) = '1'};
 
 
    ----------------------------------------------
