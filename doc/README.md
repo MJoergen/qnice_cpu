@@ -20,17 +20,9 @@ See the following block diagram:
 It is drawn by [cpu.tex](cpu.tex) and rendered by `make diagrams`; edit the LaTeX
 source rather than the `.png`.
 
-The ICACHE between FETCH and DECODE buffers up to two consecutive instruction
-words, which is what lets DECODE be offered an instruction and its immediate
-operand together. See [icache.vhd](../src/icache/icache.vhd).
-
-Between DECODE and PREPARE sits the [SEQUENCER](../src/cpu_main/sequencer.vhd),
-which issues DECODE's list of micro-operations one per clock cycle. It is not a
-pipeline stage -- it holds no payload registers and adds no latency -- but a
-one-to-many adapter on the link between the two, and `cpu_main.vhd` instantiates
-it there. The dotted outline in the diagram is the CPU_MAIN entity, which
-exists mainly to give the formal verification of DECODE, SEQUENCER, PREPARE, and
-WRITE a single top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
+The dotted outline in the diagram is the CPU_MAIN entity, which exists mainly to
+give the formal verification of DECODE, SEQUENCER, PREPARE, and WRITE a single
+top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
 
 The block diagram contains two additional blocks:
 * REGISTERS: Contains the CPU registers and supports two read ports (addressed
@@ -41,7 +33,7 @@ The block diagram contains two additional blocks:
   stale during sequential execution; PREPARE substitutes the real PC for either
   operand whenever `R15` is read, in any addressing mode.
 * MEMORY: Interfaces to the Wishbone memory bus and supports two read ports
-  (connected to PREPARE) and one write port (connected to WRITE).
+  (connected to PREPARE) and one write port (coming from WRITE).
 
 Not drawn in the block diagram are the two paths back to FETCH, one from WRITE
 and one from DECODE, which carry a new Program Counter and clear the stages
