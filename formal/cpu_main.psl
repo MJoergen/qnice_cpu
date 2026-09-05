@@ -16,15 +16,10 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- Payload stability on the DECODE -> SEQUENCER interface.
    --
    -- NOTE: this deliberately does NOT cover dec2seq_stage.src_val, .dst_val
-   -- and .r14. Those three are combinational pass-throughs of the register file
-   -- read ports (see the concurrent assignments in decode.vhd), not part of the
-   -- latched payload, and they are *required* to move while DECODE is stalled:
-   -- that is how a stalled instruction picks up a register or Status Register
-   -- write issued by the older instruction still in WRITE, and how the second
-   -- micro-op of e.g. ADD @R0++, @R0++ sees the R0 update made by the first.
-   -- Asserting stable() over the whole record instead fails BMC at depth 4,
-   -- with reg_r14_i changing on the cycle after reg_r14_we_o was asserted.
-   -- The five alu_* fields are not driven by DECODE at all.
+   -- and .r14, because DECODE does not drive them at all: the register file's
+   -- read data is wired straight to the SEQUENCER, which joins it onto the
+   -- stage record on its way past (see sequencer.vhd). The five alu_* fields are
+   -- likewise not driven by DECODE; PREPARE fills those in.
    f_dec2seq_valid_stable : assert always {dec2seq_valid and not dec2seq_ready and not rst_i and not fetch_valid_o} |=>
       {stable(dec2seq_valid) and
        stable(dec2seq_stage.microcodes) and
@@ -40,13 +35,19 @@ vunit i_cpu_main(cpu_main(synthesis))
        stable(dec2seq_stage.res_reg) and
        stable(dec2seq_stage.is_crb)};
 
-   -- The three live fields really are pure pass-throughs. These hold in every
-   -- cycle, stalled or not, and would catch someone registering them by
-   -- mistake -- which would silently reintroduce the stale-operand hazards
-   -- described above.
-   f_dec2seq_live_src : assert always {dec2seq_stage.src_val = reg_src_val_i};
-   f_dec2seq_live_dst : assert always {dec2seq_stage.dst_val = reg_dst_val_i};
-   f_dec2seq_live_r14 : assert always {dec2seq_stage.r14     = reg_r14_i};
+   -- The register file's read ports reach PREPARE live, with nothing latching
+   -- them on the way. These hold in every cycle, stalled or not, and would
+   -- catch someone registering them by mistake -- which would silently
+   -- reintroduce a stale operand, because the values are *required* to move
+   -- while the pipeline is stalled: that is how a stalled instruction picks up
+   -- a register or Status Register write issued by the older instruction still
+   -- in WRITE, and how the second micro-op of e.g. ADD @R0++, @R0++ sees the R0
+   -- update made by the first. Asserting stable() over the whole seq2prep_stage
+   -- record instead fails BMC at depth 4, with reg_r14_i changing on the cycle
+   -- after reg_r14_we_o was asserted.
+   f_seq2prep_live_src : assert always {seq2prep_stage.src_val = reg_src_val_i};
+   f_seq2prep_live_dst : assert always {seq2prep_stage.dst_val = reg_dst_val_i};
+   f_seq2prep_live_r14 : assert always {seq2prep_stage.r14     = reg_r14_i};
 
 --   f_dec2seq_ready_stable : assert always {dec2seq_ready and not dec2seq_valid and not rst_i} |=>
 --      {stable(dec2seq_ready)};

@@ -12,6 +12,18 @@
 -- chunk whose C_LAST bit is set. A new DECODE beat is not accepted until
 -- the chunk marked 'last' has been accepted downstream.
 --
+-- It also joins the register file's two read ports (and the Status Register)
+-- into the stage record on their way past. DECODE issues the read -- it owns
+-- the register numbers -- but the values come back a cycle later, by which time
+-- the instruction is already in DECODE's output register and on its way through
+-- here, so the values are wired straight from REGISTERS to this module rather
+-- than through DECODE. They are deliberately NOT registered anywhere: a value
+-- must stay live while the sequence is being issued, because the older
+-- instruction still in WRITE (or the previous micro-op of this very one, as in
+-- "ADD @R0++, @R0++") can write the register in the meantime, and the register
+-- file's write-before-read bypass then puts the new value on the read port.
+-- See "Waveforms" in README.md.
+--
 -- CONTRACT: The C_LAST bit MUST be set in the top chunk of the list, i.e. no
 -- later than chunk index C_NUM_CHUNKS-1 (= 2 for the current 36-bit
 -- 'microcodes' field, which holds three 12-bit chunks). One chunk beyond that
@@ -28,16 +40,20 @@ library ieee;
 
 entity sequencer is
    port (
-      clk_i     : in  std_logic;
-      rst_i     : in  std_logic;
+      clk_i         : in  std_logic;
+      rst_i         : in  std_logic;
       -- Connect to DECODE
-      s_valid_i : in  std_logic;
-      s_ready_o : out std_logic;
-      s_stage_i : in  t_stage;
+      s_valid_i     : in  std_logic;
+      s_ready_o     : out std_logic;
+      s_stage_i     : in  t_stage;
+      -- Connect to REGISTERS. Values only; DECODE drives the read ports.
+      reg_src_val_i : in  std_logic_vector(15 downto 0);
+      reg_dst_val_i : in  std_logic_vector(15 downto 0);
+      reg_r14_i     : in  std_logic_vector(15 downto 0);
       -- Connect to PREPARE
-      m_valid_o : out std_logic;
-      m_ready_i : in  std_logic;
-      m_stage_o : out t_stage
+      m_valid_o     : out std_logic;
+      m_ready_i     : in  std_logic;
+      m_stage_o     : out t_stage
    );
 end entity sequencer;
 
@@ -98,6 +114,11 @@ begin
    -- 'microcodes' is overwritten with the selected chunk. NOTE: the upper
    -- bits of m_stage_o.microcodes still hold the raw, unselected list;
    -- downstream logic MUST consume only bits (C_UCODE_BITS-1 downto 0).
+   --
+   -- The three operand-value fields are filled in from the register file here,
+   -- one clock cycle after DECODE presented reg_src_addr_o/reg_dst_addr_o.
+   -- DECODE leaves them undriven (as it does the alu_* fields, which PREPARE
+   -- fills in), so these assignments are the only drivers.
    p_output : process (all)
    begin
       m_valid_o <= s_valid_i;
@@ -105,6 +126,10 @@ begin
 
       m_stage_o.microcodes(C_UCODE_BITS - 1 downto 0) <=
          s_stage_i.microcodes((index + 1) * C_UCODE_BITS - 1 downto index * C_UCODE_BITS);
+
+      m_stage_o.src_val <= reg_src_val_i;
+      m_stage_o.dst_val <= reg_dst_val_i;
+      m_stage_o.r14     <= reg_r14_i;
    end process p_output;
 
 end architecture synthesis;

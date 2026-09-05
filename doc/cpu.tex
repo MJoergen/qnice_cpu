@@ -85,7 +85,8 @@
    %% Shared modules: REGISTERS on the left, MEMORY on the right
    %% ---------------------------------------------------------------
 
-   % REGISTERS spans DECODE down to WRITE: DECODE reads it, WRITE writes it.
+   % REGISTERS spans DECODE down to WRITE: DECODE issues the reads, the values
+   % come back into the SEQUENCER, and WRITE writes.
    \coordinate (regx) at ([xshift = -42mm] decode.center);
    \node[block, inner sep = 0pt,
          fit = {(regx |- decode.north) (regx |- write.south)}] (regs) {REGISTERS};
@@ -100,11 +101,13 @@
    %% Connections
    %% ---------------------------------------------------------------
 
-   % Operand reads: the register numbers leave DECODE, the values come back a
-   % clock cycle later.
-   \draw[biwire] (regs.east |- decode.west) -- (decode.west);
+   % Operand reads: the register numbers leave DECODE, and the values come back
+   % a clock cycle later -- by which time the instruction has moved on, so they
+   % are wired to the SEQUENCER rather than back into DECODE.
+   \draw[wire] (decode.west) -- (regs.east |- decode.west);
+   \draw[wire] (regs.east |- seq.west) -- (seq.west);
    % Result write-back, plus the pre/post-increment write-backs.
-   \draw[wire]   (write.west) -- (regs.east |- write.west);
+   \draw[wire] (write.west) -- (regs.east |- write.west);
 
    % Read responses back into PREPARE, requests out of WRITE.
    \draw[flow] (memory.west |- prepare.east) -- (prepare.east);

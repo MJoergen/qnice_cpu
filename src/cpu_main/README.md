@@ -263,12 +263,12 @@ Note how the two `@R0++` operands depend on each other: within this one
 instruction `R0` must go `0x001B` -> `0x001C` -> `0x001D`, and the intermediate
 value `0x001C` is only written back to the register file at t=2, long after
 DECODE issued its read at t=0. This works because DECODE does not latch the
-operand values at all; `seq_stage_o.src_val` and `seq_stage_o.dst_val` are
-wired straight through to the REGISTERS outputs:
+operand values at all: nothing between the register file and PREPARE does. The
+SEQUENCER joins the read ports onto the record as live wires:
 
 ```vhdl
-seq_stage_o.src_val <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
-seq_stage_o.dst_val <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
+m_stage_o.src_val <= reg_src_val_i; -- One clock cycle after DECODE's reg_src_addr_o
+m_stage_o.dst_val <= reg_dst_val_i; -- One clock cycle after DECODE's reg_dst_addr_o
 ```
 
 So the write-before-read bypass inside the REGISTERS module (see
@@ -315,18 +315,28 @@ It is here worth noting that even though the REGISTERS module contains all the
 CPU registers, the Program Counter (`R15`) is instead stored in the FETCH
 module and forwarded through the pipeline as a separate signal.
 
-### From DECODE to REGISTERS
+### Between DECODE, the SEQUENCER and REGISTERS
 ```
+-- driven by DECODE
 reg_rd_en_o   : out std_logic;
 reg_src_reg_o : out std_logic_vector(3 downto 0);
-reg_src_val_i : in  std_logic_vector(15 downto 0);
 reg_dst_reg_o : out std_logic_vector(3 downto 0);
+-- consumed by the SEQUENCER
+reg_src_val_i : in  std_logic_vector(15 downto 0);
 reg_dst_val_i : in  std_logic_vector(15 downto 0);
 reg_r14_i     : in  std_logic_vector(15 downto 0);
 ```
 The DECODE stage reads from the REGISTERS module. Note that the values read back
 (in `reg_src_val_i` and `reg_dst_val_i`) are valid on the following clock
 cycle. I.e. there is a fixed one-clock-cycle latency.
+
+That latency is why the two halves of this interface belong to two different
+modules. By the time a value arrives, the instruction that asked for it has
+already left DECODE and is being presented to the SEQUENCER, so the values are
+wired from REGISTERS into the SEQUENCER, which joins them onto the stage record
+(`m_stage_o.src_val`/`.dst_val`/`.r14`). Routing them back into DECODE first, as
+this design used to, only made them a combinational pass-through of a stage they
+have nothing left to do with.
 
 We could have used the standard AXI-interface with `VALID` and `READY` signals,
 but since the latency is constant, I've chosen not to. However, we do need the
@@ -482,8 +492,9 @@ DECODE, PREPARE, and WRITE.
 The interface from DECODE to the SEQUENCER, from the SEQUENCER to PREPARE, and
 from PREPARE to WRITE is a standard AXI-interface accompanied by the following
 record data structure. The SEQUENCER passes the record through unchanged apart
-from the low 12 bits of `microcodes`, so the DECODE-to-PREPARE path really is
-one interface with an adapter in the middle:
+from the low 12 bits of `microcodes` and the three register-file elements it
+joins on itself (`src_val`, `dst_val`, `r14` — see below), so the
+DECODE-to-PREPARE path really is one interface with an adapter in the middle:
 ```
 type t_stage is record
    microcodes  : std_logic_vector(35 downto 0);
@@ -534,16 +545,23 @@ stack while `res_reg` still points at `R15`.
 
 Finally, `r14` contains the current value of the Status Register.
 
-**Not every element is latched.** DECODE registers `microcodes`, `addr`, `inst`,
-`immediate`, `src_addr`, `src_mode`, `src_imm`, `dst_addr`, `dst_mode`,
-`dst_imm` and `res_reg` in its output process, but `src_val`, `dst_val` and
-`r14` are *concurrent* assignments straight from the register file read ports.
-They therefore keep moving while DECODE is stalled, and that is deliberate: it
-is how a stalled instruction picks up a register or Status Register write issued
-by the older instruction still in WRITE, and how the second micro-op of
-`ADD @R0++, @R0++` sees the `R0` update made by the first. The consumer only
-ever samples them at the moment it accepts a beat, so their movement in between
-is harmless. Freezing them would silently reintroduce stale-operand hazards.
+**Not every element is latched, and not every element comes from DECODE.**
+DECODE registers `microcodes`, `addr`, `inst`, `immediate`, `src_addr`,
+`src_mode`, `src_imm`, `dst_addr`, `dst_mode`, `dst_imm` and `res_reg` in its
+output process. It does not drive `src_val`, `dst_val` and `r14` at all: those
+are *concurrent* assignments straight from the register file read ports, made in
+the SEQUENCER. DECODE issues the read — it owns the register numbers — but the
+values come back a clock cycle later, by which time the instruction is already
+in DECODE's output register and being presented to the SEQUENCER, so they are
+wired from REGISTERS to there directly rather than through DECODE.
+
+They therefore keep moving while the pipeline is stalled, and that is
+deliberate: it is how a stalled instruction picks up a register or Status
+Register write issued by the older instruction still in WRITE, and how the
+second micro-op of `ADD @R0++, @R0++` sees the `R0` update made by the first.
+The consumer only ever samples them at the moment it accepts a beat, so their
+movement in between is harmless. Freezing them — or latching them anywhere on
+the way — would silently reintroduce stale-operand hazards.
 
 The remaining elements `alu_*` are only used from PREPARE to WRITE. They contain
 all the values needed by the ALU.
@@ -688,8 +706,8 @@ structural, and worth understanding before anyone adds it back:
 * `registers.vhd` forwards **both** Status Register write ports combinationally
   onto `sr_val_o` (see
   [registers/README.md](../registers/README.md#Write-Before-Read-on-the-dedicated-SR-port)).
-* DECODE passes `reg_r14_i` through as a *live*, unregistered signal — see the
-  note on latched versus live elements under
+* The SEQUENCER joins `reg_r14_i` onto the stage record as a *live*,
+  unregistered signal — see the note on latched versus live elements under
   [Internal interfaces](#Internal-interfaces).
 * WRITE only ever issues a register write on a cycle where PREPARE is
   simultaneously latching a fresh beat, because both are gated by the same
@@ -955,10 +973,14 @@ The assertions fall into four groups:
   because a pipeline flush (see above) legitimately drops valid mid-transfer.
   `f_dec2seq_valid_stable` enumerates the eleven *latched* elements of
   `t_stage` rather than asserting `stable()` over the whole record, because
-  `src_val`, `dst_val` and `r14` are live pass-throughs (see
-  [Internal interfaces](#Internal-interfaces) above). `f_dec2seq_live_src` /
-  `_dst` / `_r14` assert the complementary fact — that those three really are
-  pure pass-throughs — so that registering one by mistake is caught too.
+  DECODE does not drive `src_val`, `dst_val` and `r14` at all — the SEQUENCER
+  joins those on live, straight from the register file (see
+  [Internal interfaces](#Internal-interfaces) above). `f_seq2prep_live_src` /
+  `_dst` / `_r14` assert the complementary fact — that they reach PREPARE
+  unlatched — so that registering one by mistake is caught too. The same pair of
+  facts is checked one level down in
+  [formal/sequencer.psl](../../formal/sequencer.psl), by `f_stable` and
+  `f_live_src` / `_dst` / `_r14`.
   `c_dec2seq_stalled` and `c_dec2seq_stalled_sr` cover the stall condition,
   and the stall-with-SR-write case in particular, to show the stability
   assertion is not vacuous.

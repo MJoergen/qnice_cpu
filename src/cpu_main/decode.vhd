@@ -22,13 +22,14 @@ entity decode is
       early_valid_o  : out std_logic;                     -- combinatorial
       early_addr_o   : out std_logic_vector(15 downto 0); -- combinatorial
 
-      -- Register file. Value arrives on the next clock cycle
+      -- Register file: the read ports only. The values come back one clock
+      -- cycle later, by which time this instruction has left this stage, so
+      -- they are wired straight from REGISTERS into the SEQUENCER, which joins
+      -- them onto the stage record (seq_stage_o.src_val/.dst_val/.r14 are
+      -- therefore not driven here). See the header of sequencer.vhd.
       reg_rd_en_o    : out std_logic;
       reg_src_addr_o : out std_logic_vector(3 downto 0);  -- combinatorial
       reg_dst_addr_o : out std_logic_vector(3 downto 0);  -- combinatorial
-      reg_src_val_i  : in  std_logic_vector(15 downto 0);
-      reg_dst_val_i  : in  std_logic_vector(15 downto 0);
-      reg_r14_i      : in  std_logic_vector(15 downto 0);
 
       -- Register bank switch. See "Register bank switch" in write.vhd.
       bank_switch_i  : in  std_logic;
@@ -118,10 +119,6 @@ begin
    reg_src_addr_o <= fetch_data_i(R_SRC_REG);
    reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when fetch_data_i(R_OPCODE) = C_OPCODE_JMP else
                      fetch_data_i(R_DST_REG);
-
-   seq_stage_o.src_val <= reg_src_val_i; -- One clock cycle after reg_src_addr_o
-   seq_stage_o.dst_val <= reg_dst_val_i; -- One clock cycle after reg_dst_addr_o
-   seq_stage_o.r14     <= reg_r14_i;
 
 
    ------------------------------------------------------------

@@ -79,13 +79,15 @@ architecture synthesis of cpu is
    signal redirect_valid : std_logic;
    signal redirect_addr  : std_logic_vector(15 downto 0);
 
-   -- DECODE read from register file
+   -- DECODE reads from the register file, but the values arrive a clock cycle
+   -- later and are joined onto the pipeline by the SEQUENCER, one stage down.
+   -- See the header of cpu_main/sequencer.vhd.
    signal decode2reg_rd_en   : std_logic;
    signal decode2reg_src_reg : std_logic_vector(3 downto 0);
-   signal decode2reg_src_val : std_logic_vector(15 downto 0);
    signal decode2reg_dst_reg : std_logic_vector(3 downto 0);
-   signal decode2reg_dst_val : std_logic_vector(15 downto 0);
-   signal reg2decode_r14     : std_logic_vector(15 downto 0);
+   signal reg2seq_src_val    : std_logic_vector(15 downto 0);
+   signal reg2seq_dst_val    : std_logic_vector(15 downto 0);
+   signal reg2seq_r14        : std_logic_vector(15 downto 0);
 
    -- WRITE to register file
    signal wr2reg_r14_we : std_logic;
@@ -251,10 +253,10 @@ begin
          early_addr_o    => dc2fetch_addr,
          reg_rd_en_o     => decode2reg_rd_en,
          reg_src_reg_o   => decode2reg_src_reg,
-         reg_src_val_i   => decode2reg_src_val,
          reg_dst_reg_o   => decode2reg_dst_reg,
-         reg_dst_val_i   => decode2reg_dst_val,
-         reg_r14_i       => reg2decode_r14,
+         reg_src_val_i   => reg2seq_src_val,
+         reg_dst_val_i   => reg2seq_dst_val,
+         reg_r14_i       => reg2seq_r14,
          mem_req_valid_o => wr2mem_req_valid,
          mem_req_ready_i => wr2mem_req_ready,
          mem_req_op_o    => wr2mem_req_op,
@@ -313,13 +315,13 @@ begin
          rst_i       => rst_i,
          rd_en_i     => decode2reg_rd_en,
          src_reg_i   => decode2reg_src_reg,
-         src_val_o   => decode2reg_src_val,
+         src_val_o   => reg2seq_src_val,
          dst_reg_i   => decode2reg_dst_reg,
-         dst_val_o   => decode2reg_dst_val,
+         dst_val_o   => reg2seq_dst_val,
          wr_en_i     => wr2reg_we,
          wr_reg_i    => wr2reg_addr,
          wr_val_i    => wr2reg_val,
-         sr_val_o    => reg2decode_r14,
+         sr_val_o    => reg2seq_r14,
          wr_sr_en_i  => wr2reg_r14_we,
          wr_sr_val_i => wr2reg_r14
       ); -- i_registers

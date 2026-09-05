@@ -72,10 +72,11 @@ begin
    -- (test/*.writes.golden) byte-identical.
    --
    -- The reason is structural. registers.vhd forwards BOTH Status Register
-   -- write ports combinationally onto sr_val_o; DECODE passes reg_r14_i through
-   -- as a live, unregistered signal; and this stage only ever issues a register
-   -- write on a cycle where PREPARE is simultaneously latching a fresh beat. So
-   -- the value arriving here has already absorbed the write this stage made.
+   -- write ports combinationally onto sr_val_o; the SEQUENCER joins reg_r14_i
+   -- onto the stage record as a live, unregistered signal; and this stage only
+   -- ever issues a register write on a cycle where PREPARE is simultaneously
+   -- latching a fresh beat. So the value arriving here has already absorbed the
+   -- write this stage made.
 
 
    ------------------------------------------------------------
@@ -295,10 +296,10 @@ begin
    -- outgoing bank:
    --
    --   I1, the one in DECODE's OUTPUT register. Its operands were read a cycle
-   --       ago against the old bank, and decode.vhd passes the register file's
-   --       outputs straight through (seq_stage_o.src_val/dst_val are live
-   --       wires, not flip-flops), so the values are already gone. Only a
-   --       flush can undo that.
+   --       ago against the old bank, and nothing latches the register file's
+   --       outputs on the way in (the SEQUENCER joins them onto the stage
+   --       record as live wires, not flip-flops), so the values are already
+   --       gone. Only a flush can undo that.
    --   I2, the one at DECODE's INPUT. Its read is going out in THIS cycle,
    --       still against the old bank -- reg_sr does not take the new value
    --       until this cycle's clock edge. But it has not been accepted yet, so

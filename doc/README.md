@@ -33,8 +33,9 @@ exists mainly to give the formal verification of DECODE, SEQUENCER, PREPARE and
 WRITE a single top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
 
 The block diagram contains two additional blocks:
-* REGISTERS: Contains the CPU registers and supports two read ports (connected
-  to DECODE) and one write port (connected to WRITE). Note that the working copy
+* REGISTERS: Contains the CPU registers and supports two read ports (addressed
+  by DECODE, with the values arriving a cycle later at the SEQUENCER) and one
+  write port (connected to WRITE). Note that the working copy
   of the Program Counter `R15` lives in the FETCH stage, not here. The register
   file's `R15` copy is only written when an instruction targets `R15`, so it is
   stale during sequential execution; PREPARE substitutes the real PC for either
@@ -606,9 +607,9 @@ removable: the stage is a decoder, its logic is thin, and the ICACHE already
 presents its input from a register. What the register actually buys is not
 DECODE's own logic but the **REGISTERS module's one-cycle read latency**. DECODE
 drives `reg_src_addr_o`/`reg_dst_addr_o` combinationally off the instruction
-word and the values come back a cycle later, and `seq_stage_o.src_val`/
-`.dst_val` are already live wires — so the register exists only to hold the
-instruction fields until its operands catch up.
+word and the values come back a cycle later, straight into the SEQUENCER as live
+wires — so the register exists only to hold the instruction fields until its
+operands catch up.
 
 That latency is the price of a design goal. This CPU puts the register file in
 **block RAM**, where the original QNICE-FPGA builds it from LUTRAMs; a block RAM
@@ -715,8 +716,10 @@ in routing rather than logic.
 **In the build measured above, the worst path is the one this section
 describes** — the Status Register loop. Both endpoints are `wr_stage_o` fields,
 and the full listing shows it leaving PREPARE, passing through the register
-file's forwarding (`src_val_d`) and DECODE (`wr_stage_o[src_val]`), and being
-latched again by PREPARE. It is not always: some builds instead put a Block RAM
+file's forwarding (`src_val_d`) and the SEQUENCER (`wr_stage_o[src_val]`), and
+being latched again by PREPARE. (That leg used to be declared in DECODE; moving
+the register file's read data to the SEQUENCER renamed the module it belongs to
+without changing the net.) It is not always: some builds instead put a Block RAM
 clock-to-out path inside the register file on top, with zero logic levels,
 nothing to optimise and nothing this design controls.
 
@@ -748,7 +751,7 @@ PREPARE's registered ALU operand
    -> the ALU in WRITE
    -> the flag logic, which produces the Status Register
    -> the register file, which forwards an SR write combinationally
-   -> DECODE, which passes it through live and unregistered
+   -> the SEQUENCER, which joins it onto the stage record live and unregistered
    -> latched again by PREPARE
 ```
 

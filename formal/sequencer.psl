@@ -14,10 +14,44 @@ vunit i_sequencer(sequencer(synthesis))
    -- PROPERTIES OF THE OUTPUT INTERFACE
    ---------------------------------------
 
-   -- Output payload/valid are held stable while stalled downstream
+   -- Output payload/valid are held stable while stalled downstream.
+   --
+   -- The three register-file fields are excluded, and enumerating the rest is
+   -- the price of that. This module joins reg_src_val_i / reg_dst_val_i /
+   -- reg_r14_i onto the record live, and they are *required* to move while a
+   -- sequence is being issued: that is how the second micro-op of e.g.
+   -- ADD @R0++, @R0++ sees the R0 update the first one made, and how a stalled
+   -- instruction picks up a Status Register write from the instruction still in
+   -- WRITE. f_live_* below pins those three down instead.
    f_stable : assert always
       {m_valid_o and not m_ready_i and not rst_i} |=>
-      {stable(m_valid_o) and stable(m_stage_o)};
+      {stable(m_valid_o) and
+       stable(m_stage_o.microcodes) and
+       stable(m_stage_o.addr) and
+       stable(m_stage_o.inst) and
+       stable(m_stage_o.immediate) and
+       stable(m_stage_o.src_addr) and
+       stable(m_stage_o.src_mode) and
+       stable(m_stage_o.src_imm) and
+       stable(m_stage_o.dst_addr) and
+       stable(m_stage_o.dst_mode) and
+       stable(m_stage_o.dst_imm) and
+       stable(m_stage_o.res_reg) and
+       stable(m_stage_o.is_crb) and
+       stable(m_stage_o.early_jmp) and
+       stable(m_stage_o.alu_oper) and
+       stable(m_stage_o.alu_ctrl) and
+       stable(m_stage_o.alu_flags) and
+       stable(m_stage_o.alu_src_val) and
+       stable(m_stage_o.alu_dst_val)};
+
+   -- The register file's read data is joined on live, with nothing latching it
+   -- here. This is what makes excluding the three fields above safe rather than
+   -- a hole: they are not unconstrained, they are pinned to their sources in
+   -- every cycle.
+   f_live_src : assert always {m_stage_o.src_val = reg_src_val_i};
+   f_live_dst : assert always {m_stage_o.dst_val = reg_dst_val_i};
+   f_live_r14 : assert always {m_stage_o.r14     = reg_r14_i};
 
    -- Output valid is a pure pass-through of input valid
    f_valid_follows : assert always {m_valid_o = s_valid_i};

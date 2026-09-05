@@ -1,8 +1,12 @@
 # REGISTERS module
 
-This module contains all the registers in the CPU. It has two read ports
-connected to the DECODE stage, and a single write port connected to the WRITE
-stage.
+This module contains all the registers in the CPU. It has two read ports and a
+single write port. The read ports are *addressed* by the DECODE stage, but
+because the read latency is one clock cycle the values arrive when the
+instruction has already moved on, so they are wired to the SEQUENCER, which
+joins them onto the pipeline's stage record (see
+[cpu_main/README.md](../cpu_main/README.md#Between-DECODE-the-SEQUENCER-and-REGISTERS)).
+The write port is connected to the WRITE stage.
 
 The only register that is treated in a special way is the processor Status
 Register (R14). This is because this register is usually written to at the end
@@ -23,7 +27,7 @@ PREPARE stage substitutes the real PC instead (see
 The top-level interface of the REGISTERS module is as follows:
 
 ```
--- Read interface, connected to DECODE stage
+-- Read interface: addresses from the DECODE stage, values to the SEQUENCER
 rd_en_i     : in  std_logic;
 src_reg_i   : in  std_logic_vector(3 downto 0);
 src_val_o   : out std_logic_vector(15 downto 0);

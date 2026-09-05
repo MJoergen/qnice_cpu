@@ -30,11 +30,14 @@ entity cpu_main is
       early_valid_o   : out std_logic;
       early_addr_o    : out std_logic_vector(15 downto 0);
 
-      -- DECODE: to REGISTERS
+      -- DECODE: to REGISTERS (the read ports). The values come back a cycle
+      -- later and go to the SEQUENCER, not back to DECODE; see below.
       reg_rd_en_o     : out std_logic;
       reg_src_reg_o   : out std_logic_vector(3 downto 0);
-      reg_src_val_i   : in  std_logic_vector(15 downto 0);
       reg_dst_reg_o   : out std_logic_vector(3 downto 0);
+
+      -- SEQUENCER: from REGISTERS
+      reg_src_val_i   : in  std_logic_vector(15 downto 0);
       reg_dst_val_i   : in  std_logic_vector(15 downto 0);
       reg_r14_i       : in  std_logic_vector(15 downto 0);
 
@@ -115,10 +118,7 @@ begin
          early_addr_o   => early_addr_o,
          reg_rd_en_o    => reg_rd_en_o,
          reg_src_addr_o => reg_src_reg_o,
-         reg_src_val_i  => reg_src_val_i,
          reg_dst_addr_o => reg_dst_reg_o,
-         reg_dst_val_i  => reg_dst_val_i,
-         reg_r14_i      => reg_r14_i,
          bank_switch_i  => bank_switch,
          bank_stale_o   => bank_stale,
          seq_valid_o    => dec2seq_valid,
@@ -138,16 +138,25 @@ begin
    -- one-to-many adapter on the DECODE/PREPARE link, with no part in preparing
    -- the operands. It shares PREPARE's reset, so a pipeline flush abandons a
    -- half-issued list.
+   --
+   -- It is also where the register file's read data joins the pipeline. DECODE
+   -- issues the read, but the values arrive a cycle later -- i.e. exactly when
+   -- the instruction is here -- and they must stay live for the whole sequence
+   -- (see the header of sequencer.vhd), so routing them through DECODE would
+   -- only have made them a pass-through of that stage.
    i_sequencer : entity work.sequencer
       port map (
-         clk_i     => clk_i,
-         rst_i     => rst_i or fetch_valid_o,
-         s_valid_i => dec2seq_valid,
-         s_ready_o => dec2seq_ready,
-         s_stage_i => dec2seq_stage,
-         m_valid_o => seq2prep_valid,
-         m_ready_i => seq2prep_ready,
-         m_stage_o => seq2prep_stage
+         clk_i         => clk_i,
+         rst_i         => rst_i or fetch_valid_o,
+         s_valid_i     => dec2seq_valid,
+         s_ready_o     => dec2seq_ready,
+         s_stage_i     => dec2seq_stage,
+         reg_src_val_i => reg_src_val_i,
+         reg_dst_val_i => reg_dst_val_i,
+         reg_r14_i     => reg_r14_i,
+         m_valid_o     => seq2prep_valid,
+         m_ready_i     => seq2prep_ready,
+         m_stage_o     => seq2prep_stage
       ); -- i_sequencer
 
 
