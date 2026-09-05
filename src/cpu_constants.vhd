@@ -107,28 +107,40 @@ package cpu_constants is
    -- instruction check in cpu_main/write.vhd names the offender with it too.
    function ctrl_str(cmd : std_logic_vector) return string;
 
+   -- The payload on all three pipeline links: DECODE -> SEQUENCER -> PREPARE ->
+   -- WRITE. Not every element is live on every link -- each stays undriven
+   -- until the stage that fills it in has run -- so the marker on each line
+   -- below says which stage that is, and so which links carry it:
+   --
+   --   [D] filled in by DECODE        -- live on all three links
+   --   [S] filled in by the SEQUENCER -- live from SEQUENCER -> PREPARE on
+   --   [P] filled in by PREPARE       -- live on PREPARE -> WRITE only
+   --
+   -- Read back the other way round: the SEQUENCER looks at 'microcodes' alone,
+   -- PREPARE at eleven of the [D]/[S] elements, and WRITE at all 21.
+
    type t_stage is record
-      microcodes  : std_logic_vector(35 downto 0);
-      addr        : std_logic_vector(15 downto 0);
-      inst        : std_logic_vector(15 downto 0);
-      immediate   : std_logic_vector(15 downto 0);
-      src_addr    : std_logic_vector(3 downto 0);
-      src_mode    : std_logic_vector(1 downto 0);
-      src_val     : std_logic_vector(15 downto 0);
-      src_imm     : std_logic;
-      dst_addr    : std_logic_vector(3 downto 0);
-      dst_mode    : std_logic_vector(1 downto 0);
-      dst_val     : std_logic_vector(15 downto 0);
-      dst_imm     : std_logic;
-      res_reg     : std_logic_vector(3 downto 0);
-      r14         : std_logic_vector(15 downto 0);
-      is_crb      : std_logic; -- INCRB/DECRB, decoded early: see decode.vhd
-      early_jmp   : std_logic; -- Redirect already issued by DECODE: see decode.vhd
-      alu_oper    : std_logic_vector(3 downto 0);
-      alu_ctrl    : std_logic_vector(5 downto 0);
-      alu_flags   : std_logic_vector(15 downto 0);
-      alu_src_val : std_logic_vector(15 downto 0);
-      alu_dst_val : std_logic_vector(15 downto 0);
+      microcodes  : std_logic_vector(35 downto 0); -- [D] SEQUENCER narrows it to one chunk
+      addr        : std_logic_vector(15 downto 0); -- [D]
+      inst        : std_logic_vector(15 downto 0); -- [D]
+      immediate   : std_logic_vector(15 downto 0); -- [D]
+      src_addr    : std_logic_vector(3 downto 0);  -- [D]
+      src_mode    : std_logic_vector(1 downto 0);  -- [D]
+      src_val     : std_logic_vector(15 downto 0); -- [S] PREPARE swaps in the PC for R15
+      src_imm     : std_logic;                     -- [D]
+      dst_addr    : std_logic_vector(3 downto 0);  -- [D]
+      dst_mode    : std_logic_vector(1 downto 0);  -- [D]
+      dst_val     : std_logic_vector(15 downto 0); -- [S] PREPARE swaps in the PC for R15
+      dst_imm     : std_logic;                     -- [D]
+      res_reg     : std_logic_vector(3 downto 0);  -- [D]
+      r14         : std_logic_vector(15 downto 0); -- [S]
+      is_crb      : std_logic;                     -- [D] INCRB/DECRB, decoded early (decode.vhd)
+      early_jmp   : std_logic;                     -- [D] Redirect already issued (decode.vhd)
+      alu_oper    : std_logic_vector(3 downto 0);  -- [P]
+      alu_ctrl    : std_logic_vector(5 downto 0);  -- [P]
+      alu_flags   : std_logic_vector(15 downto 0); -- [P]
+      alu_src_val : std_logic_vector(15 downto 0); -- [P]
+      alu_dst_val : std_logic_vector(15 downto 0); -- [P]
    end record t_stage;
 
 end package cpu_constants;

@@ -29,7 +29,7 @@ which issues DECODE's list of micro-operations one per clock cycle. It is not a
 pipeline stage -- it holds no payload registers and adds no latency -- but a
 one-to-many adapter on the link between the two, and `cpu_main.vhd` instantiates
 it there. The dotted outline in the diagram is the CPU_MAIN entity, which
-exists mainly to give the formal verification of DECODE, SEQUENCER, PREPARE and
+exists mainly to give the formal verification of DECODE, SEQUENCER, PREPARE, and
 WRITE a single top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
 
 The block diagram contains two additional blocks:
