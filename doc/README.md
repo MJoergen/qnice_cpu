@@ -360,18 +360,18 @@ the programs `make test` runs; its header says how to run it.
   words `0x000A` to `0x000D`, greyed out in the diagram — is thrown away.
 * **t=1**: FETCH issues the first instruction-memory request of the new stream,
   for `0x0005`.
-* **t=2**: that word (`0x0048`) comes back and is handed to ICACHE. The
+* **t=2**: that word (`MOVE @R0, R2`) comes back and is handed to ICACHE. The
   pipeline is empty: DECODE, PREPARE, and WRITE all have nothing.
 * **t=3**: ICACHE offers it and DECODE accepts `MOVE @R0, R2`. Note
   `m_double_o` is low — only one word is buffered so far — which is enough,
   because this instruction has no immediate operand.
 * **t=4**: the `MOVE` sits in DECODE's output register and SEQUENCER issues its
-  first micro-operation, `0x084` (`MEM_READ_SRC` + `REG_MOD_SRC`). It holds
+  first micro-operation (`MEM_READ_SRC` + `REG_MOD_SRC`). It holds
   `s_ready_o` low, because a second micro-operation is still to come.
-* **t=5**: WRITE puts the read of the device word on the data bus
-  (`mem_req_addr_o` = `0x000A`).
-* **t=6**: the device word returns on `msrc_data_o` and SEQUENCER can finally
-  issue the second micro-operation, `0x828` (`LAST` + `MEM_WAIT_SRC` +
+* **t=5**: WRITE puts the read of the device word on the memory bus
+  (`mem_req_valid_o`).
+* **t=6**: the device word (`msrc_valid_o`) and SEQUENCER can finally
+  issue the second micro-operation, (`LAST` + `MEM_WAIT_SRC` +
   `REG_WRITE`). This is the only cycle in which a stage is held waiting for
   data. In the same cycle DECODE accepts the `AND`, this time consuming two
   words at once.
