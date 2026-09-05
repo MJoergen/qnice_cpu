@@ -51,11 +51,14 @@ PREPARE stage additionally waits for any memory operands to be read. The WRITE
 stage is entirely combinatorial, the ALU included; the only registers it drives
 are the outputs of the other blocks.
 
-In the above we see a Harvard architecture, where we have a separate
-instruction and data interface. The main reason for this choice is to simplify
-the implementation. It does also provide a nice side effect of increasing the
-available memory bandwidth, because we can read from instruction and data
-memory simultaneously, see below section on [Interleaving](#interleaving).
+## Harvard architecture
+In the above we see a Harvard architecture, where we have a separate instruction
+and data interface. The main reason for this choice is to simplify the
+implementation, because we then don't need an arbiter between the instruction
+fetches and the data memory accesses. It does also provide a nice side effect of
+increasing the available memory bandwidth, because we can read from instruction
+and data memory simultaneously, see below section on
+[Interleaving](#Interleaving).
 
 There is one important detail to note about the Harvard architecture and that
 is that it requires dual port memory. This is because we want the system to
@@ -70,9 +73,9 @@ Control transfer in this design is a *flush*: the stages above the one that
 resolved the transfer are emptied, and FETCH is pointed somewhere new. Both
 halves are one signal. WRITE's `fetch_valid_o` carries the new Program Counter
 to FETCH, and in [cpu_main.vhd](../src/cpu_main/cpu_main.vhd) it is OR-ed into
-the reset of DECODE, the SEQUENCER and PREPARE — so everything already fetched
-and decoded from the fall-through path is discarded in the same cycle the
-redirect goes out. FETCH abandons the requests it has in flight, the ICACHE
+the reset of ICACHE, DECODE, the SEQUENCER, and PREPARE — so everything already
+fetched and decoded from the fall-through path is discarded in the same cycle
+the redirect goes out. FETCH abandons the requests it has in flight, the ICACHE
 clears its buffer, and the SEQUENCER's chunk index returns to 0, abandoning a
 half-issued micro-operation list. WRITE itself is deliberately *not* reset: it
 is the stage producing the flush, and it has to be allowed to retire the
