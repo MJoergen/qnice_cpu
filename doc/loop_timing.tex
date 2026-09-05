@@ -62,21 +62,21 @@
  \nextwave{FETCH/dc\_addr\_o}               \unknown[x]{2} \cmove{0005}{1} \cand{0006}{1} \cand{0007}{1} \crbra{0008}{2} \crbra{0009}{1} \unknown[000A]{1} \unknown[000B]{1} \unknown[x]{1}
  \nextwave{ICACHE/s\_ready\_o}              \bit{0}{1} \bit{1}{4} \bit{0}{1} \bit{1}{4} \bit{0}{1}
  \nextwave{ICACHE/m\_valid\_o}              \bit{0}{3} \bit{1}{7} \bit{0}{1}
- \nextwave{DECODE/icache\_ready\_o}         \bit{1}{4} \bit{0}{2} \bit{1}{1} \bit{0}{1} \bit{1}{3}
  \nextwave{ICACHE/m\_double\_o}             \bit{0}{5} \bit{1}{2} \bit{0}{1} \bit{1}{1} \bit{0}{2}
  \nextwave{ICACHE/m\_addr\_o}               \unknown[x]{3} \cmove{0005}{1} \cand{0006}{3} \crbra{0008}{2} \unknown[000A]{1} \unknown[x]{1}
+ \nextwave{DECODE/icache\_ready\_o}         \bit{1}{4} \bit{0}{2} \bit{1}{1} \bit{0}{1} \bit{1}{3}
  \nextwave{DECODE/seq\_valid\_o}            \bit{1}{1} \bit{0}{3} \bit{1}{4} \bit{0}{1} \bit{1}{2}
- \nextwave{SEQUENCER/s\_ready\_o}           \bit{1}{4} \bit{0}{2} \bit{1}{5}
  \nextwave{DECODE/seq\_stage\_o.addr}       \unknown[000A]{1} \unknown[x]{3} \cmove{0005}{3} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1} \unknown[000A]{1}
+ \nextwave{SEQUENCER/s\_ready\_o}           \bit{1}{4} \bit{0}{2} \bit{1}{5}
  \nextwave{PREPARE/wr\_valid\_o}            \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1} \bit{1}{2} \bit{0}{1} \bit{1}{1}
  \nextwave{PREPARE/wr\_stage\_o.addr}       \crbra{0008}{1} \unknown[x]{4} \cmove{0005}{1} \unknown[x]{1} \cmove{0005}{1} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1}
  \nextwave{WRITE/mem\_req\_valid\_o}        \bit{0}{5} \bit{1}{1} \bit{0}{5}
  \nextwave{MEMORY/msrc\_valid\_o}           \bit{0}{6} \bit{1}{1} \bit{0}{4}
  \nextwave{WRITE/reg\_we\_o}                \bit{1}{1} \bit{0}{6} \bit{1}{2} \bit{0}{1} \bit{1}{1}
  \nextwave{WRITE/reg\_addr\_o}              \crbra{F}{1} \unknown[x]{6} \cmove{2}{1} \cand{2}{1} \unknown[x]{1} \crbra{F}{1}
- \nextwave{CPU/inst\_done\_o}               \bit{1}{1} \bit{0}{6} \bit{1}{2} \bit{0}{1} \bit{1}{1}
  \nextwave{WRITE/fetch\_valid\_o}           \bit{1}{1} \bit{0}{9} \bit{1}{1}
  \nextwave{WRITE/fetch\_addr\_o}            \crbra{0005}{1} \unknown[x]{9} \crbra{0005}{1}
+ \nextwave{CPU/inst\_done\_o}               \bit{1}{1} \bit{0}{6} \bit{1}{2} \bit{0}{1} \bit{1}{1}
 \end{wave}
 
 \end{document}
