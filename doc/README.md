@@ -338,9 +338,11 @@ Three instructions, five words of instruction memory, one data read, and
 **exactly ten clock cycles per iteration**. Where those ten cycles go is not
 obvious from the source, so the diagram below follows one iteration through
 every stage from the instruction fetch to `inst_done_o`. Each of the three
-instructions has its own colour, and the top three rows summarise which
-instruction occupies which pipeline register in each cycle. A flat line there
-means the stage is empty.
+instructions has its own colour, and the top four rows summarise which
+instruction each stage is working on in each cycle. A flat line there means the
+stage is empty. Every row is named after the module that *drives* it, so all of
+them are output ports; where a link's two ends have different names, the name
+shown is the driver's.
 
 ![Polling loop waveform](loop_timing.png)
 
@@ -365,7 +367,7 @@ the programs `make test` runs; its header says how to run it.
   because this instruction has no immediate operand.
 * **t=4**: the `MOVE` sits in DECODE's output register and SEQUENCER issues its
   first micro-operation, `0x084` (`MEM_READ_SRC` + `REG_MOD_SRC`). It holds
-  `seq_ready_i` low, because a second micro-operation is still to come.
+  `s_ready_o` low, because a second micro-operation is still to come.
 * **t=5**: WRITE puts the read of the device word on the data bus
   (`mem_req_addr_o` = `0x000A`).
 * **t=6**: the device word returns on `msrc_data_o` and SEQUENCER can finally
@@ -410,13 +412,13 @@ responsible for is the refusal at t=5, and that chain is worth spelling out,
 because it runs backwards through four modules:
 
 1. The `MOVE` expands into two micro-operations. SEQUENCER issues one per cycle
-   and holds `DECODE/seq_ready_i` low until it has issued the last of them.
+   and holds `SEQUENCER/s_ready_o` low until it has issued the last of them.
 2. That second micro-operation carries `MEM_WAIT_SRC`, so it cannot be issued
-   until the device word arrives at t=6. `seq_ready_i` is therefore low for
+   until the device word arrives at t=6. `s_ready_o` is therefore low for
    *two* cycles, t=4 and t=5, rather than one.
 3. DECODE cannot accept a new instruction while SEQUENCER is holding it, so it
-   leaves its `icache_ready_o` low at t=4 and t=5. That is the row drawn as
-   `ICACHE/m_ready_i`: the two are the same net, seen from ICACHE's side.
+   leaves `DECODE/icache_ready_o` low at t=4 and t=5 — the same net ICACHE
+   sees as its `m_ready_i`.
 4. ICACHE buffers two words, and by t=5 it is holding both — the `AND` and its
    immediate operand (`m_addr_o` = `0x0006`, `m_double_o` high). Nothing is
    draining it, so it has nowhere to put a third word and drops `s_ready_o` at

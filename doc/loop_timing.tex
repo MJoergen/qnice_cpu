@@ -22,31 +22,37 @@
 % according to which of the three instructions it belongs to, so that the ten
 % cycles can be attributed to them by eye.
 %
-% The top three rows are not signals but a summary of the three pipeline
-% registers below them, each derived from the valid/address pair drawn further
-% down: ICACHE/m_valid_o + m_addr_o, DECODE/seq_valid_o + seq_stage_o.addr,
-% and WRITE/prep_valid_i + prep_stage_i.addr. A low line means the stage is
-% empty in that cycle.
+% Every row is named after the module that DRIVES it, so all of them are output
+% ports (*_o).  Where a link's two ends have different names, the name used is
+% the driver's: DECODE/icache_ready_o is what ICACHE sees as m_ready_i,
+% SEQUENCER/s_ready_o is what DECODE sees as seq_ready_i, PREPARE/wr_valid_o
+% and wr_stage_o are what WRITE sees as prep_valid_i and prep_stage_i, and
+% WRITE/reg_we_o and reg_addr_o are what REGISTERS sees as wr_en_i and wr_reg_i.
 %
-% WRITE/prep_stage_i.microcode is the single 12-bit micro-operation SEQUENCER
-% selected out of DECODE's list, i.e. the one being executed. 0x084 is
-% MEM_READ_SRC + REG_MOD_SRC, 0x828 is LAST + MEM_WAIT_SRC + REG_WRITE, and
-% 0x808 is LAST + REG_WRITE.
+% The top four rows are not signals but a summary of the pipeline stage below
+% them, each derived from the valid/address pair drawn further down:
+% FETCH/wb_stb_o + wb_addr_o, ICACHE/m_valid_o + m_addr_o, DECODE/seq_valid_o +
+% seq_stage_o.addr, and PREPARE/wr_valid_o + wr_stage_o.addr. A low line means
+% the stage is empty in that cycle. The FETCH row is the address being
+% requested of instruction memory, i.e. it runs ahead of the other three.
 
 \documentclass{standalone}
 \usepackage{timing}
 
 % Eleven cycles of four-character bus values, plus the widest label in the tree.
+% The first argument of the wave environment below is the number of signal rows,
+% which sets how far down the dotted time markers reach; keep the two in step.
 \renewcommand{\wavescale}{1.4}
 
 % One tint per instruction, so a box says at a glance which of the three owns
 % the cycle. Deliberately pale: the value inside is printed in black.
-\newcommand*{\cmove}[2]{\bitvector{#1}{#2}{blue!15}}
+\newcommand*{\cmove}[2]{\bitvector{#1}{#2}{blue!35}}
 \newcommand*{\cand}[2]{\bitvector{#1}{#2}{green!25}}
 \newcommand*{\crbra}[2]{\bitvector{#1}{#2}{orange!35}}
 
 \begin{document}
-\begin{wave}{29}{11}
+\begin{wave}{25}{11}
+ \nextwave{\textit{in FETCH}}               \unknown[x]{1} \cmove{MOVE}{1} \cand{AND}{2} \crbra{RBRA}{2} \bit{0}{1} \unknown[x]{4}
  \nextwave{\textit{in ICACHE}}              \bit{0}{3} \cmove{MOVE}{1} \cand{AND}{3} \crbra{RBRA}{2} \unknown[x]{1} \bit{0}{1}
  \nextwave{\textit{in DECODE}}              \unknown[x]{1} \bit{0}{3} \cmove{MOVE}{3} \cand{AND}{1} \bit{0}{1} \crbra{RBRA}{1} \unknown[x]{1}
  \nextwave{\textit{in WRITE}}               \crbra{RBRA}{1} \bit{0}{4} \cmove{MOVE}{1} \bit{0}{1} \cmove{MOVE}{1} \cand{AND}{1} \bit{0}{1} \crbra{RBRA}{1}
@@ -56,18 +62,18 @@
  \nextwave{FETCH/dc\_addr\_o}               \unknown[x]{2} \cmove{0005}{1} \cand{0006}{1} \cand{0007}{1} \crbra{0008}{2} \crbra{0009}{1} \unknown[000A]{1} \unknown[000B]{1} \unknown[x]{1}
  \nextwave{ICACHE/s\_ready\_o}              \bit{0}{1} \bit{1}{4} \bit{0}{1} \bit{1}{4} \bit{0}{1}
  \nextwave{ICACHE/m\_valid\_o}              \bit{0}{3} \bit{1}{7} \bit{0}{1}
- \nextwave{ICACHE/m\_ready\_i}              \bit{1}{4} \bit{0}{2} \bit{1}{1} \bit{0}{1} \bit{1}{3}
+ \nextwave{DECODE/icache\_ready\_o}         \bit{1}{4} \bit{0}{2} \bit{1}{1} \bit{0}{1} \bit{1}{3}
  \nextwave{ICACHE/m\_double\_o}             \bit{0}{5} \bit{1}{2} \bit{0}{1} \bit{1}{1} \bit{0}{2}
  \nextwave{ICACHE/m\_addr\_o}               \unknown[x]{3} \cmove{0005}{1} \cand{0006}{3} \crbra{0008}{2} \unknown[000A]{1} \unknown[x]{1}
  \nextwave{DECODE/seq\_valid\_o}            \bit{1}{1} \bit{0}{3} \bit{1}{4} \bit{0}{1} \bit{1}{2}
- \nextwave{DECODE/seq\_ready\_i}            \bit{1}{4} \bit{0}{2} \bit{1}{5}
+ \nextwave{SEQUENCER/s\_ready\_o}           \bit{1}{4} \bit{0}{2} \bit{1}{5}
  \nextwave{DECODE/seq\_stage\_o.addr}       \unknown[000A]{1} \unknown[x]{3} \cmove{0005}{3} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1} \unknown[000A]{1}
- \nextwave{WRITE/prep\_valid\_i}            \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1} \bit{1}{2} \bit{0}{1} \bit{1}{1}
- \nextwave{WRITE/prep\_stage\_i.addr}       \crbra{0008}{1} \unknown[x]{4} \cmove{0005}{1} \unknown[x]{1} \cmove{0005}{1} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1}
+ \nextwave{PREPARE/wr\_valid\_o}            \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1} \bit{1}{2} \bit{0}{1} \bit{1}{1}
+ \nextwave{PREPARE/wr\_stage\_o.addr}       \crbra{0008}{1} \unknown[x]{4} \cmove{0005}{1} \unknown[x]{1} \cmove{0005}{1} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1}
  \nextwave{WRITE/mem\_req\_valid\_o}        \bit{0}{5} \bit{1}{1} \bit{0}{5}
  \nextwave{MEMORY/msrc\_valid\_o}           \bit{0}{6} \bit{1}{1} \bit{0}{4}
- \nextwave{REGISTERS/wr\_en\_i}             \bit{1}{1} \bit{0}{6} \bit{1}{2} \bit{0}{1} \bit{1}{1}
- \nextwave{REGISTERS/wr\_reg\_i}            \crbra{F}{1} \unknown[x]{6} \cmove{2}{1} \cand{2}{1} \unknown[x]{1} \crbra{F}{1}
+ \nextwave{WRITE/reg\_we\_o}                \bit{1}{1} \bit{0}{6} \bit{1}{2} \bit{0}{1} \bit{1}{1}
+ \nextwave{WRITE/reg\_addr\_o}              \crbra{F}{1} \unknown[x]{6} \cmove{2}{1} \cand{2}{1} \unknown[x]{1} \crbra{F}{1}
  \nextwave{CPU/inst\_done\_o}               \bit{1}{1} \bit{0}{6} \bit{1}{2} \bit{0}{1} \bit{1}{1}
  \nextwave{WRITE/fetch\_valid\_o}           \bit{1}{1} \bit{0}{9} \bit{1}{1}
  \nextwave{WRITE/fetch\_addr\_o}            \crbra{0005}{1} \unknown[x]{9} \crbra{0005}{1}
