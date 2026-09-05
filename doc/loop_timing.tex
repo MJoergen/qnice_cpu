@@ -24,10 +24,11 @@
 %
 % Every row is named after the module that DRIVES it, so all of them are output
 % ports (*_o).  Where a link's two ends have different names, the name used is
-% the driver's: DECODE/icache_ready_o is what ICACHE sees as m_ready_i,
-% SEQUENCER/s_ready_o is what DECODE sees as seq_ready_i, PREPARE/wr_valid_o
-% and wr_stage_o are what WRITE sees as prep_valid_i and prep_stage_i, and
-% WRITE/reg_we_o and reg_addr_o are what REGISTERS sees as wr_en_i and wr_reg_i.
+% the driver's: DECODE/icache_ready_o and icache_double_o are what ICACHE sees
+% as m_ready_i and m_double_i, SEQUENCER/s_ready_o is what DECODE sees as
+% seq_ready_i, PREPARE/wr_valid_o and wr_stage_o are what WRITE sees as
+% prep_valid_i and prep_stage_i, and WRITE/reg_we_o and reg_addr_o are what
+% REGISTERS sees as wr_en_i and wr_reg_i.
 %
 % The top four rows are not signals but a summary of the pipeline stage below
 % them, each derived from the valid/address pair drawn further down:
@@ -51,7 +52,7 @@
 \newcommand*{\crbra}[2]{\bitvector{#1}{#2}{orange!35}}
 
 \begin{document}
-\begin{wave}{25}{11}
+\begin{wave}{26}{11}
  \nextwave{\textit{in FETCH}}               \unknown[x]{1} \cmove{MOVE}{1} \cand{AND}{2} \crbra{RBRA}{2} \bit{0}{1} \unknown[x]{4}
  \nextwave{\textit{in ICACHE}}              \bit{0}{3} \cmove{MOVE}{1} \cand{AND}{3} \crbra{RBRA}{2} \unknown[x]{1} \bit{0}{1}
  \nextwave{\textit{in DECODE}}              \unknown[x]{1} \bit{0}{3} \cmove{MOVE}{3} \cand{AND}{1} \bit{0}{1} \crbra{RBRA}{1} \unknown[x]{1}
@@ -64,6 +65,7 @@
  \nextwave{ICACHE/m\_valid\_o}              \bit{0}{3} \bit{1}{7} \bit{0}{1}
  \nextwave{ICACHE/m\_double\_o}             \bit{0}{5} \bit{1}{2} \bit{0}{1} \bit{1}{1} \bit{0}{2}
  \nextwave{ICACHE/m\_addr\_o}               \unknown[x]{3} \cmove{0005}{1} \cand{0006}{3} \crbra{0008}{2} \unknown[000A]{1} \unknown[x]{1}
+ \nextwave{DECODE/icache\_double\_o}        \bit{0}{4} \bit{1}{5} \bit{0}{2}
  \nextwave{DECODE/icache\_ready\_o}         \bit{1}{4} \bit{0}{2} \bit{1}{1} \bit{0}{1} \bit{1}{3}
  \nextwave{DECODE/seq\_valid\_o}            \bit{1}{1} \bit{0}{3} \bit{1}{4} \bit{0}{1} \bit{1}{2}
  \nextwave{DECODE/seq\_stage\_o.addr}       \unknown[000A]{1} \unknown[x]{3} \cmove{0005}{3} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1} \unknown[000A]{1}
