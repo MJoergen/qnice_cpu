@@ -40,8 +40,18 @@
       % path, one instruction (or micro-operation) per beat. A doubled line
       % with an open tip draws the same outlined block arrow that the
       % diagrams.net original used.
+      %
+      % The line width is pinned, and must stay at or above ~0.5pt. "double"
+      % strokes the path once in black at (2*line width + double distance) and
+      % then again in white at (double distance), leaving the two visible lines
+      % as slivers exactly one line width thick. At the default 0.4pt that is
+      % 0.83px at the 150dpi "make diagrams" renders at -- thinner than a pixel,
+      % so whether a sliver survives rasterisation depends on where it happens
+      % to fall on the pixel grid. It cost the lower line of the WRITE-to-MEMORY
+      % arrow, which was correct in the PDF and simply absent from the PNG.
       flow/.style = {
          draw,
+         thick,
          double,
          double distance = 4pt,
          -{Triangle[open, length = 4mm, width = 7mm]}
