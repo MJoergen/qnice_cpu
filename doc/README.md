@@ -23,6 +23,10 @@ See the following block diagram:
 It is drawn by [cpu.tex](cpu.tex) and rendered by `make diagrams`; edit the LaTeX
 source rather than the `.png`.
 
+The thick arrows indicate the AXI-like pipeline handshake, consisting of a
+`VALID` signal from source to sink and a `READY` signal from sink to source.
+This handshake is used to control [back-pressure](#back-pressure).
+
 The dotted outline in the diagram is CPU_MAIN, which exists mainly to give the
 formal verification of DECODE, SEQUENCER, PREPARE, and WRITE a single top
 level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
@@ -183,15 +187,11 @@ acknowledgements, and FETCH counts and discards them; see
 
 
 ## Back-pressure
-The thick arrows indicate the AXI-like pipeline handshake, consisting of a
-`VALID` signal from source to sink and a `READY` signal from sink to source.
-This handshake is used to control back-pressure.
-
 There are three sources of back-pressure in the design:
 * An instruction may expand into up to three micro-operations. SEQUENCER on the
   DECODE-to-PREPARE link issues one per clock cycle and holds its ready signal
   low until the last one has been accepted, which stalls DECODE, which in turn
-  applies back-pressure to FETCH.
+  applies back-pressure to ICACHE.
 * MEMORY will generate back-pressure while waiting for the result read from the
   memory bus. This is part of the Wishbone protocol and allows for an I/O
   device to take more than one clock cycle to respond.
@@ -210,9 +210,9 @@ For more detailed information about the design look here:
 * [ICACHE](../src/icache/README.md)
 * [REGISTERS](../src/registers/README.md)
 * [MEMORY](../src/memory/README.md)
-* [DECODE/PREPARE/WRITE](../src/cpu_main/README.md)
+* [DECODE/SEQUENCER/PREPARE/WRITE](../src/cpu_main/README.md)
 
-The four stages and the two shared blocks are all built from a small set of
+The six stages and the two shared blocks are all built from a small set of
 reusable valid/ready primitives in `src/sub/` (`one_stage_buffer`,
 `one_stage_fifo`, `two_stage_buffer`, `two_stage_fifo`, `dp_ram`,
 `pipe_concat`); they are described in the top-level
@@ -253,13 +253,13 @@ apart:
   accepted on any clock edge where `wb_stb_o` is high and `wb_stall_i` is low.
   This only means the slave has taken the request -- it does *not* mean the
   transaction is finished.
-* **Request completed.** The slave later pulses `wb_ack_i`, once per accepted
-  request. For a read it drives the result onto `wb_data_i` in that same cycle.
-  **Writes are acknowledged too**, with no meaningful data. *Later* is a
-  requirement, not just a description: [MEMORY](../src/memory/README.md) needs
-  at least one cycle between accepting a request and acknowledging it. A slave
-  that answers in the same cycle was built and measured, and rejected — see
-  [Optimizations](#optimizations).
+* **Request completed.** The master keeps `wb_cyc_o` asserted and the slave
+  later pulses `wb_ack_i`, once per accepted request. For a read it drives the
+  result onto `wb_data_i` in that same cycle.  **Writes are acknowledged too**,
+  with no meaningful data. *Later* is a requirement, not just a description:
+  [MEMORY](../src/memory/README.md) needs at least one cycle between accepting a
+  request and acknowledging it. A slave that answers in the same cycle was built
+  and measured, and rejected — see [Optimizations](#optimizations).
 
 Because acknowledgements are just pulses carrying no identifying information,
 and because several requests may be outstanding at once, the master has to
