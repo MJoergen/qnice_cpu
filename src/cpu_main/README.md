@@ -526,10 +526,9 @@ type t_prep2wr is record                        -- PREPARE -> WRITE
    ...                                          -- the twelve above, unchanged
    src_val_pc  : std_logic_vector(15 downto 0); -- Register value, PC in for R15
    dst_val_pc  : std_logic_vector(15 downto 0);
-   r14         : std_logic_vector(15 downto 0);
+   r14         : std_logic_vector(15 downto 0); -- Also the ALU's flags input
    alu_oper    : std_logic_vector(3 downto 0);
    alu_ctrl    : std_logic_vector(5 downto 0);
-   alu_flags   : std_logic_vector(15 downto 0);
    alu_src_val : std_logic_vector(15 downto 0);
    alu_dst_val : std_logic_vector(15 downto 0);
 end record t_prep2wr;
@@ -753,9 +752,10 @@ structural, and worth understanding before anyone adds it back:
 
 Put together: the `r14` value arriving at WRITE has already absorbed any write
 WRITE itself made. `prep_stage_i.r14` is therefore used directly, and it feeds
-only the conditional-branch decision (`update_reg`). The ALU takes its flags
-from `prep_stage_i.alu_flags`, which PREPARE latched from the same source in the
-same cycle — the two are always bit-identical.
+both readers in WRITE — the conditional-branch decision (`update_reg`) and the
+ALU's `alu_flags_i`. There used to be a separate `alu_flags` element for the
+second, which PREPARE latched from the same source in the same cycle and which
+was therefore always bit-identical; the two have been coalesced.
 
 ## Pipeline flush
 Any update of the Program Counter invalidates whatever DECODE and PREPARE have

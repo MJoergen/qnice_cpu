@@ -174,10 +174,10 @@ package cpu_constants is
    -- R15 substituted, memory responses and immediates selected, ALU inputs
    -- prepared.
    --
-   -- NOTE: 'r14' and 'alu_flags' are the same value on this link. PREPARE
-   -- latches both from seq_stage_i.r14 in the same cycle; WRITE reads 'r14' for
-   -- the branch condition and 'alu_flags' for the ALU. Left as two elements
-   -- because the two readers are unrelated, not because the values differ.
+   -- NOTE: 'r14' serves two unrelated readers in WRITE -- the conditional-branch
+   -- decision and the ALU's flags input. It used to be two elements, 'r14' and
+   -- 'alu_flags', which PREPARE latched from seq_stage_i.r14 in the same cycle
+   -- and which were therefore always bit-identical. One element, read twice.
 
    type t_prep2wr is record
       microcode   : std_logic_vector(11 downto 0);
@@ -195,10 +195,9 @@ package cpu_constants is
       early_jmp   : std_logic;
       src_val_pc  : std_logic_vector(15 downto 0); -- Register value, PC swapped in for R15
       dst_val_pc  : std_logic_vector(15 downto 0); -- Register value, PC swapped in for R15
-      r14         : std_logic_vector(15 downto 0);
+      r14         : std_logic_vector(15 downto 0); -- Also the ALU's flags input
       alu_oper    : std_logic_vector(3 downto 0);
       alu_ctrl    : std_logic_vector(5 downto 0);
-      alu_flags   : std_logic_vector(15 downto 0);
       alu_src_val : std_logic_vector(15 downto 0);
       alu_dst_val : std_logic_vector(15 downto 0);
    end record t_prep2wr;

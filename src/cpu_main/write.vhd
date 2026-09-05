@@ -91,7 +91,7 @@ begin
          alu_ctrl_i      => prep_stage_i.alu_ctrl,
          alu_src_val_i   => prep_stage_i.alu_src_val,
          alu_dst_val_i   => prep_stage_i.alu_dst_val,
-         alu_flags_i     => prep_stage_i.alu_flags,
+         alu_flags_i     => prep_stage_i.r14,
          alu_res_val_o   => alu_res_val,
          alu_res_flags_o => alu_res_flags
       ); -- i_alu

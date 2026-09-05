@@ -39,7 +39,6 @@ architecture synthesis of prepare is
 
    signal alu_oper    : std_logic_vector(3 downto 0);
    signal alu_ctrl    : std_logic_vector(5 downto 0);
-   signal alu_flags   : std_logic_vector(15 downto 0);
    signal alu_src_val : std_logic_vector(15 downto 0);
    signal alu_dst_val : std_logic_vector(15 downto 0);
 
@@ -75,9 +74,8 @@ begin
    -- ALU
    ------------------------------------------------------------
 
-   alu_oper  <= seq_stage_i.inst(R_OPCODE);
-   alu_ctrl  <= seq_stage_i.inst(R_CTRL_CMD);
-   alu_flags <= seq_stage_i.r14;
+   alu_oper <= seq_stage_i.inst(R_OPCODE);
+   alu_ctrl <= seq_stage_i.inst(R_CTRL_CMD);
    -- Reading R15 as an ordinary operand.
    --
    -- The working Program Counter lives in the FETCH stage; the register file's
@@ -159,7 +157,6 @@ begin
             wr_stage_o.dst_val_pc  <= dst_val_pc;
             wr_stage_o.alu_oper    <= alu_oper;
             wr_stage_o.alu_ctrl    <= alu_ctrl;
-            wr_stage_o.alu_flags   <= alu_flags;
             wr_stage_o.alu_src_val <= alu_src_val;
             wr_stage_o.alu_dst_val <= alu_dst_val;
          end if;

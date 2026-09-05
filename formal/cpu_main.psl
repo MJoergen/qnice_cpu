@@ -182,7 +182,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    signal f_addc_ovf    : std_logic;
    signal f_addc_sr_out : std_logic_vector(15 downto 0);
 
-   f_addc_sr_in <= prep2wr_stage.alu_flags;
+   f_addc_sr_in <= prep2wr_stage.r14;
 
    f_addc_sum <= ("0" & c_dst_val) + ("0" & c_src_val) + 1
                  when f_addc_sr_in(work.cpu_constants.C_SR_C) = '1' else
@@ -247,7 +247,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    f_prep2wr_sr_fresh : assert always {rst_i = '0' and
                                        (prep2wr_valid = '0' or prep2wr_ready = '1')} |=>
                                       {rst_i = '1' or prep2wr_valid = '0' or
-                                       prep2wr_stage.alu_flags = f_r14_prev};
+                                       prep2wr_stage.r14 = f_r14_prev};
 
 
    ------------------------------------------------------------------
@@ -441,7 +441,7 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    p_add_sr_out : process (all)
    begin
-      f_add_sr_out <= prep2wr_stage.alu_flags or X"0001";
+      f_add_sr_out <= prep2wr_stage.r14 or X"0001";
       f_add_sr_out(work.cpu_constants.C_SR_V) <= f_add_ovf;
       f_add_sr_out(work.cpu_constants.C_SR_N) <= f_add_sum(15);
       f_add_sr_out(work.cpu_constants.C_SR_Z) <= f_add_zero;
