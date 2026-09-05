@@ -23,7 +23,29 @@ set_property -dict { PACKAGE_PIN V12 IOSTANDARD LVCMOS33 } [get_ports { led_o[14
 set_property -dict { PACKAGE_PIN V11 IOSTANDARD LVCMOS33 } [get_ports { led_o[15] }];    # LED15
 
 # Clock definition
-create_clock -name sys_clk -period 7.25 [get_ports {clk_i}];
+#
+# 7.35 ns, not the 7.25 ns this design was constrained at until now.
+#
+# The worst setup path here is not one path but a dense population of
+# near-identical ones -- 103 within 0.2 ns of each other -- all closing the same
+# loop: PREPARE's ALU operand registers -> the ALU -> the Status Register and
+# the register file's write forwarding -> back into PREPARE. At 7.25 ns that
+# whole population sat within a few hundredths of a nanosecond of zero, which
+# made the sign of WNS a placement outcome rather than a logic one. Measured on
+# ONE unchanged netlist across five place_design directives, WNS ranged from
+# +0.028 to -0.028 ns; edits nowhere near the path have moved it by as much as
+# 0.284 ns.
+#
+# The practical consequence was that "make system.bit" had become a coin flip:
+# a pair of source-level refactors that added no logic at all (they left the
+# design 14 LUTs SMALLER) were enough to take it from +0.025 ns to -0.018 ns and
+# turn the build red. The extra 0.10 ns costs 1.4% of clock rate and buys back a
+# margin the design can actually be edited in.
+#
+# Timing numbers quoted in the documentation that cite a 7.25 ns constraint were
+# measured before this change and have been left as measured; see doc/README.md,
+# "The critical path".
+create_clock -name sys_clk -period 7.35 [get_ports {clk_i}];
 
 # Configuration Bank Voltage Select
 set_property CFGBVS VCCO [current_design]

@@ -794,7 +794,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `e08cea1-dirty`.
+Measured with Vivado 2022.2 on commit `ccb3eb7-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -811,21 +811,45 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  963 |     63400 | 1.52 |
-| Slice Registers |  606 |    126800 | 0.48 |
+| Slice LUTs      |  950 |     63400 | 1.50 |
+| Slice Registers |  603 |    126800 | 0.48 |
 | Slices          |  393 |     15850 | 2.48 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 7.25 ns constraint: **WNS +0.025 ns**, no failing endpoints. The
+Timing at the 7.35 ns constraint: **WNS +0.087 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
+
+**That constraint was 7.25 ns until measurement forced it up**, so timing
+figures quoted elsewhere on this page were taken at 7.25 and have been left as
+measured. The reason for the move is the one
+[The critical path](#the-critical-path) describes, taken to its conclusion: the
+worst path is not a path but a population of near-identical ones — 103 within
+0.2 ns — all closing the same PREPARE → ALU → Status Register →
+register-file-forwarding → PREPARE loop. At 7.25 ns that population straddled
+zero, so the *sign* of WNS was decided by placement rather than by logic:
+measured on one unchanged netlist across five `place_design` directives, WNS
+ranged from +0.028 to −0.028 ns. Two source-level refactors that added no logic
+at all — they left the design 14 LUTs smaller — were enough to take the shipping
+build from +0.025 ns to −0.018 ns, i.e. to stop it emitting a bitstream.
+
+Shortening the loop was tried first, and does not work. Flattening PREPARE's
+operand muxing so the forwarded value reaches its register through one level
+instead of two produced a bit-identical netlist: synthesis was already doing it.
+More decisively, the third-worst path at 7.25 ns ended *at* the Status Register
+with none of the forwarding in it and still measured −0.016 ns, so removing the
+entire forwarding tail was worth 0.002 ns — the depth is the ALU's own cone to
+the Z flag, which needs a 16-input reduction where N and C need one bit. And the
+next unrelated path (`wr_stage_o[addr]` into the ICACHE flush) sat only 0.064 ns
+behind, capping anything this direction could ever return. 0.10 ns of period
+costs 1.4% of clock rate and buys a margin the design can be edited in.
 
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_dst_val][13]` to
-`i_prepare/wr_stage_o_reg[dst_val][4]`: 8 logic levels, with 80% of the delay
-in routing rather than logic.
+The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][8]` to
+`i_prepare/wr_stage_o_reg[alu_src_val][3]`: 9 logic levels, with 78% of the
+delay in routing rather than logic.
 <!-- end -->
 
 **In the build measured above, the worst path is the one this section
@@ -973,13 +997,13 @@ written:
 | FETCH           |   63 |  92 |
 | ICACHE          |   44 |  66 |
 | DECODE          |   78 |  77 |
-| SEQUENCER       |    9 |   2 |
+| SEQUENCER       |   10 |   2 |
 | PREPARE         |   70 | 131 |
 | WRITE           |  465 |   0 |
 | REGISTERS       |  166 | 142 |
 | MEMORY          |   59 |  74 |
 | Glue            |   17 |   1 |
-| **CPU total**   |  971 | 585 |
+| **CPU total**   |  972 | 585 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
@@ -998,7 +1022,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#why-write-needs-no-status-register-bypass).
 
-The two tables do not add up to each other (971 vs 963 LUTs). That is expected,
+The two tables do not add up to each other (972 vs 950 LUTs). That is expected,
 and note that the *sign* of the gap is not stable — it has landed both ways
 round across builds. The per-module figure comes first and stops after synthesis
 with `-flatten_hierarchy none`, which forbids optimisation across module

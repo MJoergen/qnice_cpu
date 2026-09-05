@@ -459,6 +459,16 @@ consequence — logic nowhere near it can still move the slack by perturbing pla
 flip-flop added next to ICACHE for the HALT gate once cost 0.284 ns, the whole margin, without
 appearing on the path; re-measure after an unrelated edit rather than assuming it cannot matter.
 
+**The clock constraint is 7.35 ns** (`hw/system.xdc`), and was 7.25 ns until that placement
+sensitivity made `make system.bit` a coin flip: two refactors that added no logic — the design came
+out 14 LUTs *smaller* — moved WNS from +0.025 to −0.018 ns and stopped the build emitting a
+bitstream, while five `place_design` directives on one unchanged netlist spanned +0.028 to
+−0.028 ns. Every timing figure quoted in this file and in the per-module READMEs predates the change
+and was measured at 7.25 ns; they have deliberately been left as measured, so read them as a record
+of that experiment rather than as the current margin. Shortening the critical loop was tried before
+relaxing the constraint and does not pay — the reasoning and the measurements are in
+doc/README.md's Utilization section. Current build: **WNS +0.087 ns**, no failing endpoints.
+
 The script rewrites **numbers only** — the surrounding analysis is a hand-written design argument.
 Every substitution is anchored on an exact pattern and a missing anchor is a hard error, so
 rewording one of those sentences breaks `make utilization` loudly rather than silently leaving a
