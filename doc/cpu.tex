@@ -48,8 +48,9 @@
       },
       % Thin arrows: everything that is not the pipeline data path.
       wire/.style   = {draw, -{Stealth[length=2mm, width=2mm]}},
-      biwire/.style = {draw, {Stealth[length=2mm, width=2mm]}-{Stealth[length=2mm, width=2mm]}},
-      buslabel/.style = {midway, above, font = \sffamily\scriptsize}
+      % "above" or "below" is chosen per arrow, so that the two labels of a
+      % bus pair sit outside the pair rather than in the gap between them.
+      buslabel/.style = {midway, font = \sffamily\scriptsize}
    ]
 
    %% ---------------------------------------------------------------
@@ -127,12 +128,25 @@
    %% The two Wishbone buses
    %% ---------------------------------------------------------------
 
-   \coordinate (busx) at ([xshift = 20mm] memory.east);
+   % Each bus is drawn as the pair it is: the address leaves the CPU, the data
+   % comes back. The two arrows of a pair are 3mm either side of the edge
+   % anchor they would otherwise share, which keeps both inside the 11mm height
+   % of the box they attach to.
+   \coordinate (busx)  at ([xshift = 20mm] memory.east);
+   \coordinate (ibusl) at (fetch.east);
+   \coordinate (ibusr) at (busx |- fetch.east);
+   \coordinate (dbusl) at (memory.east |- write.east);
+   \coordinate (dbusr) at (busx |- write.east);
 
-   \draw[wire]   (busx |- fetch.east) -- (fetch.east)
-      node[buslabel] {Instruction bus};
-   \draw[biwire] (memory.east |- write.east) -- (busx |- write.east)
-      node[buslabel] {Data bus};
+   \draw[wire] ([yshift =  3mm] ibusl) -- ([yshift =  3mm] ibusr)
+      node[buslabel, above] {Instruction address};
+   \draw[wire] ([yshift = -3mm] ibusr) -- ([yshift = -3mm] ibusl)
+      node[buslabel, below] {Instruction data};
+
+   \draw[wire] ([yshift =  3mm] dbusl) -- ([yshift =  3mm] dbusr)
+      node[buslabel, above] {Memory address};
+   \draw[wire] ([yshift = -3mm] dbusr) -- ([yshift = -3mm] dbusl)
+      node[buslabel, below] {Memory data};
 
 \end{tikzpicture}
 
