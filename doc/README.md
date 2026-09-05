@@ -1,12 +1,14 @@
 # A pipelined implementation of the QNICE CPU
 
 ## Architecture
-This implementation is essentially a four-stage pipeline consisting of:
+This implementation is essentially a six-stage pipeline consisting of:
 
-* FETCH: Fetches from the instruction memory and presents up to two words
-  (instruction plus immediate operand) at a time to the DECODE stage.
+* FETCH: Fetches one word from the instruction memory.
+* ICACHE: Presents up to two words (instruction plus immediate operand) at a
+  time to the DECODE stage.
 * DECODE: Translates the instruction into a list of up to three
   micro-operations, and reads the operand registers.
+* SEQUENCER: Forwards one micro-operation at a time to the PREPARE stage.
 * PREPARE: Prepares the input operands for the ALU.
 * WRITE: Contains the ALU and performs write-back of the result to register
   and/or memory.
@@ -18,17 +20,17 @@ See the following block diagram:
 It is drawn by [cpu.tex](cpu.tex) and rendered by `make diagrams`; edit the LaTeX
 source rather than the `.png`.
 
+The ICACHE between FETCH and DECODE buffers up to two consecutive instruction
+words, which is what lets DECODE be offered an instruction and its immediate
+operand together. See [icache.vhd](../src/icache/icache.vhd).
+
 Between DECODE and PREPARE sits the [SEQUENCER](../src/cpu_main/sequencer.vhd),
 which issues DECODE's list of micro-operations one per clock cycle. It is not a
 pipeline stage -- it holds no payload registers and adds no latency -- but a
 one-to-many adapter on the link between the two, and `cpu_main.vhd` instantiates
 it there. The dotted outline in the diagram is the CPU_MAIN entity, which
-exists mainly to give the formal verification of DECODE, PREPARE and WRITE a
-single top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
-
-The ICACHE between FETCH and DECODE buffers up to two consecutive instruction
-words, which is what lets DECODE be offered an instruction and its immediate
-operand together. See [icache.vhd](../src/icache/icache.vhd).
+exists mainly to give the formal verification of DECODE, SEQUENCER, PREPARE and
+WRITE a single top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
 
 The block diagram contains two additional blocks:
 * REGISTERS: Contains the CPU registers and supports two read ports (connected
