@@ -6,9 +6,9 @@
 ; must give the address of the next word to be fetched, and the source and
 ; destination paths must agree with each other.
 ;
-; In this implementation the Program Counter lives in the FETCH stage, and the
-; register file's R15 copy is only written when an instruction targets R15.
-; Reading R15 as an operand therefore has to be special-cased in PREPARE.
+; In this implementation the Program Counter lives in FETCH, and the register
+; file's R15 copy is only written when an instruction targets R15. Reading R15
+; as an operand therefore has to be special-cased in PREPARE.
 ;
 ; Every failed sub-test branches to its own HALT. Success falls through to EXIT.
 

@@ -85,7 +85,7 @@ architecture synthesis of two_stage_fifo is
 
 begin
 
-   -- Occupancy is reported from the REGISTERS, not from the gated s_ready_o
+   -- Occupancy is reported from the registers, not from the gated s_ready_o
    -- output. Deriving it from s_ready_o would make a flush cycle report the
    -- FIFO as full, since the gate forces s_ready_o low; the stored occupancy
    -- has not actually changed at that point.

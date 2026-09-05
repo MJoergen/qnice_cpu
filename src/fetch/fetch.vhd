@@ -3,17 +3,17 @@
 -- This unit has four interfaces:
 -- 1. Sending read requests to WISHBONE (with possible backpressure)
 -- 2. Receiving read responses from WISHBONE
--- 3. Sending instructions to DECODE stage (with possible backpressure)
--- 4. Receiving a new PC from the WRITE stage
+-- 3. Sending instructions to DECODE (with possible backpressure)
+-- 4. Receiving a new PC from WRITE
 --
 -- THEORY OF OPERATION
 -- The unit speculatively fetches a linear sequence of instructions starting at
--- the address most recently supplied by the WRITE stage. Each WISHBONE read
--- request reserves one "slot". A slot is allocated when the request is issued
--- (STB asserted) and released when the corresponding instruction word is
--- handed over to the DECODE stage. At most C_MAX_PENDING slots may be in use
--- at any time, which bounds the occupancy of both internal FIFOs and therefore
--- guarantees that neither of them can ever overflow.
+-- the address most recently supplied by WRITE. Each WISHBONE read request
+-- reserves one "slot". A slot is allocated when the request is issued (STB
+-- asserted) and released when the corresponding instruction word is handed
+-- over to DECODE. At most C_MAX_PENDING slots may be in use at any time, which
+-- bounds the occupancy of both internal FIFOs and therefore guarantees that
+-- neither of them can ever overflow.
 --
 -- The WISHBONE interface runs in pipelined mode: STB is asserted for one clock
 -- cycle per request (held until STALL is deasserted), whereas CYC is held high
@@ -42,7 +42,7 @@
 --    backpressure and takes effect immediately: everything already fetched is
 --    abandoned, both internal FIFOs are cleared, and fetching restarts at
 --    dc_addr_i.
--- b) The WRITE stage MUST supply a new PC (dc_valid_i) before any fetched
+-- b) WRITE MUST supply a new PC (dc_valid_i) before any fetched
 --    instruction is meaningful. wb_addr_o is reset to zero, so without a new
 --    PC the unit will start fetching from address 0.
 -- c) The attached WISHBONE slave MUST NOT assert ACK after CYC has been
@@ -54,8 +54,8 @@
 --    on the bus identifies which request an ACK belongs to, so discarding the
 --    acknowledgements owed to an abandoned request means discarding the next
 --    wb_stale of them. Against a slave that completed requests out of order
---    this would drop the wrong responses. The MEMORY module makes the same
---    assumption for the same reason; see src/memory/README.md.
+--    this would drop the wrong responses. MEMORY makes the same assumption
+--    for the same reason; see src/memory/README.md.
 --
 -- RESET
 -- All state is synchronously reset by rst_i. No clock domain crossing is
@@ -80,7 +80,7 @@ entity fetch is
       wb_ack_i   : in  std_logic;
       wb_data_i  : in  std_logic_vector(15 downto 0);
 
-      -- Send instruction to DECODE (i.e. to the ICACHE)
+      -- Send instruction to DECODE (i.e. to ICACHE)
       dc_valid_o : out std_logic := '0';
       dc_ready_i : in  std_logic;
       dc_addr_o  : out std_logic_vector(15 downto 0);
@@ -120,7 +120,7 @@ architecture synthesis of fetch is
    signal wb_stale : natural range 0 to C_MAX_PENDING := 0;
 
    -- Slots allocated: requests issued but whose instruction word has not yet
-   -- been delivered to the DECODE stage. Invariant:
+   -- been delivered to DECODE. Invariant:
    --    wb_pending = <STB waiting> + <address FIFO occupancy>
    --    <address FIFO occupancy> = <data buffer occupancy> + wb_outstanding
    signal wb_pending : natural range 0 to 3 := 0;
@@ -203,7 +203,7 @@ begin
             end if;
          end if;
 
-         -- 3. The DECODE stage accepted an instruction, releasing its slot.
+         -- 3. DECODE accepted an instruction, releasing its slot.
          if dc_accept = '1' then
             pending_v := pending_v - 1;
          end if;

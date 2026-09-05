@@ -1,33 +1,32 @@
 # REGISTERS module
 
 This module contains all the registers in the CPU. It has two read ports and a
-single write port. The read ports are *addressed* by the DECODE stage, but
-because the read latency is one clock cycle the values arrive when the
-instruction has already moved on, so they are wired to the SEQUENCER, which
-joins them onto the pipeline's stage record (see
-[cpu_main/README.md](../cpu_main/README.md#between-decode-the-sequencer-and-registers)).
-The write port is connected to the WRITE stage.
+single write port. The read ports are *addressed* by DECODE, but because the
+read latency is one clock cycle the values arrive when the instruction has
+already moved on, so they are wired to SEQUENCER, which joins them onto the
+pipeline's stage record (see
+[cpu_main/README.md](../cpu_main/README.md#between-decode-sequencer-and-registers)).
+The write port is connected to WRITE.
 
 The only register that is treated in a special way is the processor Status
 Register (R14). This is because this register is usually written to at the end
 of each instruction together with any optional register writes.
 
 The Stack Pointer (R13) is treated like a normal register (this is handled in
-the DECODE stage). The Program Counter (R15) has a slot in the upper
-register bank like any other register, and the WRITE stage writes it whenever an
-instruction targets R15 — that is how a branch updates the PC. But it is *not*
-the working Program Counter: that resides in the FETCH stage, which increments
-it without telling the register file. The R15 slot here is therefore stale
-during sequential execution, and must never be used as an operand value; the
-PREPARE stage substitutes the real PC instead (see
-[cpu_main/README.md](../cpu_main/README.md#reading-r15)).
+DECODE). The Program Counter (R15) has a slot in the upper register bank like
+any other register, and WRITE writes it whenever an instruction targets R15 —
+that is how a branch updates the PC. But it is *not* the working Program
+Counter: that resides in FETCH, which increments it without telling the
+register file. The R15 slot here is therefore stale during sequential
+execution, and must never be used as an operand value; PREPARE substitutes the
+real PC instead (see [cpu_main/README.md](../cpu_main/README.md#reading-r15)).
 
 
 ## Interface
-The top-level interface of the REGISTERS module is as follows:
+The top-level interface of REGISTERS is as follows:
 
 ```
--- Read interface: addresses from the DECODE stage, values to the SEQUENCER
+-- Read interface: addresses from DECODE, values to SEQUENCER
 rd_en_i     : in  std_logic;
 src_reg_i   : in  std_logic_vector(3 downto 0);
 src_val_o   : out std_logic_vector(15 downto 0);
@@ -35,7 +34,7 @@ dst_reg_i   : in  std_logic_vector(3 downto 0);
 dst_val_o   : out std_logic_vector(15 downto 0);
 sr_val_o    : out std_logic_vector(15 downto 0);
 
--- Write interface, connected to WRITE stage
+-- Write interface, connected to WRITE
 wr_sr_en_i  : in  std_logic;
 wr_sr_val_i : in  std_logic_vector(15 downto 0);
 wr_en_i     : in  std_logic;
@@ -64,7 +63,7 @@ write. This is shown in the diagram below.
 ![Write-Before-Read](write_before_read.png)
 
 Here we see the execution of the `MOVE @--R1, @R1` instruction.
-* In the first clock cycle the DECODE stage reads from register 1.
+* In the first clock cycle DECODE reads from register 1.
 * In the second clock cycle the result of the read operation (`0AF6`) is
   presented on `src_val_o` and `dst_val_o`. Simultaneously, a write (`0AF5`) is
   being performed to register 1, but no new read is issued.
@@ -122,8 +121,8 @@ the value arrives carrying only a register number, and lands on the new page.
 `R14` can be written through two different ports: the ordinary write port
 (`wr_en_i`/`wr_reg_i`/`wr_val_i`), used when an instruction targets `R14`
 explicitly, and the dedicated Status Register port
-(`wr_sr_en_i`/`wr_sr_val_i`), used by the WRITE stage to update the flags at the
-end of nearly every instruction.
+(`wr_sr_en_i`/`wr_sr_val_i`), used by WRITE to update the flags at the end of
+nearly every instruction.
 
 Write-Before-Read applies to **both** ports. Reading `R14` as an ordinary
 register — for instance the `MOVE R14, R9` that follows an `ADDC` — must return
@@ -180,8 +179,8 @@ never differed once across all seven test programs of the time at full fetch
 throughput, and `formal/registers.psl` passes without it.
 
 The `or X"0001"` on term 2 mirrors `p_sr` and `sr_val_o`, which force bit 0 of
-the Status Register to `1`; it is redundant in practice, since the WRITE stage
-never drives `wr_sr_val_i(0)` low (asserted by `f_r14_bit0` in
+the Status Register to `1`; it is redundant in practice, since WRITE never
+drives `wr_sr_val_i(0)` low (asserted by `f_r14_bit0` in
 `formal/cpu_main.psl`).
 
 

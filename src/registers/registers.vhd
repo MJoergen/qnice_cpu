@@ -22,7 +22,7 @@ entity registers is
       clk_i       : in  std_logic;
       rst_i       : in  std_logic;
       -- Read interface (two simultaneous read ports). DECODE drives the
-      -- addresses; the values arrive a cycle later, at the SEQUENCER.
+      -- addresses; the values arrive a cycle later, at SEQUENCER.
       rd_en_i     : in  std_logic;
       src_reg_i   : in  std_logic_vector(3 downto 0); -- Only valid when rd_en_i = '1'
       src_val_o   : out std_logic_vector(15 downto 0);
@@ -247,10 +247,10 @@ begin
    --
    -- Why it cannot help, which is worth seeing before reaching for it again:
    -- the late-arriving select here is the FIRST term, not the third.
-   -- wr_en_i/wr_reg_i/wr_val_i come combinationally out of the WRITE stage,
-   -- wr_val_i being the ALU result itself. The third term's inputs are already
-   -- register outputs, so precomputing it removes a level of logic from a
-   -- select that had slack to spare.
+   -- wr_en_i/wr_reg_i/wr_val_i come combinationally out of WRITE, wr_val_i
+   -- being the ALU result itself. The third term's inputs are already register
+   -- outputs, so precomputing it removes a level of logic from a select that
+   -- had slack to spare.
    --
    -- Measured anyway, since timing here is brittle enough that reasoning is
    -- not proof: WNS +0.260 ns -> +0.214 ns, i.e. no improvement, and the

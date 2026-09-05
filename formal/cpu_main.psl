@@ -116,13 +116,13 @@ vunit i_cpu_main(cpu_main(synthesis))
                                    f_move_reg_reg = '1' and
                                    c_src_reg /= 15} |-> {f_reg_read = '1'};
 
-   -- (2) Whenever a MOVE <REG>,<REG> completes in the WRITE stage, it must
-   -- write the destination register with the value read for the source, update
-   -- the flags, and issue no memory request.
+   -- (2) Whenever a MOVE <REG>,<REG> completes in WRITE, it must write the
+   -- destination register with the value read for the source, update the
+   -- flags, and issue no memory request.
    --
    -- The rst_i guard is required: during reset prep2wr_valid is unconstrained
-   -- and the WRITE stage is forcing its reset-time write of R15, which matches
-   -- the trigger by accident when c_src_reg = c_dst_reg = 0.
+   -- and WRITE is forcing its reset-time write of R15, which matches the
+   -- trigger by accident when c_src_reg = c_dst_reg = 0.
    signal f_mov_in_write : std_logic;
    f_mov_in_write <= '1' when prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_MOVE and
                               prep2wr_stage.inst(11 downto 8) = c_src_reg and
@@ -360,9 +360,9 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    -- The three memory op bits are mutually exclusive by construction of the
    -- microcode ROM -- one access per micro-op is the whole reason instructions
-   -- are decomposed. Nothing downstream re-checks it, and the MEMORY module's
-   -- own formal environment assumes it (f_mreq_op in memory.psl), so assert it
-   -- here where it is actually produced.
+   -- are decomposed. Nothing downstream re-checks it, and MEMORY's own formal
+   -- environment assumes it (f_mreq_op in memory.psl), so assert it here where
+   -- it is actually produced.
    --
    -- The rst_i guard is the same one f_mov_r_r_write needs: during reset
    -- prep2wr_valid and the stage record are both unconstrained, so the op field
@@ -614,10 +614,10 @@ vunit i_cpu_main(cpu_main(synthesis))
    --
    -- SOUNDNESS: the redirect only ever goes out for an instruction that really
    -- is such a branch, and only on the cycle DECODE accepts it. The
-   -- fetch_ready_o term is the load-bearing one: the ICACHE's soft flush is
-   -- driven from this signal and discards everything it holds, so a redirect
-   -- raised on a cycle where the branch is NOT taken into DECODE would throw
-   -- the branch itself away.
+   -- fetch_ready_o term is the load-bearing one: ICACHE's soft flush is driven
+   -- from this signal and discards everything it holds, so a redirect raised
+   -- on a cycle where the branch is NOT taken into DECODE would throw the
+   -- branch itself away.
    f_early_sound : assert always
       {early_valid_o = '1'}
       |-> {fetch_valid_i = '1' and fetch_ready_o = '1' and

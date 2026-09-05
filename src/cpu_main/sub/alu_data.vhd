@@ -97,8 +97,8 @@ begin
    -- of them at once puts the whole 16-way mux, three levels of logic, in
    -- series with the adder. Worse, the Zero flag is a 16-bit reduction of this
    -- result (see alu_flags.vhd), so those levels land on the CPU's critical
-   -- path: ALU -> Status Register -> back into the PREPARE stage's r14, which
-   -- must close in one cycle.
+   -- path: ALU -> Status Register -> back into PREPARE's r14, which must close
+   -- in one cycle.
    --
    -- Muxing everything else first, in parallel with the addition, and then
    -- selecting between just those two leaves the adder facing a single 2:1 mux.

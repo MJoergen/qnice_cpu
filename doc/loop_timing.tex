@@ -28,8 +28,8 @@
 % and WRITE/prep_valid_i + prep_stage_i.addr. A low line means the stage is
 % empty in that cycle.
 %
-% WRITE/prep_stage_i.microcode is the single 12-bit micro-operation the
-% SEQUENCER selected out of DECODE's list, i.e. the one being executed. 0x084 is
+% WRITE/prep_stage_i.microcode is the single 12-bit micro-operation SEQUENCER
+% selected out of DECODE's list, i.e. the one being executed. 0x084 is
 % MEM_READ_SRC + REG_MOD_SRC, 0x828 is LAST + MEM_WAIT_SRC + REG_WRITE, and
 % 0x808 is LAST + REG_WRITE.
 

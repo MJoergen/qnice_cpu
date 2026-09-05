@@ -80,8 +80,8 @@ architecture synthesis of cpu is
    signal redirect_addr  : std_logic_vector(15 downto 0);
 
    -- DECODE reads from the register file, but the values arrive a clock cycle
-   -- later and are joined onto the pipeline by the SEQUENCER, one stage down.
-   -- See the header of cpu_main/sequencer.vhd.
+   -- later and are joined onto the pipeline by SEQUENCER, one stage down. See
+   -- the header of cpu_main/sequencer.vhd.
    signal decode2reg_rd_en   : std_logic;
    signal decode2reg_src_reg : std_logic_vector(3 downto 0);
    signal decode2reg_dst_reg : std_logic_vector(3 downto 0);
@@ -156,7 +156,7 @@ begin
    -- Instruction ICACHE
    ------------------------------------------------------------
 
-   -- The hard flush, from WRITE, which must withdraw whatever the ICACHE is
+   -- The hard flush, from WRITE, which must withdraw whatever ICACHE is
    -- offering DECODE in the same cycle. The early redirect from DECODE is the
    -- soft one, and deliberately must not: DECODE raises it because it is
    -- accepting the branch this cycle. See contract (d) in icache.vhd.
@@ -193,9 +193,9 @@ begin
    -- to follow it in memory. Gating here means the HALT is the last instruction
    -- that ever enters the pipeline, so it is also the last one to retire.
    --
-   -- Both directions of the handshake are gated by the same signal, so the
-   -- ICACHE and DECODE always agree on whether a beat was accepted. Only a
-   -- reset restarts execution.
+   -- Both directions of the handshake are gated by the same signal, so ICACHE
+   -- and DECODE always agree on whether a beat was accepted. Only a reset
+   -- restarts execution.
    icache2decode_valid_gated          <= icache2decode_valid          and not halt_fetched;
    icache2decode_ready_gated          <= icache2decode_ready          and not halt_fetched;
    icache2decode_double_consume_gated <= icache2decode_double_consume and not halt_fetched;

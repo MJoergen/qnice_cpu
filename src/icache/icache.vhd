@@ -1,13 +1,12 @@
--- A small instruction buffer sitting between the instruction FETCH stage and
--- the DECODE stage.
+-- A small instruction buffer sitting between FETCH and DECODE.
 --
 -- THEORY OF OPERATION
--- The module buffers up to two consecutive instruction words. The DECODE
--- stage needs to see two words at once, because an instruction may be followed
--- by an immediate operand occupying the following word. DECODE cannot know
--- whether the second word is an operand until it has decoded the first, so it
--- reports back - combinatorially, in the same cycle as the handshake - how
--- many words it actually consumed:
+-- The module buffers up to two consecutive instruction words. DECODE needs to
+-- see two words at once, because an instruction may be followed by an
+-- immediate operand occupying the following word. DECODE cannot know whether
+-- the second word is an operand until it has decoded the first, so it reports
+-- back - combinatorially, in the same cycle as the handshake - how many words
+-- it actually consumed:
 --
 --    m_double_i = '0' : one word consumed  (no immediate operand)
 --    m_double_i = '1' : two words consumed (instruction plus operand)
@@ -23,8 +22,8 @@
 -- INTERFACE CONTRACTS -- these are requirements on the environment:
 --
 -- a) rst_i IS ALSO THE PIPELINE FLUSH. It must be driven by the logical OR of
---    the global reset and the FETCH stage's redirect signal (fetch.dc_valid_i),
---    exactly as the DECODE stage's reset is. This is not a convenience: when
+--    the global reset and FETCH's redirect signal (fetch.dc_valid_i),
+--    exactly as DECODE's reset is. This is not a convenience: when
 --    FETCH is redirected to a new PC it discards its own buffers, so any words
 --    still held here belong to the abandoned instruction stream and MUST be
 --    discarded in the SAME clock cycle. Failing to do so delivers one or two
@@ -49,7 +48,7 @@
 -- c) m_double_i must only be asserted when m_valid_o = '1' and m_double_o = '1'.
 --
 -- d) flush_i is a SOFT flush, and is the counterpart of rst_i for a redirect
---    that the DECODE stage itself originates (an unconditional branch with an
+--    that DECODE itself originates (an unconditional branch with an
 --    immediate target -- see "Early redirect" in cpu_main/decode.vhd). It
 --    discards the buffered words at the end of the cycle in which it is
 --    asserted, but -- unlike rst_i -- it does NOT gate m_valid_o, so the output

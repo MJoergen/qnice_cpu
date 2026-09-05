@@ -65,18 +65,18 @@ begin
 
    -- NOTE: prep_stage_i.r14 is used directly, with no bypass of this stage's own
    -- Status Register writes. There used to be one (a p_bypass process holding a
-   -- one-cycle-delayed copy of everything written to the REGISTERS module, and a
-   -- priority mux in front of prep_stage_i.r14). It was removed as dead code: a
-   -- probe on it never fired once in 8286 accepted beats of test/prog.asm, and
+   -- one-cycle-delayed copy of everything written to REGISTERS, and a priority
+   -- mux in front of prep_stage_i.r14). It was removed as dead code: a probe
+   -- on it never fired once in 8286 accepted beats of test/prog.asm, and
    -- removing it left every test program passing with the golden writes logs
    -- (test/*.writes.golden) byte-identical.
    --
    -- The reason is structural. registers.vhd forwards BOTH Status Register
-   -- write ports combinationally onto sr_val_o; the SEQUENCER joins reg_r14_i
-   -- onto the stage record as a live, unregistered signal; and this stage only
-   -- ever issues a register write on a cycle where PREPARE is simultaneously
-   -- latching a fresh beat. So the value arriving here has already absorbed the
-   -- write this stage made.
+   -- write ports combinationally onto sr_val_o; SEQUENCER joins reg_r14_i onto
+   -- the stage record as a live, unregistered signal; and this stage only ever
+   -- issues a register write on a cycle where PREPARE is simultaneously
+   -- latching a fresh beat. So the value arriving here has already absorbed
+   -- the write this stage made.
 
 
    ------------------------------------------------------------
@@ -297,7 +297,7 @@ begin
    --
    --   I1, the one in DECODE's OUTPUT register. Its operands were read a cycle
    --       ago against the old bank, and nothing latches the register file's
-   --       outputs on the way in (the SEQUENCER joins them onto the stage
+   --       outputs on the way in (SEQUENCER joins them onto the stage
    --       record as live wires, not flip-flops), so the values are already
    --       gone. Only a flush can undo that.
    --   I2, the one at DECODE's INPUT. Its read is going out in THIS cycle,
@@ -382,13 +382,13 @@ begin
    ------------------------------------------------------------
 
    -- Instruction and data memory are the same physical RAM, so a store can
-   -- land on an instruction that FETCH, the ICACHE, DECODE, or PREPARE has
-   -- already read. Nothing downstream would ever notice: the stale copy is
-   -- decoded and executed exactly as if the store had not happened. The fix is
-   -- the same flush used for a taken branch -- discard everything already read
-   -- and re-fetch from the next address, by which time the write has reached
-   -- the RAM (it is a true dual-port memory, and the re-fetch cannot get back
-   -- to the bus in the same cycle).
+   -- land on an instruction that FETCH, ICACHE, DECODE, or PREPARE has already
+   -- read. Nothing downstream would ever notice: the stale copy is decoded and
+   -- executed exactly as if the store had not happened. The fix is the same
+   -- flush used for a taken branch -- discard everything already read and
+   -- re-fetch from the next address, by which time the write has reached the
+   -- RAM (it is a true dual-port memory, and the re-fetch cannot get back to
+   -- the bus in the same cycle).
    --
    -- Doing that on EVERY store is correct but far too expensive: it puts a
    -- branch penalty on every "MOVE R0, @R1". Measured, it costs +8.5% of the
@@ -400,7 +400,7 @@ begin
    --
    --    PREPARE and DECODE hold one instruction each, <= 2 words apiece, so
    --    the word at the ICACHE output is at most next_pc + 4.
-   --    The ICACHE holds 2 words and FETCH at most C_MAX_PENDING = 2 more
+   --    ICACHE holds 2 words and FETCH at most C_MAX_PENDING = 2 more
    --    (see src/fetch/README.md), so the highest address ever requested is
    --    at most 4 beyond that.
    --

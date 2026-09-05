@@ -144,16 +144,16 @@ Four-stage pipeline: **FETCH → DECODE → PREPARE → WRITE**, plus two shared
 (2 read ports from DECODE, 1 write port from WRITE) and **MEMORY** (2 read ports from PREPARE, 1
 write port from WRITE, backed by a Wishbone bus). DECODE, PREPARE, and WRITE are combined into a
 single VHDL entity CPU_MAIN (in `src/cpu_main/cpu_main.vhd`) mainly to simplify formal
-verification of the interactions between them. CPU_MAIN also instantiates the **SEQUENCER** on
-the DECODE→PREPARE link; it is not a stage (no payload registers, no latency) but a one-to-many
+verification of the interactions between them. CPU_MAIN also instantiates **SEQUENCER** on the
+DECODE→PREPARE link; it is not a stage (no payload registers, no latency) but a one-to-many
 adapter, and it shares the two stages' flush reset. The block diagram is
 [doc/cpu.tex](doc/cpu.tex), rendered to `doc/cpu.png` by `make diagrams`.
 
 Stage-to-stage handshaking uses an AXI-style `VALID`/`READY` protocol throughout (also on the
 Wishbone bus, via `stall`/`ack`). Two independent sources of back-pressure exist: an
-instruction may expand into up to three micro-ops, and the SEQUENCER issues one per cycle while
-holding its ready low, which stalls DECODE and in turn FETCH; and the MEMORY module stalls PREPARE
-while waiting on the Wishbone bus.
+instruction may expand into up to three micro-ops, and SEQUENCER issues one per cycle while holding
+its ready low, which stalls DECODE and in turn FETCH; and MEMORY stalls PREPARE while waiting on
+the Wishbone bus.
 
 Instruction and data memory are separate interfaces (Harvard-style) but backed by the same
 physical dual-port RAM, since a program must be loadable and then executable from the same memory.
@@ -214,12 +214,11 @@ narrowing `uses_bank` fails them. See
 The core trick of this design: DECODE dynamically translates each CISC-like QNICE instruction into
 1-3 RISC-like micro-operations via a combinational ROM (`src/cpu_main/sub/microcode.vhd`), indexed
 by a 4-bit classification of the instruction (reads-from-dst / writes-to-dst / src-in-memory /
-dst-in-memory). DECODE emits that whole list in a single beat; the SEQUENCER
-(`src/cpu_main/sequencer.vhd`), instantiated by CPU_MAIN **between DECODE and PREPARE**,
-then issues it one micro-op per clock cycle. This exists because an instruction like
-`ADD @R0, @R1` needs two memory reads and one memory write, but only one memory operation is
-possible per cycle — the
-micro-ops serialize that. Each micro-op is a 12-bit word (`LAST`, `REG_MOD_SRC`, `REG_MOD_DST`,
+dst-in-memory). DECODE emits that whole list in a single beat; SEQUENCER
+(`src/cpu_main/sequencer.vhd`), instantiated by CPU_MAIN **between DECODE and PREPARE**, then
+issues it one micro-op per clock cycle. This exists because an instruction like `ADD @R0, @R1`
+needs two memory reads and one memory write, but only one memory operation is possible per cycle —
+the micro-ops serialize that. Each micro-op is a 12-bit word (`LAST`, `REG_MOD_SRC`, `REG_MOD_DST`,
 `MEM_WAIT_SRC`, `MEM_WAIT_DST`, `REG_WRITE`, `MEM_READ_SRC`, `MEM_READ_DST`, `MEM_WRITE`); the
 three register-op bits are mutually exclusive, as are the three memory-op bits. Immediate operands
 (`@R15++`) are special-cased to skip a memory read since FETCH already supplies the value inline.
@@ -229,17 +228,17 @@ to carry `REG_WRITE` with `res_reg = R15`, so the branch target reaches the PC t
 `res_other`'s `"0" & src_data_i` default. Give that arm a value of its own and every branch in the
 CPU breaks — verified by forcing it, which makes the suite stop reaching `HALT` at all. The fourth,
 reserved opcode `0xD`, is classified like `ADD` and so writes the source over the destination; that
-is unsanctioned fall-through, which is why `p_unimplemented` traps it.
-See [src/cpu_main/README.md](src/cpu_main/README.md#microcoding-of-instructions) for the full
-worked examples (`MOVE R0,R1`, `MOVE @R0,@R1`, `ADD @R0,@R1`).
+is unsanctioned fall-through, which is why `p_unimplemented` traps it. See
+[src/cpu_main/README.md](src/cpu_main/README.md#microcoding-of-instructions) for the full worked
+examples (`MOVE R0,R1`, `MOVE @R0,@R1`, `ADD @R0,@R1`).
 
 Data hazards from this pipelining (later WRITE-stage register writes vs. earlier DECODE-stage
 register reads) are handled via bypass logic described in
 [src/cpu_main/README.md](src/cpu_main/README.md#bypass), and via write-before-read semantics
-built into the REGISTERS module itself (see
-[src/registers/README.md](src/registers/README.md#operation)). Write-before-read applies to both
-`R14` write ports: the ordinary one and the dedicated SR port (`wr_sr_en_i`), the latter forwarded
-by `src_val_o`/`dst_val_o` as well. `test/prog_hazard.asm` exercises these paths directly.
+built into REGISTERS itself (see [src/registers/README.md](src/registers/README.md#operation)).
+Write-before-read applies to both `R14` write ports: the ordinary one and the dedicated SR port
+(`wr_sr_en_i`), the latter forwarded by `src_val_o`/`dst_val_o` as well. `test/prog_hazard.asm`
+exercises these paths directly.
 
 That write-before-read/bypass forwarding is also the thing to remember when writing PSL for
 `registers.vhd`: a property that predicts a forwarded `src_val_o`/`dst_val_o`/`sr_val_o` value one
@@ -269,7 +268,7 @@ see [doc/README.md](doc/README.md#self-modifying-code).
 ### Early redirect (unconditional branches)
 
 A branch normally costs **four cycles**: one to register the new PC in FETCH, one for the
-instruction memory's read latency, one in the ICACHE, and one because DECODE and PREPARE are then
+instruction memory's read latency, one in ICACHE, and one because DECODE and PREPARE are then
 empty. Measured on `prog.asm` before the early redirect below, the 731 redirects cost 3625 cycles
 of a then-15030-cycle run — **24%**.
 
@@ -288,9 +287,9 @@ assume any particular edit is what moved it.
 
 Three things are load-bearing:
 
-* **The early redirect flushes FETCH and the ICACHE only** — never DECODE or PREPARE. By the end of
-  the cycle the branch is in DECODE's output register and everything downstream is *older*, so
-  those two are the only place wrong-path instructions live. Hence `icache_rst` (from WRITE) and
+* **The early redirect flushes FETCH and ICACHE only** — never DECODE or PREPARE. By the end of the
+  cycle the branch is in DECODE's output register and everything downstream is *older*, so those
+  two are the only place wrong-path instructions live. Hence `icache_rst` (from WRITE) and
   `icache_flush` (from DECODE) are separate signals in `cpu.vhd`.
 * **The ICACHE flush must be soft.** `icache.vhd`'s `rst_i` gates `m_valid_o` combinationally, which
   is mandatory for WRITE's flush and fatal here: DECODE raises the flush *because* it is accepting
@@ -316,11 +315,10 @@ Removing FETCH's `wbi_addr_o` register — the one-cycle gap between `WRITE/fetc
 `FETCH/wb_addr_o` in the loop timing diagram — concatenates a 7.002 ns leg (PREPARE to that
 register) with a 2.698 ns one (that register to the RAM), i.e. ~9.7 ns plus a mux into a 3.625 ns
 budget; it does not fit in a full 7.25 ns period either, and it would buy one cycle per redirect,
-5.4% of the suite. Making the ICACHE cut-through merges a 4.373 ns path with a 2.558 ns (also
-half-cycle) and a 6.565 ns one. Details and numbers in doc/README.md's Optimizations section —
-read them before trying either again. **The lever that works on a branch penalty is making the
-redirect DECISION arrive earlier, not moving the register**, which is what the early redirect
-above does.
+5.4% of the suite. Making ICACHE cut-through merges a 4.373 ns path with a 2.558 ns (also
+half-cycle) and a 6.565 ns one. Details and numbers in doc/README.md's Optimizations section — read
+them before trying either again. **The lever that works on a branch penalty is making the redirect
+DECISION arrive earlier, not moving the register**, which is what the early redirect above does.
 
 ### FETCH redirect (branch penalty)
 
@@ -338,9 +336,9 @@ of unacknowledged requests past `C_MAX_PENDING`.
 Because the requests abandoned by a redirect are no longer cancelled by dropping `CYC`, they still
 owe acknowledgements; `wb_stale` counts them and `wb_rsp_accept` is gated to discard them. That
 replaces interface contract (c) with a new contract (d): **the slave must acknowledge in order**
-(the MEMORY module already assumes this). The old teardown remains for the one case that cannot be
-redirected — a request stuck on `STB` while the slave stalls, which cannot happen against the
-dual-port RAM here. See [src/fetch/README.md](src/fetch/README.md#redirect).
+(MEMORY already assumes this). The old teardown remains for the one case that cannot be redirected
+— a request stuck on `STB` while the slave stalls, which cannot happen against the dual-port RAM
+here. See [src/fetch/README.md](src/fetch/README.md#redirect).
 
 When touching `fetch.psl`, note that `f_wb_outstanding` is cleared on the design's *cancel*
 condition, not on `dc_valid_i`. Reverting that one line is silent: `f_wb_slave_ack_idle` then
@@ -458,7 +456,7 @@ It also fills in the "The critical path" note there. That path has been the same
 measured: register-to-register inside PREPARE, between two fields of `wr_stage_o`, through the ALU
 operand muxing. It is **routing-dominated** (about two thirds interconnect), which has a practical
 consequence — logic nowhere near it can still move the slack by perturbing placement. A single
-flip-flop added next to the ICACHE for the HALT gate once cost 0.284 ns, the whole margin, without
+flip-flop added next to ICACHE for the HALT gate once cost 0.284 ns, the whole margin, without
 appearing on the path; re-measure after an unrelated edit rather than assuming it cannot matter.
 
 The script rewrites **numbers only** — the surrounding analysis is a hand-written design argument.
@@ -475,7 +473,7 @@ has Vivado.
 - `src/icache/` — two-word instruction buffer between FETCH and DECODE.
 - `src/registers/` — register file (dual-port RAM based, write-before-read).
 - `src/memory/` — Wishbone-facing memory arbiter (source/destination operand buffers).
-- `src/cpu_main/` — DECODE, SEQUENCER, PREPARE, WRITE, and the `sub/` microcode ROM and ALU. The
+- `src/cpu_main/` — DECODE, SEQUENCER, PREPARE, WRITE, and the `sub/` microcode ROM and ALU.
   SEQUENCER sits beside the stages rather than in `sub/` because `cpu_main.vhd` instantiates it
   itself, on the DECODE→PREPARE link.
 - `src/sub/` — reusable elastic-pipeline building blocks, see

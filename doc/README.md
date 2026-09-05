@@ -7,11 +7,11 @@ pipeline order:
 
 * FETCH: Fetches one word from the instruction memory.
 * ICACHE: Presents up to two words (instruction plus immediate operand) at a
-  time to the DECODE stage.
+  time to DECODE.
 * DECODE: Translates the instruction into a list of up to three
   micro-operations, and reads the operand registers.
-* SEQUENCER: Forwards one micro-operation at a time to the PREPARE stage. Not a
-  stage of its own: it holds no payload registers and adds no latency.
+* SEQUENCER: Forwards one micro-operation at a time to PREPARE. Not a stage of
+  its own: it holds no payload registers and adds no latency.
 * PREPARE: Prepares the input operands for the ALU.
 * WRITE: Contains the ALU and performs write-back of the result to register
   and/or memory.
@@ -23,18 +23,18 @@ See the following block diagram:
 It is drawn by [cpu.tex](cpu.tex) and rendered by `make diagrams`; edit the LaTeX
 source rather than the `.png`.
 
-The dotted outline in the diagram is the CPU_MAIN entity, which exists mainly to
-give the formal verification of DECODE, SEQUENCER, PREPARE, and WRITE a single
-top level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
+The dotted outline in the diagram is CPU_MAIN, which exists mainly to give the
+formal verification of DECODE, SEQUENCER, PREPARE, and WRITE a single top
+level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
 
 The block diagram contains two additional blocks:
 * REGISTERS: Contains the CPU registers and supports two read ports (addressed
-  by DECODE, with the values arriving a cycle later at the SEQUENCER) and one
-  write port (connected to WRITE). Note that the working copy
-  of the Program Counter `R15` lives in the FETCH stage, not here. The register
-  file's `R15` copy is only written when an instruction targets `R15`, so it is
-  stale during sequential execution; PREPARE substitutes the real PC for either
-  operand whenever `R15` is read, in any addressing mode.
+  by DECODE, with the values arriving a cycle later at SEQUENCER) and one write
+  port (connected to WRITE). Note that the working copy of the Program Counter
+  `R15` lives in FETCH, not here. The register file's `R15` copy is only
+  written when an instruction targets `R15`, so it is stale during sequential
+  execution; PREPARE substitutes the real PC for either operand whenever `R15`
+  is read, in any addressing mode.
 * MEMORY: Interfaces to the Wishbone memory bus and supports two read ports
   (connected to PREPARE) and one write port (coming from WRITE).
 
@@ -44,12 +44,11 @@ above it. That is how every branch works; see
 [Pipeline flush](#pipeline-flush) below.
 
 The flow through the pipeline is that an instruction will spend one or two
-clock cycles in the FETCH stage (two cycles if it uses an immediate operand),
-and up to three clock cycles in DECODE -- one per micro-operation, because the
-SEQUENCER holds DECODE stalled until it has issued the last one. The
-PREPARE stage additionally waits for any memory operands to be read. The WRITE
-stage is entirely combinatorial, the ALU included; the only registers it drives
-are the outputs of the other blocks.
+clock cycles in FETCH (two cycles if it uses an immediate operand), and up to
+three clock cycles in DECODE -- one per micro-operation, because SEQUENCER
+holds DECODE stalled until it has issued the last one. PREPARE additionally
+waits for any memory operands to be read. WRITE is entirely combinatorial, the
+ALU included; the only registers it drives are the outputs of the other blocks.
 
 ## Harvard architecture
 In the above we see a Harvard architecture, where we have a separate instruction
@@ -58,7 +57,7 @@ implementation, because we then don't need an arbiter between the instruction
 fetches and the data memory accesses. It does also provide a nice side effect of
 increasing the available memory bandwidth, because we can read from instruction
 and data memory simultaneously, see below section on
-[Interleaving](#Interleaving).
+[Interleaving](#interleaving).
 
 There is one important detail to note about the Harvard architecture and that
 is that it requires dual port memory. This is because we want the system to
@@ -75,8 +74,8 @@ halves are one signal. WRITE's `fetch_valid_o` carries the new Program Counter
 to FETCH, and in [cpu_main.vhd](../src/cpu_main/cpu_main.vhd) it is OR-ed into
 the reset of ICACHE, DECODE, SEQUENCER, and PREPARE — so everything already
 fetched and decoded from the fall-through path is discarded in the same cycle
-the redirect goes out. FETCH abandons the requests it has in flight, the ICACHE
-clears its buffer, and the SEQUENCER's chunk index returns to 0, abandoning a
+the redirect goes out. FETCH abandons the requests it has in flight, ICACHE
+clears its buffer, and SEQUENCER's chunk index returns to 0, abandoning a
 half-issued micro-operation list. WRITE itself is deliberately *not* reset: it
 is the stage producing the flush, and it has to be allowed to retire the
 instruction that caused it.
@@ -146,7 +145,7 @@ it. [`test/prog_pipeline.asm`](../test/prog_pipeline.asm) branches over twelve
 
 ### What a flush costs
 A flush costs **four cycles**: one to register the new PC in FETCH, one for the
-instruction memory's read latency, one in the ICACHE, and one because DECODE and
+instruction memory's read latency, one in ICACHE, and one because DECODE and
 PREPARE are then empty. That is the single largest overhead in the design —
 measured on `prog.asm` before the early redirect below existed, 731 redirects
 accounted for 3625 cycles of a 15030-cycle run, **24%**.
@@ -161,19 +160,18 @@ that is worth on real code, and what it cost in timing margin, is in
 [Optimizations](#optimizations).
 
 This is a *partial* flush, and the distinction is load-bearing. The early
-redirect resets FETCH and the ICACHE only — never DECODE or PREPARE. By the end
-of the cycle the branch is in DECODE's output register and everything
-downstream of it is *older*, so the wrong-path instructions live only in FETCH
-and the ICACHE. The ICACHE flush must also be *soft*: DECODE raises it
-*because* it is accepting the branch being offered this cycle, so a reset that
-withdrew that handshake would withdraw the condition it was derived from and
-settle on "no branch accepted, no flush" — silently inert. Hence `icache_rst`
-(the hard flush, from WRITE) and `icache_flush` (the soft one, from DECODE) are
-separate signals in [cpu.vhd](../src/cpu.vhd). WRITE must then not redirect
-again when the branch finally retires, or it would discard exactly what the
-early redirect went to fetch; `prep_stage_i.early_jmp` carries that fact down
-the pipeline. See
-[Early redirect](../src/cpu_main/README.md#early-redirect) and
+redirect resets FETCH and ICACHE only — never DECODE or PREPARE. By the end of
+the cycle the branch is in DECODE's output register and everything downstream
+of it is *older*, so the wrong-path instructions live only in FETCH and ICACHE.
+The ICACHE flush must also be *soft*: DECODE raises it *because* it is
+accepting the branch being offered this cycle, so a reset that withdrew that
+handshake would withdraw the condition it was derived from and settle on "no
+branch accepted, no flush" — silently inert. Hence `icache_rst` (the hard
+flush, from WRITE) and `icache_flush` (the soft one, from DECODE) are separate
+signals in [cpu.vhd](../src/cpu.vhd). WRITE must then not redirect again when
+the branch finally retires, or it would discard exactly what the early redirect
+went to fetch; `prep_stage_i.early_jmp` carries that fact down the pipeline.
+See [Early redirect](../src/cpu_main/README.md#early-redirect) and
 [Flush](../src/icache/README.md#flush).
 
 One further detail lives in FETCH: a redirect does **not** tear down the
@@ -190,13 +188,13 @@ The thick arrows indicate the AXI-like pipeline handshake, consisting of a
 This handshake is used to control back-pressure.
 
 There are three sources of back-pressure in the design:
-* An instruction may expand into up to three micro-operations. The SEQUENCER on
-  the DECODE-to-PREPARE link issues one per clock cycle and holds its ready
-  signal low until the last one has been accepted, which stalls DECODE, which in
-  turn applies back-pressure to the FETCH stage.
-* The MEMORY module will generate back-pressure while waiting for the result
-  read from the memory bus. This is part of the Wishbone protocol and allows
-  for an I/O device to take more than one clock cycle to respond.
+* An instruction may expand into up to three micro-operations. SEQUENCER on the
+  DECODE-to-PREPARE link issues one per clock cycle and holds its ready signal
+  low until the last one has been accepted, which stalls DECODE, which in turn
+  applies back-pressure to FETCH.
+* MEMORY will generate back-pressure while waiting for the result read from the
+  memory bus. This is part of the Wishbone protocol and allows for an I/O
+  device to take more than one clock cycle to respond.
 * A retiring `INCRB`/`DECRB` stalls DECODE for a single cycle, but only if the
   instruction DECODE is about to accept would read one of the banked registers
   `R0`-`R7` — its register read is going out against the outgoing bank, and one
@@ -258,19 +256,19 @@ apart:
 * **Request completed.** The slave later pulses `wb_ack_i`, once per accepted
   request. For a read it drives the result onto `wb_data_i` in that same cycle.
   **Writes are acknowledged too**, with no meaningful data. *Later* is a
-  requirement, not just a description: the [MEMORY module](../src/memory/README.md)
-  needs at least one cycle between accepting a request and acknowledging it. A
-  slave that answers in the same cycle was built and measured, and rejected —
-  see [Optimizations](#optimizations).
+  requirement, not just a description: [MEMORY](../src/memory/README.md) needs
+  at least one cycle between accepting a request and acknowledging it. A slave
+  that answers in the same cycle was built and measured, and rejected — see
+  [Optimizations](#optimizations).
 
 Because acknowledgements are just pulses carrying no identifying information,
 and because several requests may be outstanding at once, the master has to
 remember what it asked for and in what order. That is exactly what the FIFO
-inside the [MEMORY module](../src/memory/README.md) does: it records the type of
-every accepted-but-unacknowledged request, and matches each `wb_ack_i` against
-the oldest one to decide whether the returned data belongs to the source operand
-buffer, the destination operand buffer, or nowhere at all (a write). This relies
-on the slave acknowledging in issue order.
+inside [MEMORY](../src/memory/README.md) does: it records the type of every
+accepted-but-unacknowledged request, and matches each `wb_ack_i` against the
+oldest one to decide whether the returned data belongs to the source operand
+buffer, the destination operand buffer, or nowhere at all (a write). This
+relies on the slave acknowledging in issue order.
 
 ## Interleaving
 Analyzing the timing of a QNICE assembly program is not simple, due to the
@@ -355,23 +353,23 @@ it. `test/prog_poll.asm` deliberately never halts and is therefore not one of
 the programs `make test` runs; its header says how to run it.
 
 * **t=0**: the `RBRA` retires. `inst_done_o` pulses, `R15` is written with the
-  branch target `0x0005`, and `fetch_valid_o` redirects FETCH and flushes the
+  branch target `0x0005`, and `fetch_valid_o` redirects FETCH and flushes
   ICACHE. Everything FETCH had speculatively read past the branch — the four
   words `0x000A` to `0x000D`, greyed out in the diagram — is thrown away.
 * **t=1**: FETCH issues the first instruction-memory request of the new stream,
   for `0x0005`.
-* **t=2**: that word (`0x0048`) comes back and is handed to the ICACHE. The
+* **t=2**: that word (`0x0048`) comes back and is handed to ICACHE. The
   pipeline is empty: DECODE, PREPARE, and WRITE all have nothing.
-* **t=3**: the ICACHE offers it and DECODE accepts `MOVE @R0, R2`. Note
+* **t=3**: ICACHE offers it and DECODE accepts `MOVE @R0, R2`. Note
   `m_double_o` is low — only one word is buffered so far — which is enough,
   because this instruction has no immediate operand.
-* **t=4**: the `MOVE` sits in DECODE's output register and the SEQUENCER issues
-  its first micro-operation, `0x084` (`MEM_READ_SRC` + `REG_MOD_SRC`). It holds
+* **t=4**: the `MOVE` sits in DECODE's output register and SEQUENCER issues its
+  first micro-operation, `0x084` (`MEM_READ_SRC` + `REG_MOD_SRC`). It holds
   `seq_ready_i` low, because a second micro-operation is still to come.
 * **t=5**: WRITE puts the read of the device word on the data bus
   (`mem_req_addr_o` = `0x000A`).
-* **t=6**: the device word returns on `msrc_data_o` and the SEQUENCER can
-  finally issue the second micro-operation, `0x828` (`LAST` + `MEM_WAIT_SRC` +
+* **t=6**: the device word returns on `msrc_data_o` and SEQUENCER can finally
+  issue the second micro-operation, `0x828` (`LAST` + `MEM_WAIT_SRC` +
   `REG_WRITE`). This is the only cycle in which a stage is held waiting for
   data. In the same cycle DECODE accepts the `AND`, this time consuming two
   words at once.
@@ -389,7 +387,7 @@ arithmetic: that the ten cycles are three instructions plus the overheads around
 them. The useful reading is that they are **one instruction-memory refill**.
 FETCH delivers one word per clock cycle, the loop is five words long, and the
 branch puts a fixed cost either side of those five. Follow the
-`FETCH/dc_addr_o` row, and the cycles in which the ICACHE actually takes what is
+`FETCH/dc_addr_o` row, and the cycles in which ICACHE actually takes what is
 offered there (`ICACHE/s_ready_o` high):
 
 | cycles | | |
@@ -398,9 +396,9 @@ offered there (`ICACHE/s_ready_o` high):
 | t=2 – t=7 | 6 | the loop's five words, one per cycle — but see t=5 |
 | t=8, t=9 | 2 | decoding the last word, and carrying it to WRITE |
 
-Two plus six plus two is the ten. The first word of the loop lands in the ICACHE
-at t=2 and the last at t=7 — five words spread over six cycles, because at t=5
-the ICACHE refuses the word FETCH is offering it. The last one still has to be
+Two plus six plus two is the ten. The first word of the loop lands in ICACHE at
+t=2 and the last at t=7 — five words spread over six cycles, because at t=5
+ICACHE refuses the word FETCH is offering it. The last one still has to be
 decoded at t=8 and to reach WRITE at t=9, which retires it at t=10 = t=0.
 
 Note what is *not* in that accounting: the data read. Its latency is hidden —
@@ -411,23 +409,22 @@ Not quite hidden, though. The one row in the diagram that the read is
 responsible for is the refusal at t=5, and that chain is worth spelling out,
 because it runs backwards through four modules:
 
-1. The `MOVE` expands into two micro-operations. The SEQUENCER issues one per
-   cycle and holds `DECODE/seq_ready_i` low until it has issued the last of
-   them.
+1. The `MOVE` expands into two micro-operations. SEQUENCER issues one per cycle
+   and holds `DECODE/seq_ready_i` low until it has issued the last of them.
 2. That second micro-operation carries `MEM_WAIT_SRC`, so it cannot be issued
    until the device word arrives at t=6. `seq_ready_i` is therefore low for
    *two* cycles, t=4 and t=5, rather than one.
-3. DECODE cannot accept a new instruction while the SEQUENCER is holding it, so
-   it leaves its `fetch_ready_o` low at t=4 and t=5. That is the row drawn as
-   `ICACHE/m_ready_i`: the two are the same net, seen from the ICACHE's side.
-4. The ICACHE buffers two words, and by t=5 it is holding both — the `AND` and
-   its immediate operand (`m_addr_o` = `0x0006`, `m_double_o` high). Nothing is
-   draining it, so it has nowhere to put a third word and drops `s_ready_o`
-   at t=5.
+3. DECODE cannot accept a new instruction while SEQUENCER is holding it, so it
+   leaves its `fetch_ready_o` low at t=4 and t=5. That is the row drawn as
+   `ICACHE/m_ready_i`: the two are the same net, seen from ICACHE's side.
+4. ICACHE buffers two words, and by t=5 it is holding both — the `AND` and its
+   immediate operand (`m_addr_o` = `0x0006`, `m_double_o` high). Nothing is
+   draining it, so it has nowhere to put a third word and drops `s_ready_o` at
+   t=5.
 5. FETCH is offering `0x0008` in that cycle and is refused. It re-offers it at
-   t=6, `0x0009` follows at t=7, so the ICACHE can only offer the `RBRA` as a
-   pair at t=8 — one cycle later than it otherwise would, which is the tenth
-   cycle of the loop.
+   t=6, `0x0009` follows at t=7, so ICACHE can only offer the `RBRA` as a pair
+   at t=8 — one cycle later than it otherwise would, which is the tenth cycle
+   of the loop.
 
 That last step is what the reader sees as the bubble at t=9: WRITE is idle
 because the `RBRA` was decoded a cycle late, not because of anything happening
@@ -462,9 +459,9 @@ can store into its own instruction stream. Doing so is fully supported, with no
 latency requirement: an instruction may be rewritten by the store immediately
 before it.
 
-That did not use to be true, and the failure was silent. FETCH, the ICACHE,
-DECODE, and PREPARE have all read ahead of the instruction retiring in WRITE, so
-a store landing on one of those addresses changed the RAM but not the copy about
+That did not use to be true, and the failure was silent. FETCH, ICACHE, DECODE,
+and PREPARE have all read ahead of the instruction retiring in WRITE, so a
+store landing on one of those addresses changed the RAM but not the copy about
 to execute — the *old* instruction ran, with nothing anywhere reporting a
 problem. Five instructions of padding, or a branch, was enough to hide it,
 which is the worst possible property for a bug to have.
@@ -472,9 +469,9 @@ which is the worst possible property for a bug to have.
 WRITE now treats such a store as a control transfer. When a store retires, it
 checks whether the address is close enough to the program counter to have been
 read already, and if so asserts the same `fetch_valid_o` that a taken branch
-uses: DECODE and PREPARE are reset, FETCH and the ICACHE discard their buffers,
-and execution restarts at the following instruction, which is re-fetched from
-the updated RAM. The write has landed by then — the data port writes and the
+uses: DECODE and PREPARE are reset, FETCH and ICACHE discard their buffers, and
+execution restarts at the following instruction, which is re-fetched from the
+updated RAM. The write has landed by then — the data port writes and the
 instruction port reads in the same cycle, and the re-fetch cannot get back to
 the bus in the same cycle anyway.
 
@@ -482,14 +479,14 @@ Two things are worth knowing:
 
 * **The check is deliberately over-approximate.** It flushes on any store within
   32 words after the current instruction, where the real read-ahead is at most 8
-  (2 words each for PREPARE and DECODE, 2 in the ICACHE, and `C_MAX_PENDING` = 2
-  in FETCH; probing the fetch pointer against the ICACHE output over the whole
-  of `prog.asm` gives a maximum of 4 for the last two together). The slack is
-  what makes the comparison cheap enough to sit on the flush net at all — see
-  the comment above `smc_delta` in
-  [write.vhd](../src/cpu_main/write.vhd), where the exact version is recorded
-  along with the −0.042 ns it cost. Over-approximating is safe by construction:
-  a spurious flush costs cycles, never correctness.
+  (2 words each for PREPARE and DECODE, 2 in ICACHE, and `C_MAX_PENDING` = 2 in
+  FETCH; probing the fetch pointer against the ICACHE output over the whole of
+  `prog.asm` gives a maximum of 4 for the last two together). The slack is what
+  makes the comparison cheap enough to sit on the flush net at all — see the
+  comment above `smc_delta` in [write.vhd](../src/cpu_main/write.vhd), where
+  the exact version is recorded along with the −0.042 ns it cost.
+  Over-approximating is safe by construction: a spurious flush costs cycles,
+  never correctness.
 * **So a store near the PC costs a branch penalty**, whether or not it was aimed
   at code. This is why the window is not simply "every store": flushing
   unconditionally costs 8.5% of the run time of `prog.asm` and 64% of
@@ -507,21 +504,21 @@ the PC — both pass either way, and are there to pin the two edges.
 
 ## Optimizations
 
-**Done: the FETCH module no longer clears `wbi_cyc_o` at every branch.** A
-redirect now keeps the bus cycle alive and issues the first request of the new
-instruction stream on the next clock cycle, instead of tearing the cycle down
-and waiting a cycle before `STB` can be reasserted. That saves exactly one cycle
-per redirect: 741 of them in `test/prog.asm`, **−4.7%** of its run time, and up
-to −9.1% on the branch-dense programs. The per-program figures are in
+**Done: FETCH no longer clears `wbi_cyc_o` at every branch.** A redirect now
+keeps the bus cycle alive and issues the first request of the new instruction
+stream on the next clock cycle, instead of tearing the cycle down and waiting a
+cycle before `STB` can be reasserted. That saves exactly one cycle per
+redirect: 741 of them in `test/prog.asm`, **−4.7%** of its run time, and up to
+−9.1% on the branch-dense programs. The per-program figures are in
 `test/*.stats.golden`; the memory-request counts there are unchanged, i.e. the
 same bus traffic simply happens a cycle earlier. Cost: 6 LUTs and 2 flip-flops
 in FETCH, and a new requirement that the slave acknowledge in order — see
 [fetch/README.md](../src/fetch/README.md#redirect).
 
 **Done: a register bank switch no longer always flushes the pipeline.** Changing
-the upper eight bits of `R14` moves the page of `R0`-`R7` that the REGISTERS
-module presents, and DECODE issues its register read two stages ahead of WRITE,
-so instructions already in flight can have read the outgoing bank. That used to
+the upper eight bits of `R14` moves the page of `R0`-`R7` that REGISTERS
+presents, and DECODE issues its register read two stages ahead of WRITE, so
+instructions already in flight can have read the outgoing bank. That used to
 mean an unconditional flush — a full branch penalty on every `INCRB`/`DECRB`,
 which is what the ISA uses to enter and leave a subroutine. Only two
 instructions are ever at risk, though, and only if they actually *consume* a
@@ -533,21 +530,22 @@ merely held for a cycle. The standard subroutine prologue `INCRB` /
 `MOVE R8, R0` and epilogue `DECRB` / `MOVE @R13++, R15` read nothing banked and
 now cost nothing at all: all ten bank switches in `test/prog.asm` are free,
 **−0.3%** of its run time (15070 → 15030 cycles, i.e. 4 cycles per switch), and
-the saving scales with how bank-switch-heavy a program is rather than showing up
-in this suite, which barely uses them. Cost: 23 LUTs *fewer* and 3 flip-flops
-more, and 0.072 ns of timing margin that the change does not explain — see
+the saving
+scales with how bank-switch-heavy a program is rather than showing up in this
+suite, which barely uses them. Cost: 23 LUTs *fewer* and 3 flip-flops more, and
+0.072 ns of timing margin that the change does not explain — see
 [The critical path](#the-critical-path). More detail under
 [Register bank switch](../src/cpu_main/README.md#register-bank-switch).
 
-**Done: an unconditional branch to an immediate target no longer waits for the
-WRITE stage.** `ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1` is the one branch DECODE
-can resolve on the spot: the condition selects `SR` bit 0, which reads as 1
-always, and the target is the immediate word FETCH has already delivered
-alongside the instruction — DECODE even computes the absolute address for the
-relative modes already. So DECODE redirects FETCH on the cycle it accepts the
-instruction, two cycles before WRITE would have, and the penalty falls from four
-cycles to two — to one for `ASUB`/`RSUB`, whose second micro-op overlaps one
-more cycle of the refill.
+**Done: an unconditional branch to an immediate target no longer waits for
+WRITE.** `ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1` is the one branch DECODE can
+resolve on the spot: the condition selects `SR` bit 0, which reads as 1 always,
+and the target is the immediate word FETCH has already delivered alongside the
+instruction — DECODE even computes the absolute address for the relative modes
+already. So DECODE redirects FETCH on the cycle it accepts the instruction, two
+cycles before WRITE would have, and the penalty falls from four cycles to two —
+to one for `ASUB`/`RSUB`, whose second micro-op overlaps one more cycle of the
+refill.
 
 The test suite understates this badly, and deliberately so: it is a correctness
 suite, and only 73 of `prog.asm`'s 731 redirects are of this form, worth −1.0%.
@@ -573,7 +571,7 @@ twice, Vivado being deterministic), and +0.007 (guard in `prepare.vhd`'s reset
 instead). The last two are the same design measured two ways; the 0.005 ns
 between them is not worth the reset-duration assumption the second one needs.
 
-It also needs a soft-flush port on the ICACHE — the ordinary reset gates
+It also needs a soft-flush port on ICACHE — the ordinary reset gates
 `m_valid_o`, which would withdraw the very handshake the flush is derived from.
 See [Early redirect](../src/cpu_main/README.md#early-redirect) and
 [The soft flush](../src/icache/README.md#the-soft-flush).
@@ -632,9 +630,9 @@ an address while `STALL` is asserted, so the mux would need qualifying by
 documented reset contract.
 
 The ICACHE register is worse. Instruction-RAM data to the ICACHE input is
-4.373 ns, and from the ICACHE's `m_data` register it is 2.558 ns to the register
+4.373 ns, and from ICACHE's `m_data` register it is 2.558 ns to the register
 file's RAM address — another half-cycle path, slack 0.218 — and 6.565 ns to
-FETCH's control registers through DECODE's ready cone. Making the ICACHE
+FETCH's control registers through DECODE's ready cone. Making ICACHE
 cut-through merges those into 7-11 ns paths.
 
 Both of those are why the early redirect above attacks the *front* of the chain
@@ -718,11 +716,11 @@ either side of it. The rest of the branch is the zero-latency support itself,
 and stays there.
 
 **Rejected: a combinatorial DECODE stage.** DECODE's output register looks
-removable: the stage is a decoder, its logic is thin, and the ICACHE already
+removable: the stage is a decoder, its logic is thin, and ICACHE already
 presents its input from a register. What the register actually buys is not
-DECODE's own logic but the **REGISTERS module's one-cycle read latency**. DECODE
+DECODE's own logic but the **one-cycle read latency of REGISTERS**. DECODE
 drives `reg_src_addr_o`/`reg_dst_addr_o` combinationally off the instruction
-word and the values come back a cycle later, straight into the SEQUENCER as live
+word and the values come back a cycle later, straight into SEQUENCER as live
 wires — so the register exists only to hold the instruction fields until its
 operands catch up.
 
@@ -765,11 +763,11 @@ in wall-clock time**. Even `prog_hazard`, the best case in cycles, only nets
 −3.7%.
 
 Remaining ideas:
-* The ICACHE adds a further cycle to the branch penalty: a word arriving from
-  FETCH is registered before DECODE sees it. A bypass for the empty-buffer case
-  would remove it, at the cost of a combinational path from the Wishbone data
-  input through to DECODE. Unlike the redirect above, this one trades against
-  Fmax rather than being free.
+* ICACHE adds a further cycle to the branch penalty: a word arriving from FETCH
+  is registered before DECODE sees it. A bypass for the empty-buffer case would
+  remove it, at the cost of a combinational path from the Wishbone data input
+  through to DECODE. Unlike the redirect above, this one trades against Fmax
+  rather than being free.
 
 
 ## TODO
@@ -831,12 +829,12 @@ in routing rather than logic.
 **In the build measured above, the worst path is the one this section
 describes** — the Status Register loop. Both endpoints are `wr_stage_o` fields,
 and the full listing shows it leaving PREPARE, passing through the register
-file's forwarding (`src_val_d`) and the SEQUENCER, and being latched again by
+file's forwarding (`src_val_d`) and SEQUENCER, and being latched again by
 PREPARE. (That leg used to be declared in DECODE; moving the register file's
-read data to the SEQUENCER renamed the module it belongs to without changing the
-net.) It is not always: some builds instead put a Block RAM
-clock-to-out path inside the register file on top, with zero logic levels,
-nothing to optimise, and nothing this design controls.
+read data to SEQUENCER renamed the module it belongs to without changing the
+net.) It is not always: some builds instead put a Block RAM clock-to-out path
+inside the register file on top, with zero logic levels, nothing to optimise,
+and nothing this design controls.
 
 Which of the two wins is not a durable property, and neither is the number
 attached to it, nor which leg of the loop the listing happens to run through --
@@ -866,7 +864,7 @@ PREPARE's registered ALU operand
    -> the ALU in WRITE
    -> the flag logic, which produces the Status Register
    -> the register file, which forwards an SR write combinationally
-   -> the SEQUENCER, which joins it onto the stage record live and unregistered
+   -> SEQUENCER, which joins it onto the stage record live and unregistered
    -> latched again by PREPARE
 ```
 
@@ -950,10 +948,10 @@ Two things to know before trying to optimise it further:
   starting.
 * **Unrelated logic elsewhere can move this number.** Because the path is
   placement-sensitive, logic that is nowhere near it can still perturb it. A
-  single flip-flop added next to the ICACHE, for the HALT gate, once cost
-  0.284 ns here — the entire margin — without appearing on the path at all;
-  see the commit that introduced `make utilization`. Treat a slack change after
-  an unrelated edit as plausible rather than surprising, and re-measure rather
+  single flip-flop added next to ICACHE, for the HALT gate, once cost 0.284 ns
+  here — the entire margin — without appearing on the path at all; see the
+  commit that introduced `make utilization`. Treat a slack change after an
+  unrelated edit as plausible rather than surprising, and re-measure rather
   than reasoning about it.
 
 ### Where the logic is
@@ -996,7 +994,7 @@ Two things stand out:
 * **WRITE holds no registers at all.** It is purely combinatorial: the ALU is
   combinatorial, and the Status Register shadow registers it used to carry were
   removed once they were shown to be dead — see
-  [cpu_main/README.md](../src/cpu_main/README.md#why-the-write-stage-needs-no-status-register-bypass).
+  [cpu_main/README.md](../src/cpu_main/README.md#why-write-needs-no-status-register-bypass).
 
 The two tables do not add up to each other (971 vs 963 LUTs). That is expected,
 and note that the *sign* of the gap is not stable — it has landed both ways

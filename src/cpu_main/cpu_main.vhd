@@ -1,6 +1,6 @@
--- NOTE: The DECODE, SEQUENCER, and PREPARE modules are explicitly reset (using
+-- NOTE: DECODE, SEQUENCER, and PREPARE are explicitly reset (using
 -- fetch_valid_o) following any update to the Program Counter (as determined by
--- the WRITE module). This flushes the entire pipeline.
+-- WRITE). This flushes the entire pipeline.
 
 library ieee;
    use ieee.std_logic_1164.all;
@@ -33,7 +33,7 @@ entity cpu_main is
       early_addr_o    : out std_logic_vector(15 downto 0);
 
       -- DECODE: to REGISTERS (the read ports). The values come back a cycle
-      -- later and go to the SEQUENCER, not back to DECODE; see below.
+      -- later and go to SEQUENCER, not back to DECODE; see below.
       reg_rd_en_o     : out std_logic;
       reg_src_reg_o   : out std_logic_vector(3 downto 0);
       reg_dst_reg_o   : out std_logic_vector(3 downto 0);
@@ -79,13 +79,13 @@ end entity cpu_main;
 
 architecture synthesis of cpu_main is
 
-   -- DECODE to the SEQUENCER: one beat per instruction, carrying the whole
+   -- DECODE to SEQUENCER: one beat per instruction, carrying the whole
    -- micro-op list.
    signal dec2seq_valid : std_logic;
    signal dec2seq_ready : std_logic;
    signal dec2seq_stage : t_dec2seq;
 
-   -- The SEQUENCER to PREPARE: one beat per micro-op.
+   -- SEQUENCER to PREPARE: one beat per micro-op.
    signal seq2prep_valid : std_logic;
    signal seq2prep_ready : std_logic;
    signal seq2prep_stage : t_seq2prep;
@@ -133,12 +133,12 @@ begin
    -- SEQUENCER
    ------------------------------------------------------------
 
-   -- DECODE emits an instruction's whole micro-op list in one beat; the
-   -- SEQUENCER issues it one micro-op per clock cycle, holding dec2seq_ready
-   -- low until the last one has been accepted. It sits between the two stages
-   -- rather than inside PREPARE because that is what it is -- an elastic
-   -- one-to-many adapter on the DECODE/PREPARE link, with no part in preparing
-   -- the operands. It shares PREPARE's reset, so a pipeline flush abandons a
+   -- DECODE emits an instruction's whole micro-op list in one beat; SEQUENCER
+   -- issues it one micro-op per clock cycle, holding dec2seq_ready low until
+   -- the last one has been accepted. It sits between the two stages rather
+   -- than inside PREPARE because that is what it is -- an elastic one-to-many
+   -- adapter on the DECODE/PREPARE link, with no part in preparing the
+   -- operands. It shares PREPARE's reset, so a pipeline flush abandons a
    -- half-issued list.
    --
    -- It is also where the register file's read data joins the pipeline. DECODE

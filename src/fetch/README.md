@@ -37,7 +37,7 @@ wb_addr_o  : out std_logic_vector(15 downto 0);
 wb_ack_i   : in  std_logic;
 wb_data_i  : in  std_logic_vector(15 downto 0);
 
--- Send instruction to DECODE (i.e. to the ICACHE)
+-- Send instruction to DECODE (i.e. to ICACHE)
 dc_valid_o : out std_logic;
 dc_ready_i : in  std_logic;
 dc_addr_o  : out std_logic_vector(15 downto 0);
@@ -51,7 +51,7 @@ dc_addr_i  : in  std_logic_vector(15 downto 0)
 It speculatively fetches a linear sequence of instruction words starting at the
 address most recently supplied on `dc_valid_i`/`dc_addr_i`. Each WISHBONE read
 request reserves one *slot*: allocated when the request is issued (`STB`
-asserted), released when the corresponding word is handed to the ICACHE. At most
+asserted), released when the corresponding word is handed to ICACHE. At most
 `C_MAX_PENDING = 2` slots may be in use, which bounds the occupancy of both
 internal FIFOs and is what guarantees neither can overflow. The bus runs in
 pipelined mode — `STB` is one cycle per request (held while `STALL`), `CYC` is
@@ -118,13 +118,13 @@ Also stated in the file header:
   i.e. silent instruction corruption.
 * The WISHBONE slave **must** acknowledge requests **in order**. Nothing on the
   bus says which request an `ACK` belongs to, so discarding what an abandoned
-  request is owed means discarding the next `wb_stale` acknowledgements. The
-  MEMORY module makes the same assumption for the same reason, see
+  request is owed means discarding the next `wb_stale` acknowledgements. MEMORY
+  makes the same assumption for the same reason, see
   [memory/README.md](../memory/README.md).
 
 ## Formal verification
 
-FETCH and the ICACHE have a job each, and both are in `DUTS` in
+FETCH and ICACHE have a job each, and both are in `DUTS` in
 [formal/Makefile](../../formal/Makefile). `icache.sby` is described in
 [icache/README.md](../icache/README.md#formal-verification).
 

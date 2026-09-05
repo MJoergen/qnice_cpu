@@ -9,9 +9,9 @@ entity prepare is
       clk_i           : in  std_logic;
       rst_i           : in  std_logic;
 
-      -- From the SEQUENCER (instantiated alongside this module in
-      -- cpu_main.vhd): one beat per micro-operation, where DECODE emits one
-      -- beat per instruction.
+      -- From SEQUENCER (instantiated alongside this module in cpu_main.vhd):
+      -- one beat per micro-operation, where DECODE emits one beat per
+      -- instruction.
       seq_valid_i     : in  std_logic;
       seq_ready_o     : out std_logic;
       seq_stage_i     : in  t_seq2prep;
@@ -78,13 +78,13 @@ begin
    alu_ctrl <= seq_stage_i.inst(R_CTRL_CMD);
    -- Reading R15 as an ordinary operand.
    --
-   -- The working Program Counter lives in the FETCH stage; the register file's
-   -- R15 copy is only written when an instruction actually targets R15, so it
-   -- is stale during sequential execution and must never be used as an operand
-   -- value. src_val_pc/dst_val_pc substitute the real PC, and are then used for
-   -- BOTH the ALU inputs below and the copies latched into the stage record --
-   -- the latter matters because the WRITE stage derives the memory address and
-   -- the pre/post-increment write-back from src_val_pc/dst_val_pc, so @R15,
+   -- The working Program Counter lives in FETCH; the register file's R15 copy
+   -- is only written when an instruction actually targets R15, so it is stale
+   -- during sequential execution and must never be used as an operand value.
+   -- src_val_pc/dst_val_pc substitute the real PC, and are then used for BOTH
+   -- the ALU inputs below and the copies latched into the stage record -- the
+   -- latter matters because WRITE derives the memory address and the
+   -- pre/post-increment write-back from src_val_pc/dst_val_pc, so @R15,
    -- @--R15, and R15 as a plain operand all have to agree.
    --
    -- The value is the address of the next word to be fetched at the point the

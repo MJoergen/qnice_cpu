@@ -22,12 +22,12 @@
 -- each of them is optional, and only improves the diagnostic.
 --
 -- The decision is deliberately not taken on the same clock edge as the halt.
--- The status write is issued by the WRITE stage one or more cycles before the
--- HALT retires, but it reaches the Wishbone bus through the MEMORY module, so
--- it can still be in flight at that point. G_DRAIN_CYCLES gives it time to land
--- (and gives debug.vhd time to log it). Nothing else can appear on the bus
--- during the drain: the HALT is the last instruction the CPU accepts into its
--- pipeline, see p_halt_fetched in src/cpu.vhd.
+-- The status write is issued by WRITE one or more cycles before the HALT
+-- retires, but it reaches the Wishbone bus through MEMORY, so it can still be
+-- in flight at that point. G_DRAIN_CYCLES gives it time to land (and gives
+-- debug.vhd time to log it). Nothing else can appear on the bus during the
+-- drain: the HALT is the last instruction the CPU accepts into its pipeline,
+-- see p_halt_fetched in src/cpu.vhd.
 --
 -- Only the first write to G_STATUS_ADDR counts, so a program cannot accidentally
 -- overwrite its own verdict afterwards.

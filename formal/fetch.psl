@@ -4,9 +4,9 @@ vunit i_fetch(fetch(synthesis))
    -- FREE CONSTANTS USED FOR THE END-TO-END DATA INTEGRITY PROOF
    -----------------------------------------------------------------
    -- The slave is assumed to always return f_const_data for f_const_addr.
-   -- Since both are unconstrained constants, proving that the DECODE stage
-   -- receives f_const_data whenever it receives f_const_addr proves payload
-   -- correctness for every address, without needing a scoreboard.
+   -- Since both are unconstrained constants, proving that DECODE receives
+   -- f_const_data whenever it receives f_const_addr proves payload correctness
+   -- for every address, without needing a scoreboard.
    --
    -- NOTE ON K-INDUCTION: f_dc_data_integrity is not expected to close under
    -- pure k-induction.  The induction hypothesis has to relate the CONTENTS of
@@ -165,7 +165,7 @@ vunit i_fetch(fetch(synthesis))
       end if;
    end process p_stb_pending;
 
-   -- Record the last address delivered to the DECODE stage.
+   -- Record the last address delivered to DECODE.
    p_dc_last_addr : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -180,8 +180,8 @@ vunit i_fetch(fetch(synthesis))
       end if;
    end process p_dc_last_addr;
 
-   -- Record the new PC supplied by the WRITE stage, until the first
-   -- instruction fetched from it has been delivered.
+   -- Record the new PC supplied by WRITE, until the first instruction fetched
+   -- from it has been delivered.
    p_dc_new_pc : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -286,8 +286,8 @@ vunit i_fetch(fetch(synthesis))
    -- PROPERTIES OF THE DECODE INTERFACE
    --
    -- NOTE: "dc_" covers both directions. dc_valid_o/dc_addr_o/dc_data_o carry
-   -- instructions towards DECODE (via the ICACHE); dc_valid_i/dc_addr_i are the
-   -- PC redirect, which comes from the WRITE stage, not from DECODE.
+   -- instructions towards DECODE (via ICACHE); dc_valid_i/dc_addr_i are the PC
+   -- redirect, which comes from WRITE, not from DECODE.
    ---------------------------------------
 
    -- DECODE ASSERT: The output must be stable while not accepted, unless the
@@ -355,8 +355,7 @@ vunit i_fetch(fetch(synthesis))
       end if;
    end process p_wb_ack_delay;
 
-   -- Count the number of consecutive cycles the DECODE stage applies
-   -- backpressure.
+   -- Count the number of consecutive cycles DECODE applies backpressure.
    p_dc_stall_delay : process (clk_i)
    begin
       if rising_edge(clk_i) then
@@ -409,13 +408,13 @@ vunit i_fetch(fetch(synthesis))
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    --------------------------------------------
 
-   -- DECODE stage accepts data
+   -- DECODE accepts data
    f_dc_accept : cover {dc_valid_o; not dc_valid_o};
 
-   -- DECODE stage receives two data cycles back-to-back
+   -- DECODE receives two data cycles back-to-back
    f_dc_back2back : cover {dc_valid_o and dc_ready_i; dc_valid_o};
 
-   -- DECODE stage receives three data cycles back-to-back
+   -- DECODE receives three data cycles back-to-back
    f_dc_back3back : cover {dc_valid_o and dc_ready_i; dc_valid_o and dc_ready_i; dc_valid_o};
 
    -- An abort while a transaction is in progress
@@ -603,10 +602,10 @@ vunit i_fetch(fetch(synthesis))
    -- Assume no reset after the first clock cycle
 --   f_reset2 : assume always {not rst_i} |=> {not rst_i};
 
-   -- Assume the DECODE stage is always ready
+   -- Assume DECODE is always ready
 --   f_dc_ready_always : assume always {dc_ready_i};
 
-   -- Assume the DECODE stage never resets the address
+   -- Assume DECODE never resets the address
 --   f_dc_after_reset2 : assume always {not rst_i} |=> {not dc_valid_i};
 
    -- Assume the WISHBONE slave never stalls.
@@ -619,7 +618,7 @@ vunit i_fetch(fetch(synthesis))
 --   f_dc_ready_hold : assume always {dc_ready_i and not dc_valid_o} |=> {dc_ready_i};
 
    -- BOUNDED PROGRESS: with the artificial stall/ack constraints above, an
-   -- always-ready DECODE stage must receive an instruction within a bounded
+   -- always-ready DECODE must receive an instruction within a bounded
    -- number of cycles.  The bound is empirical -- enable this together with
    -- f_dc_ready_always and f_reset2, and raise the limit if it trips.
 --   signal f_no_output_delay : integer range 0 to 31 := 0;

@@ -9,11 +9,11 @@
 % What it shows, and what it deliberately does not: the six blocks of the
 % pipeline in pipeline order, the two shared modules they hang off (REGISTERS
 % on the left, MEMORY on the right), the two Wishbone buses leaving on the
-% right, and the dotted boundary of the CPU_MAIN entity. It does NOT show the
-% valid/ready handshaking, the redirect paths from WRITE and DECODE back to
-% FETCH, or the bank-switch signals -- those are described in doc/README.md
-% and in the per-module READMEs, and drawing them here would turn the picture
-% into a net list.
+% right, and the dotted boundary of CPU_MAIN. It does NOT show the valid/ready
+% handshaking, the redirect paths from WRITE and DECODE back to FETCH, or the
+% bank-switch signals -- those are described in doc/README.md and in the
+% per-module READMEs, and drawing them here would turn the picture into a net
+% list.
 
 \documentclass[border=8pt]{standalone}
 
@@ -81,7 +81,7 @@
    \draw[flow] (prepare) -- (write);
 
    %% ---------------------------------------------------------------
-   %% The CPU_MAIN entity
+   %% CPU_MAIN
    %% ---------------------------------------------------------------
 
    % The label rides just above the top edge rather than inside it: the
@@ -105,7 +105,7 @@
    % border. Keep the two x-offsets 26mm apart and centred on regx/memx.
 
    % REGISTERS spans DECODE down to WRITE: DECODE issues the reads, the values
-   % come back into the SEQUENCER, and WRITE writes.
+   % come back into SEQUENCER, and WRITE writes.
    \coordinate (regx) at ([xshift = -42mm] decode.center);
    \node[block, inner sep = 0pt,
          fit = {([xshift = -13mm] regx |- decode.north)
@@ -124,7 +124,7 @@
 
    % Operand reads: the register numbers leave DECODE, and the values come back
    % a clock cycle later -- by which time the instruction has moved on, so they
-   % are wired to the SEQUENCER rather than back into DECODE.
+   % are wired to SEQUENCER rather than back into DECODE.
    \draw[wire] (decode.west) -- (regs.east |- decode.west);
    \draw[wire] (regs.east |- seq.west) -- (seq.west);
    % Result write-back, plus the pre/post-increment write-backs.

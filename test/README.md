@@ -124,10 +124,10 @@ a stale flags value would show up:
   bit clear and set must give different results.
 
 `prog_r15.asm` covers `R15` used as an ordinary ALU operand. The working Program
-Counter lives in the FETCH stage, so the register file's `R15` copy is stale
-during sequential execution and PREPARE has to substitute the real PC; these
-tests pin that down against the reference semantics in `qnice.c`, where a single
-PC register is advanced right after the instruction fetch and both operands are
+Counter lives in FETCH, so the register file's `R15` copy is stale during
+sequential execution and PREPARE has to substitute the real PC; these tests pin
+that down against the reference semantics in `qnice.c`, where a single PC
+register is advanced right after the instruction fetch and both operands are
 read through it:
 
 * `T1` — `CMP R15, R15`: the source and destination read paths must agree. This
@@ -138,8 +138,8 @@ read through it:
   destination on a two-word instruction (so the PC has already advanced past
   the immediate).
 * `T4` — `@R15`, PC-relative memory addressing, which reaches the PC through a
-  different path again: the WRITE stage derives the memory address from
-  `src_val_pc`, not from the ALU operand.
+  different path again: WRITE derives the memory address from `src_val_pc`, not
+  from the ALU operand.
 
 `prog_hazard.asm` covers read-after-write data hazards between *adjacent*
 instructions: a register written and then read, used as a memory pointer, used
@@ -182,7 +182,7 @@ banks that follows it is left commented out, since it dominates the simulation
 time of the whole program.
 
 `prog_self_modifying.asm` covers stores into the program's own instruction
-stream. The hazard is that FETCH, the ICACHE, DECODE, and PREPARE have all read
+stream. The hazard is that FETCH, ICACHE, DECODE, and PREPARE have all read
 ahead of the instruction retiring in WRITE, so without the flush described in
 [Self-modifying code](../src/cpu_main/README.md#self-modifying-code) the *old*
 instruction executes and nothing reports a problem.

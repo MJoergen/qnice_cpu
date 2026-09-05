@@ -126,7 +126,7 @@ vunit i_memory(memory(synthesis))
 
    -- WRITE producer contract: while a request is offered but not yet
    -- accepted (mreq_ready_o low), valid must stay asserted and the payload
-   -- must remain stable. This mirrors how the real WRITE stage behaves and
+   -- must remain stable. This mirrors how the real WRITE behaves and
    -- is what the combinational Wishbone request path relies on.
    f_mreq_stable : assume always {mreq_valid_i and not mreq_ready_o and not rst_i} |=>
          {rst_i = '1' or (stable(mreq_valid_i) and stable(mreq_op_i) and stable(mreq_addr_i) and stable(mreq_data_i))};

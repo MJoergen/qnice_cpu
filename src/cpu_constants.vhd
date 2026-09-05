@@ -118,7 +118,7 @@ package cpu_constants is
    -- given the same name twice:
    --
    --   * 'microcodes' is the whole list of up to three micro-operations;
-   --     'microcode' is the single one the SEQUENCER has selected out of it.
+   --     'microcode' is the single one SEQUENCER has selected out of it.
    --   * 'src_reg_val'/'dst_reg_val' are the register file's read data as it
    --     stands; 'src_val_pc'/'dst_val_pc' are those values with the real
    --     Program Counter substituted for a read of R15, which is what every
@@ -129,7 +129,7 @@ package cpu_constants is
 
    -- DECODE -> SEQUENCER: one beat per instruction, carrying the whole
    -- micro-op list. The register file's read data is not here yet: DECODE
-   -- issues the read, but the values arrive a cycle later, at the SEQUENCER.
+   -- issues the read, but the values arrive a cycle later, at SEQUENCER.
 
    type t_dec2seq is record
       microcodes : std_logic_vector(35 downto 0); -- Up to three 12-bit micro-ops
@@ -147,9 +147,9 @@ package cpu_constants is
       early_jmp  : std_logic;                     -- Redirect already issued (decode.vhd)
    end record t_dec2seq;
 
-   -- SEQUENCER -> PREPARE: one beat per micro-operation. The SEQUENCER selects
-   -- one chunk out of 'microcodes' and joins on the register file read ports,
-   -- live and unregistered -- see the header of cpu_main/sequencer.vhd.
+   -- SEQUENCER -> PREPARE: one beat per micro-operation. SEQUENCER selects one
+   -- chunk out of 'microcodes' and joins on the register file read ports, live
+   -- and unregistered -- see the header of cpu_main/sequencer.vhd.
 
    type t_seq2prep is record
       microcode   : std_logic_vector(11 downto 0); -- The selected micro-op alone

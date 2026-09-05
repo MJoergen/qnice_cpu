@@ -1,7 +1,7 @@
 # The main QNICE pipeline
 
 This is a detailed design description of the main CPU pipeline, particularly
-the stages DECODE, PREPARE, and WRITE, and the SEQUENCER that joins the first
+the stages DECODE, PREPARE, and WRITE, and SEQUENCER, which joins the first
 two.
 
 Table of contents:
@@ -27,19 +27,18 @@ simplify the formal verification: `formal/cpu_main.psl` can then state
 properties about the interfaces *between* the stages, which is where most of
 the interesting behaviour is.
 
-CPU_MAIN also instantiates the [SEQUENCER](sequencer.vhd), on the link
-from DECODE to PREPARE. It is not a fourth stage: it holds no payload
-registers, adds no latency, and its only state is the index of the
-micro-operation it is currently presenting. It is a one-to-many adapter, taking
-one beat per instruction from DECODE and producing one beat per
-micro-operation for PREPARE.
+CPU_MAIN also instantiates [SEQUENCER](sequencer.vhd), on the link from DECODE
+to PREPARE. It is not a fourth stage: it holds no payload registers, adds no
+latency, and its only state is the index of the micro-operation it is currently
+presenting. It is a one-to-many adapter, taking one beat per instruction from
+DECODE and producing one beat per micro-operation for PREPARE.
 
 ## Microcoding of instructions
 
 The really cool feature of this implementation is the conversion from the
 CISC-like QNICE instructions to more RISC-like micro-operations. This
-conversion is done dynamically, i.e. on-the-fly by the DECODE stage with the
-help of a small ROM containing micro-code for the various instruction types.
+conversion is done dynamically, i.e. on-the-fly by DECODE with the help of a
+small ROM containing micro-code for the various instruction types.
 
 The main purpose of this micro-coding is to reduce the complexity of the
 implementation. The complexity arises from the advanced addressing modes,
@@ -57,9 +56,9 @@ operand.
 Note that this microcoding only concerns with splitting up the memory
 operations. Therefore, any optional pre- or post-increment of the registers has
 no influence on the micro-coding. Pre- and post-increment of registers is
-instead handled by the WRITE stage.  This once again simplifies the design
-since we here need only to distinguish between pure register addressing mode
-against any of the three memory adressing modes.
+instead handled by WRITE.  This once again simplifies the design since we here
+need only to distinguish between pure register addressing mode against any of
+the three memory adressing modes.
 
 With the above we have classified the instructions into four classes:
 |  Instruction  | # of operations | Which operations                                                                    |
@@ -105,11 +104,11 @@ need one micro-operation to wait for the result read back from memory.
 Another optimization is that I treat immediate operands as a special case. An
 immediate operand is encoded as `@R15++` in the instruction, but there is no need
 to perform a read from memory in this case, because the value is already given
-by the FETCH module.
+by FETCH.
 
 What about instructions with `@R15++` in both operands, e.g. `ADD @R15++,
-@R15++`?  The FETCH module only provides the first immediate operand.
-Therefore, the second immediate operand is handled using a regular memory read.
+@R15++`?  FETCH only provides the first immediate operand. Therefore, the
+second immediate operand is handled using a regular memory read.
 
 Furthermore, other addressing modes involving the Program Counter, i,e. `@R15`
 and `@--R15` are not optimized and instead handled as any other memory
@@ -207,12 +206,11 @@ An instruction like `ADD @R0, @R1` performs three memory instructions:
   register, waits for both memory operands to be ready, and writes the result
   back to memory.
 
-The PREPARE stage uses the `MEM_WAIT_SRC` and `MEM_WAIT_DST` microoperations to
-control the flow through the pipeline. If any memory read operations have been
-performed, the PREPARE stage waits for the read operations to be complete.
+PREPARE uses the `MEM_WAIT_SRC` and `MEM_WAIT_DST` microoperations to control
+the flow through the pipeline. If any memory read operations have been
+performed, PREPARE waits for the read operations to be complete.
 
-The WRITE stage uses the remaining microoperations to control the MEMORY and
-REGISTERS modules.
+WRITE uses the remaining microoperations to control MEMORY and REGISTERS.
 
 ### Waveforms
 The picture below is taken from a GHDL simulation of
@@ -224,46 +222,45 @@ instruction reads both operands, adds them to `0x3579`, writes that back to
 `0x001C`, and leaves `R0` at `0x001D`.
 
 The instruction occupies the pipeline for four clock cycles, t=1 to t=4, and
-consequently the FETCH module is stalled for three of them, t=1 to t=3. In the
-diagram the handshake bits (`valid`/`ready`/`enable`) are always drawn with
-their true value, whereas the payload buses are greyed out whenever their
-`valid` is low, or whenever they belong to a neighbouring instruction rather
-than to this `ADD`. The breakdown is as follows:
+consequently FETCH is stalled for three of them, t=1 to t=3. In the diagram the
+handshake bits (`valid`/`ready`/`enable`) are always drawn with their true
+value, whereas the payload buses are greyed out whenever their `valid` is low,
+or whenever they belong to a neighbouring instruction rather than to this
+`ADD`. The breakdown is as follows:
 
-* At time t=0: The FETCH module presents the single-word instruction and the
-  DECODE stage accepts it in the same cycle. At the same time, the REGISTERS
-  module is asked to read register 0, both as source and destination register.
-* At time t=1: The instruction is now in `seq_stage_o`, and the SEQUENCER
-  selects the first micro-operation `0x084` (`MEM_READ_SRC` + `REG_MOD_SRC`)
-  out of the list that DECODE emitted. At the same time the register value
-  `0x001B` is returned from the REGISTERS module.
-* At time t=2: The SEQUENCER selects the second micro-operation `0x002`
-  (`MEM_READ_DST`). Meanwhile the WRITE stage, which now holds `0x084`, issues
-  the first memory request `MEM_READ_SRC` from address `0x001B` and asks the
-  REGISTERS module to write `0x001B`+1 = `0x001C` to register 0. This written
-  value is bypassed combinatorially and appears on `src_val_o`/`dst_val_o` in
-  the very same cycle.
-* At time t=3: The SEQUENCER selects the last micro-operation `0x871` (`LAST` +
-  `REG_MOD_DST` + `MEM_WAIT_SRC` + `MEM_WAIT_DST` + `MEM_WRITE`), and the WRITE
-  stage issues the request `MEM_READ_DST` from address `0x001C`. The source
-  operand `0x1234` returns from the MEMORY module in this cycle, but the
-  destination operand does not, so the `MEM_WAIT_DST` bit makes PREPARE pull
-  `seq_ready` low and hold the micro-operation for one more cycle. This is the
-  only stall in the whole diagram. No new value is written to the REGISTERS
-  module.
+* At time t=0: FETCH presents the single-word instruction and DECODE accepts it
+  in the same cycle. At the same time, REGISTERS is asked to read register 0,
+  both as source and destination register.
+* At time t=1: The instruction is now in `seq_stage_o`, and SEQUENCER selects
+  the first micro-operation `0x084` (`MEM_READ_SRC` + `REG_MOD_SRC`) out of the
+  list that DECODE emitted. At the same time the register value `0x001B` is
+  returned from REGISTERS.
+* At time t=2: SEQUENCER selects the second micro-operation `0x002`
+  (`MEM_READ_DST`). Meanwhile WRITE, which now holds `0x084`, issues the first
+  memory request `MEM_READ_SRC` from address `0x001B` and asks REGISTERS to
+  write `0x001B`+1 = `0x001C` to register 0. This written value is bypassed
+  combinatorially and appears on `src_val_o`/`dst_val_o` in the very same
+  cycle.
+* At time t=3: SEQUENCER selects the last micro-operation `0x871` (`LAST` +
+  `REG_MOD_DST` + `MEM_WAIT_SRC` + `MEM_WAIT_DST` + `MEM_WRITE`), and WRITE
+  issues the request `MEM_READ_DST` from address `0x001C`. The source operand
+  `0x1234` returns from MEMORY in this cycle, but the destination operand does
+  not, so the `MEM_WAIT_DST` bit makes PREPARE pull `seq_ready` low and hold
+  the micro-operation for one more cycle. This is the only stall in the whole
+  diagram. No new value is written to REGISTERS.
 * At time t=4: The destination operand `0x2345` arrives, `seq_ready` goes high
-  again, and the last micro-operation is handed on to the WRITE stage. The FETCH
-  module also gets to deliver a new word to the DECODE stage here; that word
-  appears on `seq_stage_o` in the following cycle.
-* At time t=5: The WRITE stage issues the last request `MEM_WRITE` of `0x1234` +
-  `0x2345` = `0x3579` to address `0x001C`, and at the same time the REGISTERS
-  module is instructed to update register 0 to the value `0x001D`.
+  again, and the last micro-operation is handed on to WRITE. FETCH also gets to
+  deliver a new word to DECODE here; that word appears on `seq_stage_o` in the
+  following cycle.
+* At time t=5: WRITE issues the last request `MEM_WRITE` of `0x1234` + `0x2345`
+  = `0x3579` to address `0x001C`, and at the same time REGISTERS is instructed
+  to update register 0 to the value `0x001D`.
 
 Note how the two `@R0++` operands depend on each other: within this one
 instruction `R0` must go `0x001B` -> `0x001C` -> `0x001D`, and the intermediate
 value `0x001C` is only written back to the register file at t=2, long after
 DECODE issued its read at t=0. This works because DECODE does not latch the
-operand values at all: nothing between the register file and PREPARE does. The
+operand values at all: nothing between the register file and PREPARE does.
 SEQUENCER joins the read ports onto the record as live wires:
 
 ```vhdl
@@ -271,11 +268,10 @@ m_stage_o.src_reg_val <= reg_src_val_i; -- One cycle after DECODE's reg_src_addr
 m_stage_o.dst_reg_val <= reg_dst_val_i; -- One cycle after DECODE's reg_dst_addr_o
 ```
 
-So the write-before-read bypass inside the REGISTERS module (see
-[Bypass](#bypass)) is what holds `0x001C` on `dst_val_o` from t=2 to t=4, and it
-is *that* value the WRITE stage increments to `0x001D` at t=5. Without the
-bypass the second `@R0++` would work from the stale `0x001B` and leave `R0` at
-`0x001C`.
+So the write-before-read bypass inside REGISTERS (see [Bypass](#bypass)) is
+what holds `0x001C` on `dst_val_o` from t=2 to t=4, and it is *that* value
+WRITE increments to `0x001D` at t=5. Without the bypass the second `@R0++`
+would work from the stale `0x001B` and leave `R0` at `0x001C`.
 
 ![Waveform](timing.png)
 
@@ -295,58 +291,56 @@ fetch_addr_i   : in  std_logic_vector(15 downto 0);
 fetch_data_i   : in  std_logic_vector(31 downto 0);
 fetch_double_o : out std_logic;
 ```
-This AXI-interface accepts one or two words from the FETCH module. The signal
-`fetch_double_i` from the FETCH module indicates whether the signal
-`fetch_data_i` contains one or two words.
-Correspondingly, the signal `fetch_double_o` back to the FETCH module indicates
-whether we wish to consume one or two words.
+This AXI-interface accepts one or two words from FETCH. The signal
+`fetch_double_i` from FETCH indicates whether the signal `fetch_data_i`
+contains one or two words. Correspondingly, the signal `fetch_double_o` back to
+FETCH indicates whether we wish to consume one or two words.
 
 The idea behind this is that some instructions contain an immediate operand.
 Transferring two words (i.e. instruction and immediate operand) simultaneously
-greatly simplifies the implementation of the DECODE stage.  Furthermore, this
-allows [interleaving](../../doc/README.md#interleaving) of consecutive
-instructions resulting in higher performance.
+greatly simplifies the implementation of DECODE.  Furthermore, this allows
+[interleaving](../../doc/README.md#interleaving) of consecutive instructions
+resulting in higher performance.
 
 The instruction is always present in bits 15-0 and any immediate operand (or
 possibly the next instruction) is optionally present in bits 31-16. The signal
 `fetch_addr_i` contains the address (i.e. Program Counter) of the instruction.
 
-It is here worth noting that even though the REGISTERS module contains all the
-CPU registers, the Program Counter (`R15`) is instead stored in the FETCH
-module and forwarded through the pipeline as a separate signal.
+It is here worth noting that even though REGISTERS contains all the CPU
+registers, the Program Counter (`R15`) is instead stored in FETCH and forwarded
+through the pipeline as a separate signal.
 
-### Between DECODE, the SEQUENCER, and REGISTERS
+### Between DECODE, SEQUENCER, and REGISTERS
 ```
 -- driven by DECODE
 reg_rd_en_o   : out std_logic;
 reg_src_reg_o : out std_logic_vector(3 downto 0);
 reg_dst_reg_o : out std_logic_vector(3 downto 0);
--- consumed by the SEQUENCER
+-- consumed by SEQUENCER
 reg_src_val_i : in  std_logic_vector(15 downto 0);
 reg_dst_val_i : in  std_logic_vector(15 downto 0);
 reg_r14_i     : in  std_logic_vector(15 downto 0);
 ```
-The DECODE stage reads from the REGISTERS module. Note that the values read back
-(in `reg_src_val_i` and `reg_dst_val_i`) are valid on the following clock
-cycle. I.e. there is a fixed one-clock-cycle latency.
+DECODE reads from REGISTERS. Note that the values read back (in `reg_src_val_i`
+and `reg_dst_val_i`) are valid on the following clock cycle. I.e. there is a
+fixed one-clock-cycle latency.
 
 That latency is why the two halves of this interface belong to two different
 modules. By the time a value arrives, the instruction that asked for it has
-already left DECODE and is being presented to the SEQUENCER, so the values are
-wired from REGISTERS into the SEQUENCER, which joins them onto the stage record
+already left DECODE and is being presented to SEQUENCER, so the values are
+wired from REGISTERS into SEQUENCER, which joins them onto the stage record
 (`m_stage_o.src_reg_val`/`.dst_reg_val`/`.r14`). Routing them back into DECODE
 first, as this design used to, only made them a combinational pass-through of a
 stage they have nothing left to do with.
 
 We could have used the standard AXI-interface with `VALID` and `READY` signals,
 but since the latency is constant, I've chosen not to. However, we do need the
-signal `reg_rd_en_o` because when back-pressure is received from the PREPARE
-stage, we don't want to issue new read requests, i.e. we don't want the values
+signal `reg_rd_en_o` because when back-pressure is received from PREPARE, we
+don't want to issue new read requests, i.e. we don't want the values
 `reg_src_val_i` and `reg_dst_val_i` to change.
 
 The signal `reg_r14_i` always returns the current value of the Status Register
-`R14`. This is needed in the WRITE stage for the ALU and for conditional
-branching.
+`R14`. This is needed in WRITE for the ALU and for conditional branching.
 
 ### From WRITE to REGISTERS
 ```
@@ -357,11 +351,10 @@ reg_r14_we_o : out std_logic;
 reg_r14_o    : out std_logic_vector(15 downto 0);
 ```
 
-The WRITE stage calculates a new value for the destination register and
-simultaneously a new value for the Status Register `R14`. There is a separate
-Write-Enable for the destination and status registers. There is no support for
-back-pressure, simply because the Register file always accepts and performs a
-write.
+WRITE calculates a new value for the destination register and simultaneously a
+new value for the Status Register `R14`. There is a separate Write-Enable for
+the destination and status registers. There is no support for back-pressure,
+simply because the Register file always accepts and performs a write.
 
 ### From WRITE to MEMORY
 ```
@@ -371,17 +364,17 @@ mem_req_op_o    : out std_logic_vector(2 downto 0);
 mem_req_addr_o  : out std_logic_vector(15 downto 0);
 mem_req_data_o  : out std_logic_vector(15 downto 0);
 ```
-It is the WRITE stage that issues both read and write requests to the MEMORY
-module. This is because the DECODE stage generates micro-operations that each
-perform at most one memory operation.
+It is WRITE that issues both read and write requests to MEMORY. This is because
+DECODE generates micro-operations that each perform at most one memory
+operation.
 
 This interface is closely linked together with how the [Wishbone
 interface](../../doc/README.md#wishbone) works and how the [MEMORY
 module](../memory/README.md) is designed.
 
-Note that we have the standard AXI-interface controlling when the MEMORY module
-accepts a transaction request (read or write). The type of request is
-controlled by the one-hot-encoded `mem_req_op_o` signal:
+Note that we have the standard AXI-interface controlling when MEMORY accepts a
+transaction request (read or write). The type of request is controlled by the
+one-hot-encoded `mem_req_op_o` signal:
 * Bit 2 : Read from memory and store in Source buffer.
 * Bit 1 : Read from memory and store in Destination buffer.
 * Bit 0 : Write to memory.
@@ -389,9 +382,9 @@ controlled by the one-hot-encoded `mem_req_op_o` signal:
 Exactly one of these three bits must be set for any transaction.
 
 Since all memory transactions are controlled by the same stage (WRITE), this
-greatly simplifies the MEMORY module. Correspondingly, since the MEMORY module
-contains buffers for both Source and Destination operands, this greatly
-simplifies the PREPARE module, see below.
+greatly simplifies MEMORY. Correspondingly, since MEMORY contains buffers for
+both Source and Destination operands, this greatly simplifies PREPARE, see
+below.
 
 ### From MEMORY to PREPARE
 ```
@@ -403,16 +396,16 @@ mem_dst_ready_o : out std_logic;
 mem_dst_data_i  : in  std_logic_vector(15 downto 0);
 ```
 
-The PREPARE module receives optionally a Source and/or a Destination operand
-from the MEMORY module. The interface uses two parallel AXI-interfaces, which
-again significantly simplifies the PREPARE stage.
+PREPARE receives optionally a Source and/or a Destination operand from MEMORY.
+The interface uses two parallel AXI-interfaces, which again significantly
+simplifies PREPARE.
 
 
 ### From WRITE to FETCH
 The interfaces described so far work for almost all instructions and
 addressing modes.  However, during branches the Program Counter `R15` inside
-the FETCH module must be updated. This is controlled by the following two
-signals generated by the WRITE stage.
+FETCH must be updated. This is controlled by the following two signals
+generated by WRITE.
 ```
 fetch_valid_o : out std_logic;
 fetch_addr_o  : out std_logic_vector(15 downto 0);
@@ -479,7 +472,7 @@ padding and depends on this.
 ```
 inst_done_o : out std_logic;
 ```
-This output is asserted for one clock cycle whenever the WRITE stage accepts the
+This output is asserted for one clock cycle whenever WRITE accepts the
 micro-operation marked `LAST`, i.e. once per completed instruction. It is not
 used by the CPU itself; it drives the instruction counter in the testbench and
 gates the call to the `disassemble` procedure inside a `pragma synthesis_off`
@@ -489,8 +482,8 @@ block in [write.vhd](write.vhd).
 This section describes the interfaces between the three stages DECODE, PREPARE,
 and WRITE.
 
-The interface from DECODE to the SEQUENCER, from the SEQUENCER to PREPARE, and
-from PREPARE to WRITE is a standard AXI-interface, each carrying a record of its
+The interface from DECODE to SEQUENCER, from SEQUENCER to PREPARE, and from
+PREPARE to WRITE is a standard AXI-interface, each carrying a record of its
 own. There used to be a single `t_stage` for all three, holding the union of
 what the three links need, so every link also carried the elements belonging to
 stages further down — undriven, and documented as such. One record per link
@@ -539,7 +532,7 @@ above rather than repeated three times; [cpu_constants.vhd](../cpu_constants.vhd
 is authoritative.
 
 **Two elements change meaning in flight, so they do not carry the same name
-twice.** `microcodes` is the whole list; `microcode` is the single one the
+twice.** `microcodes` is the whole list; `microcode` is the single one
 SEQUENCER has selected out of it. `src_reg_val`/`dst_reg_val` are the register
 file's read data as it stands; `src_val_pc`/`dst_val_pc` are those values with
 the real Program Counter substituted for a read of `R15`, which is what every
@@ -548,7 +541,7 @@ shared one name, and the second of each was a `--` comment away from being
 misread.
 
 The element `microcodes` carries the whole list of up to three 12-bit
-micro-operations produced by the microcode ROM (3 x 12 = 36 bits). The SEQUENCER
+micro-operations produced by the microcode ROM (3 x 12 = 36 bits). SEQUENCER
 presents them one at a time, slicing the selected chunk out into the 12-bit
 `microcode` of `t_seq2prep`. It used to overwrite bits 11-0 of a 36-bit element
 and pass the raw list along in the upper bits, obliging every reader downstream
@@ -556,7 +549,7 @@ to slice before use; the narrower element on the narrower record removes that
 obligation rather than restating it.
 
 The elements `addr`, `inst`, and `immediate` are the address, instruction, and
-immediate operand passed on from the FETCH module.
+immediate operand passed on from FETCH.
 
 The flags `src_imm` and `dst_imm` indicate whether the source or destination
 operand should use the immediate value passed on.
@@ -585,11 +578,11 @@ neither re-derivation fits in front of it: see
 **`t_dec2seq` is latched in full; the three register-file elements are not.**
 DECODE registers the whole of `t_dec2seq` in its output process. The three
 elements `t_seq2prep` adds are *concurrent* assignments straight from the
-register file read ports, made in the SEQUENCER. DECODE issues the read — it
-owns the register numbers — but the values come back a clock cycle later, by
-which time the instruction is already in DECODE's output register and being
-presented to the SEQUENCER, so they are wired from REGISTERS to there directly
-rather than through DECODE.
+register file read ports, made in SEQUENCER. DECODE issues the read — it owns
+the register numbers — but the values come back a clock cycle later, by which
+time the instruction is already in DECODE's output register and being presented
+to SEQUENCER, so they are wired from REGISTERS to there directly rather than
+through DECODE.
 
 They therefore keep moving while the pipeline is stalled, and that is
 deliberate: it is how a stalled instruction picks up a register or Status
@@ -607,10 +600,10 @@ resolved: everything the ALU and the write-back need.
 ## Stages
 
 ### DECODE
-The main back-bone of the DECODE stage is the micro-code ROM implemented in the
-file [microcode.vhd](sub/microcode.vhd). The entry to this ROM is a four-bit
-signal describing the classification of the current instruction. This
-classification is encoded in the following four bits:
+The main back-bone of DECODE is the micro-code ROM implemented in the file
+[microcode.vhd](sub/microcode.vhd). The entry to this ROM is a four-bit signal
+describing the classification of the current instruction. This classification
+is encoded in the following four bits:
 * `reads_from_dst` : The instruction wants to read from the destination operand.
 * `writes_to_dst`  : The instruction wants to write to the destination operand.
 * `src_memory`     : The source operand belongs in memory.
@@ -624,33 +617,33 @@ DECODE forwards that entire list in a single beat; it is the
 [SEQUENCER](sequencer.vhd), sitting between DECODE and PREPARE, that splits
 (sequences) it into separate clock cycles.
 
-This implies a contract between DECODE and the SEQUENCER: the `LAST` bit must be
-set no later than the top (third) chunk of the list. The SEQUENCER derives its chunk
-index range from the width of `microcodes`, so a fourth chunk would index past
-the end of the list. Every entry of the microcode ROM, and every one of the jump
-overrides in [decode.vhd](decode.vhd), sets `LAST` in the top chunk. The
-contract is stated in the header of [sequencer.vhd](sequencer.vhd) and
+This implies a contract between DECODE and SEQUENCER: the `LAST` bit must be
+set no later than the top (third) chunk of the list. SEQUENCER derives its
+chunk index range from the width of `microcodes`, so a fourth chunk would index
+past the end of the list. Every entry of the microcode ROM, and every one of
+the jump overrides in [decode.vhd](decode.vhd), sets `LAST` in the top chunk.
+The contract is stated in the header of [sequencer.vhd](sequencer.vhd) and
 assumed in `formal/sequencer.psl`.
 
-One additional complexity handled by the DECODE module is the special case of
-jump instructions (`ABRA`, `RBRA`, `ASUB`, and `RSUB`).
+One additional complexity handled by DECODE is the special case of jump
+instructions (`ABRA`, `RBRA`, `ASUB`, and `RSUB`).
 
 ### PREPARE
 
 #### Reading R15
 
-The working Program Counter lives in the FETCH stage. The register file does
-hold an `R15`, but it is only written when an instruction actually targets
-`R15` — i.e. on branches — so during sequential execution it is stale and must
-never be used as an operand value.
+The working Program Counter lives in FETCH. The register file does hold an
+`R15`, but it is only written when an instruction actually targets `R15` — i.e.
+on branches — so during sequential execution it is stale and must never be used
+as an operand value.
 
 PREPARE therefore substitutes the real PC into the register file's
 `src_reg_val`/`dst_reg_val` before anything downstream sees them, and hands the
 result on under a different name — `src_val_pc`/`dst_val_pc` in
 [prepare.vhd](prepare.vhd). Doing the substitution on the stage record, rather
-than only on the ALU inputs, matters because the WRITE stage derives two other
-things from `src_val_pc`/`dst_val_pc`: the memory address for `@R15` and
-`@--R15`, and the pre/post-increment write-back. All three have to agree.
+than only on the ALU inputs, matters because WRITE derives two other things
+from `src_val_pc`/`dst_val_pc`: the memory address for `@R15` and `@--R15`, and
+the pre/post-increment write-back. All three have to agree.
 
 The substituted value is the address of the next word to be fetched at the
 point the operand is read, matching `qnice.c`, which advances a single PC
@@ -672,24 +665,24 @@ set `Z` only if the two paths agree.
 
 #### Sequencing
 
-This stage's input comes from the [SEQUENCER](sequencer.vhd), which expands
-the single beat DECODE emits into one beat per micro-operation. The SEQUENCER
-adds no latency (it is combinatorial in the forward direction), but it holds its
-`s_ready_o` low until the chunk marked `LAST` has been accepted downstream. That
-is the first of the two sources of back-pressure towards FETCH. The second is
-the wait for memory read data, expressed by the `MEM_WAIT_SRC` and
+This stage's input comes from [SEQUENCER](sequencer.vhd), which expands the
+single beat DECODE emits into one beat per micro-operation. SEQUENCER adds no
+latency (it is combinatorial in the forward direction), but it holds its
+`s_ready_o` low until the chunk marked `LAST` has been accepted downstream.
+That is the first of the two sources of back-pressure towards FETCH. The second
+is the wait for memory read data, expressed by the `MEM_WAIT_SRC` and
 `MEM_WAIT_DST` micro-operations, and that one *is* raised here — `seq_ready_o`
-in [prepare.vhd](prepare.vhd), which the SEQUENCER passes on to DECODE.
+in [prepare.vhd](prepare.vhd), which SEQUENCER passes on to DECODE.
 
-The SEQUENCER used to be instantiated inside this stage. It was moved out to
+SEQUENCER used to be instantiated inside this stage. It was moved out to
 `cpu_main.vhd` because it belongs to neither stage: it does no operand
 preparation, and its `s_ready_o` is the DECODE handshake rather than PREPARE's.
 The move is a pure hierarchy change, and was measured as one: every test
 program's writes log and cycle count is byte-identical across it, and a
 `-flatten_hierarchy none` synthesis reports the same 971 LUTs and 585
 flip-flops for the CPU before and after, with PREPARE's 79/133 splitting
-exactly into 70/131 plus the SEQUENCER's 9/2 (see
-[Where the logic is](../../doc/README.md#where-the-logic-is)).
+exactly into 70/131 plus SEQUENCER's 9/2
+(see [Where the logic is](../../doc/README.md#where-the-logic-is)).
 
 [sequencer.vhd](sequencer.vhd) later followed it out of `sub/` and now sits
 beside the stages it joins, which leaves `sub/` holding exactly what the stages
@@ -703,8 +696,8 @@ longer pipeline, and therefore additional bypass handling is needed, as well as
 occasional pipeline stalls.
 
 ### WRITE
-This stage contains the ALU and writes result back to the REGISTERS or MEMORY
-module.  Additionally, it handles pre- and post-increment of the registers.
+This stage contains the ALU and writes result back to REGISTERS or MEMORY.
+Additionally, it handles pre- and post-increment of the registers.
 
 ## Bypass
 
@@ -714,27 +707,25 @@ module.  Additionally, it handles pre- and post-increment of the registers.
 Whenever one has a pipelined architecture, where later stages write back to
 storage (i.e. register file) that is read in an earlier stage, we have a
 potential data hazard. In other words, we need to ensure that the register
-values read in the DECODE stage are not stale compared to the values written in
-the WRITE stage. In this design that is handled entirely inside the REGISTERS
-module; CPU_MAIN itself carries no bypass logic, which is less obvious than it
-sounds and is explained below.
+values read in DECODE are not stale compared to the values written in WRITE. In
+this design that is handled entirely inside REGISTERS; CPU_MAIN itself carries
+no bypass logic, which is less obvious than it sounds and is explained below.
 
-### Write-before-read in the REGISTERS module
-The REGISTERS module resolves the common case itself: a write from the WRITE
-stage that coincides with a read from the DECODE stage returns the newly written
-value rather than the stale one. This is a combinational bypass built into the
-register file, described in
+### Write-before-read in REGISTERS
+REGISTERS resolves the common case itself: a write from WRITE that coincides
+with a read from DECODE returns the newly written value rather than the stale
+one. This is a combinational bypass built into the register file, described in
 [registers/README.md](../registers/README.md#operation). No action is needed in
 CPU_MAIN for this case. The [waveform](#waveforms) above shows this bypass at
-work within a single instruction: the two `@R0++` operands of `ADD @R0++, @R0++`
-chain through it.
+work within a single instruction: the two `@R0++` operands of
+`ADD @R0++, @R0++` chain through it.
 
-### Why the WRITE stage needs no Status Register bypass
+### Why WRITE needs no Status Register bypass
 
-The WRITE stage both consumes and produces the Status Register within the same
+WRITE both consumes and produces the Status Register within the same
 instruction, so it looks like it should need a bypass of its own — and it used
-to have one: a `p_bypass` process holding a one-cycle-delayed copy of everything
-this stage wrote to the REGISTERS module, feeding a priority mux in front of
+to have one: a `p_bypass` process holding a one-cycle-delayed copy of
+everything this stage wrote to REGISTERS, feeding a priority mux in front of
 `prep_stage_i.r14`.
 
 That was removed as dead code. A probe on it never fired once in 8286 accepted
@@ -745,8 +736,8 @@ structural, and worth understanding before anyone adds it back:
 * `registers.vhd` forwards **both** Status Register write ports combinationally
   onto `sr_val_o` (see
   [registers/README.md](../registers/README.md#write-before-read-on-the-dedicated-sr-port)).
-* The SEQUENCER joins `reg_r14_i` onto the stage record as a *live*,
-  unregistered signal — see the note on latched versus live elements under
+* SEQUENCER joins `reg_r14_i` onto the stage record as a *live*, unregistered
+  signal — see the note on latched versus live elements under
   [Internal interfaces](#internal-interfaces).
 * WRITE only ever issues a register write on a cycle where PREPARE is
   simultaneously latching a fresh beat, because both are gated by the same
@@ -763,14 +754,14 @@ was therefore always bit-identical; the two have been coalesced.
 Any update of the Program Counter invalidates whatever DECODE and PREPARE have
 already speculatively fetched and decoded from the fall-through path. Rather
 than adding a separate flush signal, CPU_MAIN reuses `fetch_valid_o`: in
-[cpu_main.vhd](cpu_main.vhd) the DECODE, SEQUENCER, and PREPARE instances are
-reset with `rst_i or fetch_valid_o`, while WRITE gets the plain `rst_i`.
+[cpu_main.vhd](cpu_main.vhd) DECODE, SEQUENCER, and PREPARE are reset with
+`rst_i or fetch_valid_o`, while WRITE gets the plain `rst_i`.
 
 So every branch, and every other write to `R15`, clears everything upstream in
-the same cycle that the new PC is handed to FETCH. For the SEQUENCER that means
-its chunk index goes back to 0, abandoning a half-issued micro-operation list. The WRITE stage is
-deliberately not flushed, since it is the stage producing the branch and must be
-allowed to complete the instruction that caused it.
+the same cycle that the new PC is handed to FETCH. For SEQUENCER that means its
+chunk index goes back to 0, abandoning a half-issued micro-operation list.
+WRITE is deliberately not flushed, since it is the stage producing the branch
+and must be allowed to complete the instruction that caused it.
 
 This also covers the exit from reset. While `rst_i` is asserted, the `p_reg`
 process in [write.vhd](write.vhd) forces a write of `R15 = 0`, which in turn
@@ -780,7 +771,7 @@ pipeline.
 ### Early redirect
 A branch costs four cycles because WRITE resolves it two stages after DECODE
 read it: one cycle to register the new PC in FETCH, one for the instruction
-memory's read latency, one in the ICACHE, and one because DECODE and PREPARE are
+memory's read latency, one in ICACHE, and one because DECODE and PREPARE are
 then empty. Measured on `test/prog.asm` immediately before this optimisation,
 redirects accounted for 3625 cycles of a 15030-cycle run — **24%**.
 
@@ -810,11 +801,11 @@ falls from 678 to 580 cycles, **−14.5%**, against −1.0% for `prog.asm`.
 
 Three things make it work, and each is easy to undo:
 
-**The early redirect flushes FETCH and the ICACHE only — never DECODE or
-PREPARE.** By the end of the cycle the branch is in DECODE's output register,
-and everything downstream of it is *older*, so the only wrong-path instructions
-in the machine are the ones FETCH and the ICACHE hold. That is what makes this
-cheaper than resolving a branch early in general, and it is why `cpu.vhd` keeps
+**The early redirect flushes FETCH and ICACHE only — never DECODE or PREPARE.**
+By the end of the cycle the branch is in DECODE's output register, and
+everything downstream of it is *older*, so the only wrong-path instructions in
+the machine are the ones FETCH and ICACHE hold. That is what makes this cheaper
+than resolving a branch early in general, and it is why `cpu.vhd` keeps
 `icache_rst` (from WRITE) and `icache_flush` (from DECODE) as separate signals.
 
 **The ICACHE flush has to be *soft*.** Its ordinary `rst_i` gates `m_valid_o`
@@ -864,15 +855,14 @@ dual-port RAM here never does.
 
 ### Register bank switch
 The other thing that flushes the pipeline is a change to the upper eight bits of
-`R14`, which select which of the 256 pages of `R0`-`R7` the REGISTERS module
-presents (`INCRB`, `DECRB`, or an ordinary write to `R14` that lands in those
-bits).
+`R14`, which select which of the 256 pages of `R0`-`R7` REGISTERS presents
+(`INCRB`, `DECRB`, or an ordinary write to `R14` that lands in those bits).
 
 This has to be a flush, not a bypass. DECODE issues a register read two stages
-ahead of WRITE, so by the time `INCRB`'s new bank reaches the REGISTERS module,
-the read for the instruction *after* it has already gone out — against the old
-bank. Forwarding the bank into `lower_rd_addr_src`/`lower_rd_addr_dst` does not
-help either: the address was applied to the RAM a full cycle before the new bank
+ahead of WRITE, so by the time `INCRB`'s new bank reaches REGISTERS, the read
+for the instruction *after* it has already gone out — against the old bank.
+Forwarding the bank into `lower_rd_addr_src`/`lower_rd_addr_dst` does not help
+either: the address was applied to the RAM a full cycle before the new bank
 existed. Measured on the instruction pair `DECRB` / `MOVE R0, R9`, the read is
 issued one cycle before the `wr_sr_en_i` write lands.
 
@@ -905,7 +895,7 @@ outgoing bank by the time the switch retires in WRITE:
 
 | | Where it is | What its register read did | Remedy |
 |---|---|---|---|
-| I1 | DECODE's output register | Issued a cycle ago, against the old bank. The SEQUENCER joins `src_reg_val`/`dst_reg_val` onto the record as *live* wires, so the values are already gone. | Flush. |
+| I1 | DECODE's output register | Issued a cycle ago, against the old bank. SEQUENCER joins `src_reg_val`/`dst_reg_val` onto the record as *live* wires, so the values are already gone. | Flush. |
 | I2 | DECODE's input | Being issued in this very cycle, still against the old bank: `reg_sr` does not take the new value until this cycle's clock edge. But nothing has accepted it yet. | Hold `fetch_ready_o` low for one cycle, so it reads again from the new bank. |
 
 Anything further back issues its read at least one cycle from now and picks up
@@ -977,8 +967,8 @@ fails them. Verified by doing exactly that: dropping the destination half of
 ### Self-modifying code
 The third thing that flushes the pipeline is a store into the instruction stream.
 Instruction and data memory are the same physical RAM, so `MOVE R1, @R0` can land
-on an address that FETCH, the ICACHE, DECODE, or PREPARE has already read — and
-the stale copy would then execute with nothing noticing.
+on an address that FETCH, ICACHE, DECODE, or PREPARE has already read — and the
+stale copy would then execute with nothing noticing.
 
 `smc_hit` in [write.vhd](write.vhd) detects this and joins `fetch_valid_o`. The
 subtlety is entirely in keeping it cheap: this net is the reset pin of every
@@ -999,11 +989,10 @@ how far `smc_hit`'s cheaper subtraction may be tightened.
 
 ## Formal verification
 `formal/cpu_main.psl` verifies the assembled DECODE + PREPARE + WRITE pipeline
-against a free (unconstrained) environment for FETCH, the REGISTERS module and
-the MEMORY module. The environment assumptions model the valid/ready contract on
-each interface, the fixed one-cycle read latency of the REGISTERS module, and the
-fact that at most one source and one destination read may be outstanding
-towards the MEMORY module at a time.
+against a free (unconstrained) environment for FETCH, REGISTERS, and MEMORY.
+The environment assumptions model the valid/ready contract on each interface,
+the fixed one-cycle read latency of REGISTERS, and the fact that at most one
+source and one destination read may be outstanding towards MEMORY at a time.
 
 The assertions fall into four groups:
 
@@ -1028,8 +1017,8 @@ The assertions fall into four groups:
   assertion is not vacuous.
 * **Output interfaces.** `f_fetch_double` checks that we never accept a single
   word when we need two; `f_mem_src_ready_stable` / `f_mem_dst_ready_stable`
-  check the ready signals towards the MEMORY module; `f_r14_bit0` checks the
-  QNICE invariant that bit 0 of the Status Register always reads back as `1`.
+  check the ready signals towards MEMORY; `f_r14_bit0` checks the QNICE
+  invariant that bit 0 of the Status Register always reads back as `1`.
 * **Instruction behaviour.** `f_mov_r_r_read` and `f_mov_r_r_write` are the two
   properties that reason about an actual instruction. Using `anyconst`
   source/destination register numbers, they assert that accepting a
@@ -1090,13 +1079,13 @@ The assertions fall into four groups:
   without any assertion noticing. `c_crb_flush` and `c_crb_hold` cover the two
   outcomes that do cost something.
 
-The SEQUENCER is additionally verified standalone in `formal/sequencer.psl`,
-where `prove` (k-induction) passes: output valid is a pure pass-through of input
+SEQUENCER is additionally verified standalone in `formal/sequencer.psl`, where
+`prove` (k-induction) passes: output valid is a pure pass-through of input
 valid, the payload is stable while stalled, no new DECODE beat is accepted
 before the `LAST` chunk has been accepted, and the chunk index advances,
 restarts, and holds correctly. The `LAST`-in-the-top-chunk contract described
 under [DECODE](#decode) is an *assume* there, not an assert - it is a
-requirement on the microcode ROM, not a property of the SEQUENCER.
+requirement on the microcode ROM, not a property of SEQUENCER.
 
 **Status.** `cpu_main.sby` defines a `cover` and a `bmc` task, both at depth 20.
 Both pass, and the assertions are mutation-tested. Corrupting the register read

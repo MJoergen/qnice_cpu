@@ -119,8 +119,8 @@ L_T4_1          MOVE    R3, R2          ; New instruction, to replace L_T4
 
 
 ; ---------------------------------------------------------------
-; T5: Modify the instruction through a PRE-DECREMENT pointer. The WRITE stage
-;     derives the memory address as dst_val-1 in that mode, so this reaches
+; T5: Modify the instruction through a PRE-DECREMENT pointer. WRITE derives
+;     the memory address as dst_val-1 in that mode, so this reaches
 ;     mem_req_addr_o by a different path than T1-T4.
 ; ---------------------------------------------------------------
 T5              MOVE    L_T5, R0

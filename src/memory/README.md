@@ -1,7 +1,7 @@
 # MEMORY module
 
 ## Interfaces
-The top-level interface of the MEMORY module is as follows:
+The top-level interface of MEMORY is as follows:
 ```
 -- From WRITE
 mreq_valid_i : in  std_logic;
@@ -33,9 +33,9 @@ wb_data_i    : in  std_logic_vector(15 downto 0)
 
 ## Implementation
 
-This module multiplexes one request channel (from the WRITE stage) and two readback channels
-(SRC/DST, back to the PREPARE stage) onto a single Wishbone Master interface, using three
-[`src/sub/`](../sub) elastic-pipeline primitives:
+This module multiplexes one request channel (from WRITE) and two readback channels (SRC/DST, back
+to PREPARE) onto a single Wishbone Master interface, using three [`src/sub/`](../sub)
+elastic-pipeline primitives:
 
 * **`i_two_stage_fifo_mem`** (depth 2) tracks the one-hot op-type (`mreq_op_i`: READ_SRC / READ_DST
   / WRITE) of each *outstanding* (issued-but-not-yet-acked) request, in issue order. It is pushed
