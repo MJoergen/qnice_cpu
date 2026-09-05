@@ -85,17 +85,27 @@
    %% Shared modules: REGISTERS on the left, MEMORY on the right
    %% ---------------------------------------------------------------
 
+   % Both boxes are fitted to a full-width RECTANGLE -- the two corners are
+   % offset by half of block's 26mm minimum width -- rather than to the
+   % zero-width vertical segment (regx |- ...) (regx |- ...) that would
+   % otherwise say the same thing. The shape comes out identical either way,
+   % because minimum width expands it, but the LABEL does not: fitted to a
+   % zero-width box it ends up 6mm right of centre, all but touching the right
+   % border. Keep the two x-offsets 26mm apart and centred on regx/memx.
+
    % REGISTERS spans DECODE down to WRITE: DECODE issues the reads, the values
    % come back into the SEQUENCER, and WRITE writes.
    \coordinate (regx) at ([xshift = -42mm] decode.center);
    \node[block, inner sep = 0pt,
-         fit = {(regx |- decode.north) (regx |- write.south)}] (regs) {REGISTERS};
+         fit = {([xshift = -13mm] regx |- decode.north)
+                ([xshift =  13mm] regx |- write.south)}] (regs) {REGISTERS};
 
    % MEMORY spans PREPARE down to WRITE: WRITE issues the requests, PREPARE
    % consumes the read responses.
    \coordinate (memx) at ([xshift = 42mm] decode.center);
    \node[block, inner sep = 0pt,
-         fit = {(memx |- prepare.north) (memx |- write.south)}] (memory) {MEMORY};
+         fit = {([xshift = -13mm] memx |- prepare.north)
+                ([xshift =  13mm] memx |- write.south)}] (memory) {MEMORY};
 
    %% ---------------------------------------------------------------
    %% Connections
