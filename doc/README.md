@@ -73,7 +73,7 @@ Control transfer in this design is a *flush*: the stages above the one that
 resolved the transfer are emptied, and FETCH is pointed somewhere new. Both
 halves are one signal. WRITE's `fetch_valid_o` carries the new Program Counter
 to FETCH, and in [cpu_main.vhd](../src/cpu_main/cpu_main.vhd) it is OR-ed into
-the reset of ICACHE, DECODE, the SEQUENCER, and PREPARE — so everything already
+the reset of ICACHE, DECODE, SEQUENCER, and PREPARE — so everything already
 fetched and decoded from the fall-through path is discarded in the same cycle
 the redirect goes out. FETCH abandons the requests it has in flight, the ICACHE
 clears its buffer, and the SEQUENCER's chunk index returns to 0, abandoning a
@@ -84,7 +84,7 @@ instruction that caused it.
 Four conditions raise `fetch_valid_o`, and
 [write.vhd](../src/cpu_main/write.vhd) builds all four out of registered stage
 state rather than out of the ALU result. That is not an accident of style. This
-net is the reset pin of every flip-flop in two stages, so it has enormous
+net is the reset pin of every flip-flop in four stages, so it has enormous
 fanout and must settle early. Two of the four tests below are, for that reason,
 deliberately cheap over-approximations of the condition they stand for — they
 flush in cases that did not strictly need it — and the measured price of the
@@ -125,7 +125,7 @@ precise version is recorded next to each in the RTL.
   [Register bank switch](../src/cpu_main/README.md#register-bank-switch).
 * **A store landing within 32 words after the current instruction.** Instruction
   and data memory are two ports of the same RAM, so a store can overwrite an
-  instruction that FETCH, the ICACHE, DECODE or PREPARE has already read. WRITE
+  instruction that FETCH, ICACHE, DECODE, or PREPARE has already read. WRITE
   treats such a store as a control transfer and re-fetches from the updated
   RAM. The window is over-approximate — the real read-ahead is at most 8 words —
   and that is safe by construction, since a spurious flush costs cycles rather
