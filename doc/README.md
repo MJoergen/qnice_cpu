@@ -43,10 +43,10 @@ The block diagram contains two additional blocks:
 * MEMORY: Interfaces to the Wishbone memory bus and supports two read ports
   (connected to PREPARE) and one write port (connected to WRITE).
 
-Not drawn in the block diagram is the path from WRITE back to FETCH. Any write
-to `R15` is forwarded to FETCH as a new Program Counter, and the same signal
-flushes the DECODE and PREPARE stages. That is how every branch works, and it is
-the only way the pipeline is cleared other than a global reset.
+Not drawn in the block diagram are the two paths back to FETCH, one from WRITE
+and one from DECODE, which carry a new Program Counter and clear the stages
+above it. That is how every branch works; see
+[Pipeline flush](#Pipeline-flush) below.
 
 The flow through the pipeline is that an instruction will spend one or two
 clock cycles in the FETCH stage (two cycles if it uses an immediate operand),
@@ -70,6 +70,122 @@ memory.  Thankfully, most modern FPGAs have built-in dual port memories that
 support this construct natively.
 
 
+## Pipeline flush
+Control transfer in this design is a *flush*: the stages above the one that
+resolved the transfer are emptied, and FETCH is pointed somewhere new. Both
+halves are one signal. WRITE's `fetch_valid_o` carries the new Program Counter
+to FETCH, and in [cpu_main.vhd](../src/cpu_main/cpu_main.vhd) it is OR-ed into
+the reset of DECODE, the SEQUENCER and PREPARE — so everything already fetched
+and decoded from the fall-through path is discarded in the same cycle the
+redirect goes out. FETCH abandons the requests it has in flight, the ICACHE
+clears its buffer, and the SEQUENCER's chunk index returns to 0, abandoning a
+half-issued micro-operation list. WRITE itself is deliberately *not* reset: it
+is the stage producing the flush, and it has to be allowed to retire the
+instruction that caused it.
+
+Four conditions raise `fetch_valid_o`, and
+[write.vhd](../src/cpu_main/write.vhd) builds all four out of registered stage
+state rather than out of the ALU result. That is not an accident of style. This
+net is the reset pin of every flip-flop in two stages, so it has enormous
+fanout and must settle early. Two of the four tests below are, for that reason,
+deliberately cheap over-approximations of the condition they stand for — they
+flush in cases that did not strictly need it — and the measured price of the
+precise version is recorded next to each in the RTL.
+
+* **A write to `R15`.** This is every taken branch — DECODE rewrites a jump's
+  microcode to write its target to `R15`, so a branch *is* a register write as
+  far as WRITE is concerned — and equally any ordinary instruction that names
+  `R15` as its destination. The redirect target is the value being written.
+  It has one carve-out: a branch that DECODE already redirected on its own must
+  not redirect a second time here, for which see [below](#What-a-flush-costs).
+* **A write to `R14`.** The upper eight bits of the Status Register select
+  which of the 256 pages of `R0`-`R7` the register file presents, so changing
+  them is a control transfer in disguise: an instruction already in flight has
+  had its operands read against the outgoing page. The trigger is *syntactic* —
+  "this instruction writes `R14`" — and not a comparison of the new page
+  against the old, which means `MOVE ST____C_, R14` pays a branch penalty even
+  though it leaves the page alone, and so does `R14` used as a pointer
+  (`MOVE @R14++, R0`, whose post-increment write-back names `R14` like any
+  other). The precise version was built and measured: it costs the entire
+  timing margin (WNS +0.344 → +0.010 ns and +44 LUTs), because it puts the ALU
+  result and an 8-bit comparator in front of that high-fanout net. Note that
+  `R14` and `R15` share `reg_addr_o(3 downto 1) = "111"`, so these two
+  conditions are physically one product term. The redirect target is the
+  following instruction.
+* **A retiring `INCRB`/`DECRB`, but only sometimes.** These change the register
+  page directly, and the same hazard applies — except that here it is worth two
+  extra signals to be precise about it, because the instruction pair is common.
+  Only two instructions can ever have read the outgoing page, and only if they
+  *consume* a paged value: writing `R0`-`R7` is safe, since the write travels
+  down the pipeline as a register *number* and lands in whatever page is
+  current when it retires. So DECODE classifies each instruction, and a bank
+  switch flushes only when the instruction in DECODE's output register reads a
+  paged register, holds DECODE for a single cycle when the one at its *input*
+  does, and costs nothing otherwise. That last case is the common one: all ten
+  bank switches in `prog.asm` are free, the standard `INCRB` / `MOVE R8, R0`
+  prologue and `DECRB` / `MOVE @R13++, R15` epilogue included. See
+  [Register bank switch](../src/cpu_main/README.md#Register-bank-switch).
+* **A store landing within 32 words after the current instruction.** Instruction
+  and data memory are two ports of the same RAM, so a store can overwrite an
+  instruction that FETCH, the ICACHE, DECODE or PREPARE has already read. WRITE
+  treats such a store as a control transfer and re-fetches from the updated
+  RAM. The window is over-approximate — the real read-ahead is at most 8 words —
+  and that is safe by construction, since a spurious flush costs cycles rather
+  than correctness. A store *through* `R15` is simply forced to hit, since the
+  register file's `R15` copy is stale and the distance calculation would be
+  meaningless. See [Self-modifying code](#Self-modifying-code).
+
+Reset is the fifth case, and it goes through the first of those four rather
+than around it: while `rst_i` is asserted, `p_reg` in `write.vhd` forces a write
+of `R15 = 0`, which raises `fetch_valid_o` by the ordinary path and so starts
+execution from address 0 with a clean pipeline.
+
+A flush also clears the HALT gate in [cpu.vhd](../src/cpu.vhd). A `HALT` handed
+to DECODE stops the CPU, but a `HALT` that DECODE has accepted is not
+necessarily one that will execute — an older branch retiring behind it discards
+it. [`test/prog_pipeline.asm`](../test/prog_pipeline.asm) branches over twelve
+`HALT`s used as padding and depends on this.
+
+### What a flush costs
+A flush costs **four cycles**: one to register the new PC in FETCH, one for the
+instruction memory's read latency, one in the ICACHE, and one because DECODE and
+PREPARE are then empty. That is the single largest overhead in the design —
+measured on `prog.asm`, 731 redirects account for 3625 cycles of a 15030-cycle
+run, **24%**.
+
+One class of branch escapes most of it. For `ABRA`/`ASUB`/`RBRA`/`RSUB
+<label>, 1`, DECODE has everything the redirect needs the moment it accepts the
+instruction: the condition is unconditional, so no flags are involved, and the
+target is the immediate word FETCH already delivered alongside the instruction.
+DECODE therefore issues the redirect itself, two cycles before WRITE would
+have, cutting the penalty to **two cycles, and one for `ASUB`/`RSUB`**. What
+that is worth on real code, and what it cost in timing margin, is in
+[Optimizations](#Optimizations).
+
+This is a *partial* flush, and the distinction is load-bearing. The early
+redirect resets FETCH and the ICACHE only — never DECODE or PREPARE. By the end
+of the cycle the branch is in DECODE's output register and everything
+downstream of it is *older*, so the wrong-path instructions live only in FETCH
+and the ICACHE. The ICACHE flush must also be *soft*: DECODE raises it
+*because* it is accepting the branch being offered this cycle, so a reset that
+withdrew that handshake would withdraw the condition it was derived from and
+settle on "no branch accepted, no flush" — silently inert. Hence `icache_rst`
+(the hard flush, from WRITE) and `icache_flush` (the soft one, from DECODE) are
+separate signals in [cpu.vhd](../src/cpu.vhd). WRITE must then not redirect
+again when the branch finally retires, or it would discard exactly what the
+early redirect went to fetch; `prep_stage_i.early_jmp` carries that fact down
+the pipeline. See
+[Early redirect](../src/cpu_main/README.md#Early-redirect) and
+[Flush](../src/icache/README.md#Flush).
+
+One further detail lives in FETCH: a redirect does **not** tear down the
+Wishbone cycle. `CYC` stays asserted and the first request of the new
+instruction stream goes out on the very next clock cycle, which is worth
+another cycle per redirect. The requests abandoned by the redirect still owe
+acknowledgements, and FETCH counts and discards them; see
+[Redirect](../src/fetch/README.md#Redirect).
+
+
 ## Back-pressure
 The thick arrows indicate the AXI-like pipeline handshake, consisting of a
 `VALID` signal from source to sink and a `READY` signal from sink to source.
@@ -89,7 +205,7 @@ There are three sources of back-pressure in the design:
   cycle of back-pressure is enough to make it read again against the new one.
   This is the cheap half of
   [Register bank switch](../src/cpu_main/README.md#Register-bank-switch); the
-  expensive half is a pipeline flush.
+  expensive half is a [pipeline flush](#Pipeline-flush).
 
 
 ## Detailed design description
