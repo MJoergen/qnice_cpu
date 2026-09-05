@@ -399,7 +399,7 @@ single 6-input LUT and no longer does. An interrupt grant is a fourth term on a
 net that is the reset pin of two entire pipeline stages, and the bank-switch work
 spent 0.072 ns of the margin quoted below getting the third one in.
 
-The budget is **+0.093 ns** — see [Utilization](README.md#Utilization), measured
+The budget is **+0.093 ns** — see [Utilization](README.md#utilization), measured
 at the 7.25 ns constraint. For scale, adding the register-bank flush alone cost
 0.098 ns, making it conditional cost a further 0.072 ns, and placement noise
 unrelated to any edit has been measured at up to 0.284 ns. This is the single
@@ -468,7 +468,7 @@ The reference halts on both.
   Two things worth having on record beyond the headline. `fetch_valid_o` did not
   become critical — both builds end up on the same Status Register loop inside
   PREPARE, at 9 logic levels and roughly 80% routing, which is the path
-  [The critical path](README.md#The-critical-path) already describes. And the
+  [The critical path](README.md#the-critical-path) already describes. And the
   cost in area is +5 LUTs and +1 flip-flop, where the flip-flop is the spike's
   own toggle and so will not appear in the real implementation.
 

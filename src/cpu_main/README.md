@@ -5,21 +5,21 @@ the stages DECODE, PREPARE, and WRITE, and the SEQUENCER that joins the first
 two.
 
 Table of contents:
-* [Block diagram](#Block-diagram)
-* [Microcoding of instructions](#Microcoding-of-instructions)
-* [External interfaces](#External-interfaces)
-* [Internal interfaces](#Internal-interfaces)
-* [Stages](#Stages)
-* [Bypass](#Bypass)
-* [Pipeline flush](#Pipeline-flush)
-* [Formal verification](#Formal-verification)
+* [Block diagram](#block-diagram)
+* [Microcoding of instructions](#microcoding-of-instructions)
+* [External interfaces](#external-interfaces)
+* [Internal interfaces](#internal-interfaces)
+* [Stages](#stages)
+* [Bypass](#bypass)
+* [Pipeline flush](#pipeline-flush)
+* [Formal verification](#formal-verification)
 
 ## Block diagram
 
 ![Block Diagram](../../doc/cpu.png)
 
 The remaining blocks are described else-where, see [main
-documentation](../../doc/README.md#Detailed-design-description).
+documentation](../../doc/README.md#detailed-design-description).
 
 The three stages DECODE, PREPARE, and WRITE are combined into a single module
 CPU_MAIN, drawn as the dotted outline in the diagram. This is mainly to
@@ -272,7 +272,7 @@ m_stage_o.dst_reg_val <= reg_dst_val_i; -- One cycle after DECODE's reg_dst_addr
 ```
 
 So the write-before-read bypass inside the REGISTERS module (see
-[Bypass](#Bypass)) is what holds `0x001C` on `dst_val_o` from t=2 to t=4, and it
+[Bypass](#bypass)) is what holds `0x001C` on `dst_val_o` from t=2 to t=4, and it
 is *that* value the WRITE stage increments to `0x001D` at t=5. Without the
 bypass the second `@R0++` would work from the stale `0x001B` and leave `R0` at
 `0x001C`.
@@ -304,7 +304,7 @@ whether we wish to consume one or two words.
 The idea behind this is that some instructions contain an immediate operand.
 Transferring two words (i.e. instruction and immediate operand) simultaneously
 greatly simplifies the implementation of the DECODE stage.  Furthermore, this
-allows [interleaving](../../doc/README.md#Interleaving) of consecutive
+allows [interleaving](../../doc/README.md#interleaving) of consecutive
 instructions resulting in higher performance.
 
 The instruction is always present in bits 15-0 and any immediate operand (or
@@ -376,7 +376,7 @@ module. This is because the DECODE stage generates micro-operations that each
 perform at most one memory operation.
 
 This interface is closely linked together with how the [Wishbone
-interface](../../doc/README.md#Wishbone) works and how the [MEMORY
+interface](../../doc/README.md#wishbone) works and how the [MEMORY
 module](../memory/README.md) is designed.
 
 Note that we have the standard AXI-interface controlling when the MEMORY module
@@ -420,13 +420,13 @@ fetch_addr_o  : out std_logic_vector(15 downto 0);
 These are mostly decoded directly from the register write port: `fetch_valid_o`
 is asserted whenever WRITE writes to register 15, and `fetch_addr_o` is that
 write value. The same `fetch_valid_o` also flushes the pipeline, see
-[Pipeline flush](#Pipeline-flush) below.
+[Pipeline flush](#pipeline-flush) below.
 
 The one case that is not a write to `R15` is a change of the register bank, see
-[Register bank switch](#Register-bank-switch).
+[Register bank switch](#register-bank-switch).
 
 One class of branch does *not* redirect from here, because DECODE has already
-done it two cycles earlier — see [From DECODE to FETCH](#From-DECODE-to-FETCH)
+done it two cycles earlier — see [From DECODE to FETCH](#from-decode-to-fetch)
 immediately below.
 
 ### From DECODE to FETCH
@@ -437,7 +437,7 @@ early_addr_o  : out std_logic_vector(15 downto 0);  -- combinatorial
 A second redirect port, driven by DECODE rather than WRITE, for the one class of
 branch DECODE can resolve by itself: an unconditional jump to an immediate
 target, i.e. `ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1`. See
-[Early redirect](#Early-redirect).
+[Early redirect](#early-redirect).
 
 The two redirect ports are mutually exclusive and `cpu.vhd` merges them into the
 single one `fetch.vhd` sees, so FETCH itself is unaware of the distinction.
@@ -450,7 +450,7 @@ bank_stale_i  : in  std_logic;   -- DECODE -> WRITE
 The only signals in CPU_MAIN that skip a stage. They exist so that an
 `INCRB`/`DECRB` does not have to flush the pipeline unconditionally; both are
 combinational and both are explained under
-[Register bank switch](#Register-bank-switch).
+[Register bank switch](#register-bank-switch).
 
 ### Halt
 ```
@@ -579,8 +579,8 @@ Finally, `is_crb` and `early_jmp` are single bits that DECODE computes and
 carries down rather than letting WRITE re-derive them from `inst`. Both land on
 `fetch_valid_o`, the reset pin of every flip-flop in DECODE and PREPARE, and
 neither re-derivation fits in front of it: see
-[Register bank switch](#Register-bank-switch) and
-[Early redirect](#Early-redirect).
+[Register bank switch](#register-bank-switch) and
+[Early redirect](#early-redirect).
 
 **`t_dec2seq` is latched in full; the three register-file elements are not.**
 DECODE registers the whole of `t_dec2seq` in its output process. The three
@@ -689,7 +689,7 @@ program's writes log and cycle count is byte-identical across it, and a
 `-flatten_hierarchy none` synthesis reports the same 971 LUTs and 585
 flip-flops for the CPU before and after, with PREPARE's 79/133 splitting
 exactly into 70/131 plus the SEQUENCER's 9/2 (see
-[Where the logic is](../../doc/README.md#Where-the-logic-is)).
+[Where the logic is](../../doc/README.md#where-the-logic-is)).
 
 [sequencer.vhd](sequencer.vhd) later followed it out of `sub/` and now sits
 beside the stages it joins, which leaves `sub/` holding exactly what the stages
@@ -724,8 +724,8 @@ The REGISTERS module resolves the common case itself: a write from the WRITE
 stage that coincides with a read from the DECODE stage returns the newly written
 value rather than the stale one. This is a combinational bypass built into the
 register file, described in
-[registers/README.md](../registers/README.md#Operation). No action is needed in
-CPU_MAIN for this case. The [waveform](#Waveforms) above shows this bypass at
+[registers/README.md](../registers/README.md#operation). No action is needed in
+CPU_MAIN for this case. The [waveform](#waveforms) above shows this bypass at
 work within a single instruction: the two `@R0++` operands of `ADD @R0++, @R0++`
 chain through it.
 
@@ -744,10 +744,10 @@ structural, and worth understanding before anyone adds it back:
 
 * `registers.vhd` forwards **both** Status Register write ports combinationally
   onto `sr_val_o` (see
-  [registers/README.md](../registers/README.md#Write-Before-Read-on-the-dedicated-SR-port)).
+  [registers/README.md](../registers/README.md#write-before-read-on-the-dedicated-sr-port)).
 * The SEQUENCER joins `reg_r14_i` onto the stage record as a *live*,
   unregistered signal — see the note on latched versus live elements under
-  [Internal interfaces](#Internal-interfaces).
+  [Internal interfaces](#internal-interfaces).
 * WRITE only ever issues a register write on a cycle where PREPARE is
   simultaneously latching a fresh beat, because both are gated by the same
   ready signal.
@@ -845,7 +845,7 @@ frequency the cycles are free, but there is essentially nothing left for the
 next change. The critical path is unmoved, still register-to-register inside
 PREPARE through the ALU operand muxing, which none of this touches; the cost is
 the placement sensitivity described in
-[doc/README.md](../../doc/README.md#The-critical-path) rather than logic added
+[doc/README.md](../../doc/README.md#the-critical-path) rather than logic added
 to the path. Measured across four builds: +0.093 (baseline), +0.036 (early
 redirect with the reset guard omitted, which is not safe), +0.002 (as
 committed), +0.007 (guard moved into PREPARE's reset, which buys 0.005 ns and
@@ -989,7 +989,7 @@ address. The exact form puts a four-way mux and an adder in front of the
 subtraction and does not meet timing; the numbers and the derivation of the constant are in the
 comment above `smc_delta`.
 
-See [Self-modifying code](../../doc/README.md#Self-modifying-code) for the
+See [Self-modifying code](../../doc/README.md#self-modifying-code) for the
 architectural picture and [`test/prog_self_modifying.asm`](../../test/prog_self_modifying.asm)
 for the coverage. `f_flush_on_smc` in
 [formal/cpu_main.psl](../../formal/cpu_main.psl) pins the window from the other
@@ -1016,7 +1016,7 @@ The assertions fall into four groups:
   register-file elements, which DECODE does not drive and which must move while
   DECODE is stalled, so the property had to enumerate the latched elements one
   by one — and was quietly missing `early_jmp`. `t_dec2seq` holds exactly what
-  DECODE latches (see [Internal interfaces](#Internal-interfaces) above), so
+  DECODE latches (see [Internal interfaces](#internal-interfaces) above), so
   nothing can be left out by accident. `f_seq2prep_live_src` /
   `_dst` / `_r14` assert the complementary fact — that they reach PREPARE
   unlatched — so that registering one by mistake is caught too. The same pair of
@@ -1059,7 +1059,7 @@ The assertions fall into four groups:
 
 * **Pipeline flush.** `fetch_valid_o` is not only the redirect back to FETCH; it
   is the reset pin of every flip-flop in DECODE and PREPARE, so everything that
-  raises it is a flush (see [Pipeline flush](#Pipeline-flush) above). Four
+  raises it is a flush (see [Pipeline flush](#pipeline-flush) above). Four
   properties cover the two conditions that used to rest on simulation alone.
   `f_flush_on_bank_change` states the *requirement* rather than the
   implementation: whenever the value landing in `R14` changes the upper eight
@@ -1095,7 +1095,7 @@ where `prove` (k-induction) passes: output valid is a pure pass-through of input
 valid, the payload is stable while stalled, no new DECODE beat is accepted
 before the `LAST` chunk has been accepted, and the chunk index advances,
 restarts and holds correctly. The `LAST`-in-the-top-chunk contract described
-under [DECODE](#DECODE) is an *assume* there, not an assert - it is a
+under [DECODE](#decode) is an *assume* there, not an assert - it is a
 requirement on the microcode ROM, not a property of the SEQUENCER.
 
 **Status.** `cpu_main.sby` defines a `cover` and a `bmc` task, both at depth 20.

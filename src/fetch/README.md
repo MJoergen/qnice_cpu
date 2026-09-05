@@ -18,7 +18,7 @@ instantiated directly in [src/cpu.vhd](../cpu.vhd).
 
 The two used to be wrapped in a `fetch_cache.vhd`. That wrapper is gone;
 `cpu.vhd` wires them together itself, which is why the redirect/flush signal is
-visible at the top level — see [Flush](../icache/README.md#Flush) in the ICACHE
+visible at the top level — see [Flush](../icache/README.md#flush) in the ICACHE
 write-up, which is where the two flavours of it are pinned down.
 
 ## fetch.vhd
@@ -126,7 +126,7 @@ Also stated in the file header:
 
 FETCH and the ICACHE have a job each, and both are in `DUTS` in
 [formal/Makefile](../../formal/Makefile). `icache.sby` is described in
-[icache/README.md](../icache/README.md#Formal-verification).
+[icache/README.md](../icache/README.md#formal-verification).
 
 ### fetch.sby
 
@@ -221,7 +221,7 @@ or an explicit `dc_valid_i` term:
 
 The same reasoning is why `icache.psl`'s stability properties carry an
 `rst_i = '0'` term: there too `rst_i` is the flush. See
-[Formal verification](../icache/README.md#Formal-verification).
+[Formal verification](../icache/README.md#formal-verification).
 
 Omitting one of these is the trap described in the top-level `CLAUDE.md`, and
 BMC finds it immediately.

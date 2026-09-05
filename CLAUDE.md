@@ -167,7 +167,7 @@ The working Program Counter (`R15`) lives inside FETCH. The register file *does*
 slot in its upper bank and WRITE writes it whenever an instruction targets `R15` (i.e. on
 branches), but it is stale during sequential execution, so PREPARE substitutes the real PC for
 either operand whenever `R15` is read, in any addressing mode (`src_val_pc`/`dst_val_pc` in
-`prepare.vhd`; see [src/cpu_main/README.md](src/cpu_main/README.md#Reading-R15)). Reading that
+`prepare.vhd`; see [src/cpu_main/README.md](src/cpu_main/README.md#reading-r15)). Reading that
 stale slot directly was a real bug, fixed by that substitution;
 `R14` (Status Register) is handled specially in the register file (written alongside any regular
 register write at the end of most instructions); `R13` (Stack Pointer) is an ordinary register,
@@ -207,7 +207,7 @@ case that must NOT flush), and `f_flush_on_bank_change` / `f_hold_on_bank_change
 an in-flight instruction that consumes a banked value must be flushed or refused. Both derive
 "consumes a banked value" from the raw instruction encoding rather than from `uses_bank`, so
 narrowing `uses_bank` fails them. See
-[src/cpu_main/README.md](src/cpu_main/README.md#Register-bank-switch).
+[src/cpu_main/README.md](src/cpu_main/README.md#register-bank-switch).
 
 ### Microcode / instruction decomposition
 
@@ -230,14 +230,14 @@ to carry `REG_WRITE` with `res_reg = R15`, so the branch target reaches the PC t
 CPU breaks — verified by forcing it, which makes the suite stop reaching `HALT` at all. The fourth,
 reserved opcode `0xD`, is classified like `ADD` and so writes the source over the destination; that
 is unsanctioned fall-through, which is why `p_unimplemented` traps it.
-See [src/cpu_main/README.md](src/cpu_main/README.md#Microcoding-of-instructions) for the full
+See [src/cpu_main/README.md](src/cpu_main/README.md#microcoding-of-instructions) for the full
 worked examples (`MOVE R0,R1`, `MOVE @R0,@R1`, `ADD @R0,@R1`).
 
 Data hazards from this pipelining (later WRITE-stage register writes vs. earlier DECODE-stage
 register reads) are handled via bypass logic described in
-[src/cpu_main/README.md](src/cpu_main/README.md#Bypass), and via write-before-read semantics
+[src/cpu_main/README.md](src/cpu_main/README.md#bypass), and via write-before-read semantics
 built into the REGISTERS module itself (see
-[src/registers/README.md](src/registers/README.md#Operation)). Write-before-read applies to both
+[src/registers/README.md](src/registers/README.md#operation)). Write-before-read applies to both
 `R14` write ports: the ordinary one and the dedicated SR port (`wr_sr_en_i`), the latter forwarded
 by `src_val_o`/`dst_val_o` as well. `test/prog_hazard.asm` exercises these paths directly.
 
@@ -250,7 +250,7 @@ in [formal/registers.psl](formal/registers.psl) carries an explicit escape claus
 Separately, `sr_val_o`'s combinational mux previously didn't give `rst_i` the same top priority
 that `reg_sr`'s register process (`p_sr`) does, so a write coinciding with reset could briefly leak
 onto `sr_val_o` before `reg_sr` caught up next edge — fixed by making `rst_i` the first term in
-that mux (see [src/registers/README.md](src/registers/README.md#Formal-verification)).
+that mux (see [src/registers/README.md](src/registers/README.md#formal-verification)).
 
 ### Self-modifying code
 
@@ -264,7 +264,7 @@ flip-flop in DECODE and PREPARE, so the comparison must subtract **raw stage reg
 *window* rather than "every store" (unconditional flushing costs +8.5% on `prog.asm`,
 +64% on `prog_interleave.asm`). Over-approximating the window is always safe — a spurious
 flush costs cycles, not correctness. `test/prog_self_modifying.asm` covers both edges;
-see [doc/README.md](doc/README.md#Self-modifying-code).
+see [doc/README.md](doc/README.md#self-modifying-code).
 
 ### Early redirect (unconditional branches)
 
@@ -340,7 +340,7 @@ owe acknowledgements; `wb_stale` counts them and `wb_rsp_accept` is gated to dis
 replaces interface contract (c) with a new contract (d): **the slave must acknowledge in order**
 (the MEMORY module already assumes this). The old teardown remains for the one case that cannot be
 redirected — a request stuck on `STB` while the slave stalls, which cannot happen against the
-dual-port RAM here. See [src/fetch/README.md](src/fetch/README.md#Redirect).
+dual-port RAM here. See [src/fetch/README.md](src/fetch/README.md#redirect).
 
 When touching `fetch.psl`, note that `f_wb_outstanding` is cleared on the design's *cancel*
 condition, not on `dc_valid_i`. Reverting that one line is silent: `f_wb_slave_ack_idle` then
@@ -479,13 +479,13 @@ has Vivado.
   SEQUENCER sits beside the stages rather than in `sub/` because `cpu_main.vhd` instantiates it
   itself, on the DECODE→PREPARE link.
 - `src/sub/` — reusable elastic-pipeline building blocks, see
-  [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-srcsub) above.
+  [Elastic pipeline building blocks](#elastic-pipeline-building-blocks-srcsub) above.
 - `src/cpu.vhd` — top-level entity tying FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN together.
 - `test/` — testbench (`tb_cpu.vhd`), memory models, the pass/fail monitor (`test_monitor.vhd`),
   and `.asm` test programs. See [test/README.md](test/README.md) for how to tell a passing run
   from a failing one. One of them, `test/prog_waveform.asm`, is not really a test: it
   is the program the pipeline timing diagram in
-  [src/cpu_main/README.md](src/cpu_main/README.md#Waveforms) was read off, and it is in `TESTS`
+  [src/cpu_main/README.md](src/cpu_main/README.md#waveforms) was read off, and it is in `TESTS`
   only so that a change invalidating the diagram's quoted addresses and cycle counts fails the
   writes-log diff. The diagram itself is hand-written in `src/cpu_main/timing.tex` and rendered
   by `make diagrams`; nothing derives it from the simulation automatically.

@@ -153,7 +153,7 @@ then used as a pre-decrement pointer.
 `H12` switch banks — with `INCRB`/`DECRB` and with an ordinary write to `R14` —
 and then read `R0` from the very next instruction, as source and as destination.
 Both read the previous bank unless the bank switch flushes the pipeline, see
-[Register bank switch](../src/cpu_main/README.md#Register-bank-switch); `H12` is
+[Register bank switch](../src/cpu_main/README.md#register-bank-switch); `H12` is
 the case that silently copies one bank's value into another. `H13` writes `R14`
 *without* changing the bank — the flag-setup idiom — and checks that `R0` still
 reads back correctly afterwards. Note it cannot check that no flush happened:
@@ -184,7 +184,7 @@ time of the whole program.
 `prog_self_modifying.asm` covers stores into the program's own instruction
 stream. The hazard is that FETCH, the ICACHE, DECODE and PREPARE have all read
 ahead of the instruction retiring in WRITE, so without the flush described in
-[Self-modifying code](../src/cpu_main/README.md#Self-modifying-code) the *old*
+[Self-modifying code](../src/cpu_main/README.md#self-modifying-code) the *old*
 instruction executes and nothing reports a problem.
 
 * `T1`/`T2` — rewrite the opcode, and the immediate operand, of the very next
@@ -212,7 +212,7 @@ exists because the rest of this directory is unrepresentative in one specific
 way. These are CPU tests, so their branches are overwhelmingly *conditional*:
 only 73 of the 731 pipeline redirects in `prog.asm` come from an unconditional
 branch to an immediate target, the one class DECODE resolves by itself (see
-[Early redirect](../src/cpu_main/README.md#Early-redirect)). Real QNICE code is
+[Early redirect](../src/cpu_main/README.md#early-redirect)). Real QNICE code is
 the other way round — counting branches in the QNICE-FPGA monitor sources gives
 328 `RSUB <label>, 1`, 182 `RBRA <label>, 1` and 308 conditional `RBRA`, i.e.
 62% unconditional with an immediate target, because that is what every
@@ -230,7 +230,7 @@ call or a return fails the run rather than merely changing
 
 `prog_waveform.asm` is different in kind from the rest: it exists to *generate*
 the pipeline timing diagram in
-[src/cpu_main/README.md](../src/cpu_main/README.md#Waveforms). It is a straight
+[src/cpu_main/README.md](../src/cpu_main/README.md#waveforms). It is a straight
 run of `ADD @R0++, @R0++` at address `0x0006` surrounded by `MOVE R1, R1`
 padding, and that README quotes concrete addresses, register values and cycle
 numbers read off a simulation of it. It is in `TESTS` so that a change which
@@ -242,7 +242,7 @@ in memory. When it does need to change, re-read the values from a fresh
 simulation and run `make diagrams`.
 
 `prog_poll.asm` exists for the same reason — it generates the loop timing
-diagram in [doc/README.md](../doc/README.md#A-polling-loop-cycle-by-cycle) —
+diagram in [doc/README.md](../doc/README.md#a-polling-loop-cycle-by-cycle) —
 but it is **not** in `TESTS`, because **it never halts**. It is a device-polling
 loop, three instructions spinning until a status bit appears at `@R0`, and the
 testbench has no device to set that bit: `DEV` is an ordinary memory word
@@ -259,7 +259,7 @@ never halts either, and it is not in `TESTS`. It is the same five-word loop at
 the same addresses with `MOVE R1, R2` in place of `MOVE @R0, R2`, so it does no
 data access at all, and it runs in nine cycles per iteration rather than ten.
 That difference is the measurement quoted in
-[doc/README.md](../doc/README.md#Where-the-ten-cycles-go), and it is the reason
+[doc/README.md](../doc/README.md#where-the-ten-cycles-go), and it is the reason
 the two programs have to stay word-for-word aligned — the header of
 `prog_poll_reg.asm` says which two lines differ and why each of them has to.
 Change one of the pair and change the other.

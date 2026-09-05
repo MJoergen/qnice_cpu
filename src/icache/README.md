@@ -19,7 +19,7 @@ and `icache.vhd` is instantiated directly in [src/cpu.vhd](../cpu.vhd):
 
 The two entities used to be wrapped in a `fetch_cache.vhd`. That wrapper is
 gone; `cpu.vhd` wires them together itself, which is why both flush signals are
-visible at the top level (see [Flush](#Flush) below). The FETCH half is
+visible at the top level (see [Flush](#flush) below). The FETCH half is
 documented in [fetch/README.md](../fetch/README.md).
 
 ## icache.vhd
@@ -106,7 +106,7 @@ operation:
 `flush_i` is the second one, and it is the counterpart of `rst_i` for a redirect
 that DECODE originates itself rather than receives — an unconditional branch to
 an immediate target, see
-[Early redirect](../cpu_main/README.md#Early-redirect). `cpu.vhd` drives the two
+[Early redirect](../cpu_main/README.md#early-redirect). `cpu.vhd` drives the two
 separately:
 
 ```vhdl
@@ -138,7 +138,7 @@ trigger cycle in GHDL, so the qualifier has to be in the trigger.
 
 `icache.sby` is in `DUTS` in [formal/Makefile](../../formal/Makefile), as is
 FETCH's own job; see
-[fetch/README.md](../fetch/README.md#Formal-verification) for what the two
+[fetch/README.md](../fetch/README.md#formal-verification) for what the two
 together do *not* prove.
 
 `bmc`, `cover` and `prove` (k-induction), depth 10, elaborated with the small
@@ -163,4 +163,4 @@ become unreachable.
 The stability properties in `icache.psl` carry an `rst_i = '0'` term for the
 same reason FETCH's carry `abort rst_i`: here too `rst_i` is the flush, and a
 valid or ready signal can legitimately drop *within* the cycle it is asserted.
-See [Reset and flush escapes](../fetch/README.md#Reset-and-flush-escapes).
+See [Reset and flush escapes](../fetch/README.md#reset-and-flush-escapes).

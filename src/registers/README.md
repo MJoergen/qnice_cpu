@@ -5,7 +5,7 @@ single write port. The read ports are *addressed* by the DECODE stage, but
 because the read latency is one clock cycle the values arrive when the
 instruction has already moved on, so they are wired to the SEQUENCER, which
 joins them onto the pipeline's stage record (see
-[cpu_main/README.md](../cpu_main/README.md#Between-DECODE-the-SEQUENCER-and-REGISTERS)).
+[cpu_main/README.md](../cpu_main/README.md#between-decode-the-sequencer-and-registers)).
 The write port is connected to the WRITE stage.
 
 The only register that is treated in a special way is the processor Status
@@ -20,7 +20,7 @@ the working Program Counter: that resides in the FETCH stage, which increments
 it without telling the register file. The R15 slot here is therefore stale
 during sequential execution, and must never be used as an operand value; the
 PREPARE stage substitutes the real PC instead (see
-[cpu_main/README.md](../cpu_main/README.md#Reading-R15)).
+[cpu_main/README.md](../cpu_main/README.md#reading-r15)).
 
 
 ## Interface
@@ -99,7 +99,7 @@ guarantees that no read already issued against the outgoing page is ever
 happened and holding back the one whose read is going out in that very cycle —
 and it only has to do either when the instruction concerned actually uses a
 banked value. See
-[Register bank switch](../cpu_main/README.md#Register-bank-switch) in the
+[Register bank switch](../cpu_main/README.md#register-bank-switch) in the
 CPU_MAIN write-up for the details, including why forwarding the bank here
 would not have been enough on its own: the read address reaches the RAM a cycle
 before the new bank exists.

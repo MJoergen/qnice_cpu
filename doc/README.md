@@ -41,7 +41,7 @@ The block diagram contains two additional blocks:
 Not drawn in the block diagram are the two paths back to FETCH, one from WRITE
 and one from DECODE, which carry a new Program Counter and clear the stages
 above it. That is how every branch works; see
-[Pipeline flush](#Pipeline-flush) below.
+[Pipeline flush](#pipeline-flush) below.
 
 The flow through the pipeline is that an instruction will spend one or two
 clock cycles in the FETCH stage (two cycles if it uses an immediate operand),
@@ -55,7 +55,7 @@ In the above we see a Harvard architecture, where we have a separate
 instruction and data interface. The main reason for this choice is to simplify
 the implementation. It does also provide a nice side effect of increasing the
 available memory bandwidth, because we can read from instruction and data
-memory simultaneously, see below section on [Interleaving](#Interleaving).
+memory simultaneously, see below section on [Interleaving](#interleaving).
 
 There is one important detail to note about the Harvard architecture and that
 is that it requires dual port memory. This is because we want the system to
@@ -92,7 +92,7 @@ precise version is recorded next to each in the RTL.
   far as WRITE is concerned — and equally any ordinary instruction that names
   `R15` as its destination. The redirect target is the value being written.
   It has one carve-out: a branch that DECODE already redirected on its own must
-  not redirect a second time here, for which see [below](#What-a-flush-costs).
+  not redirect a second time here, for which see [below](#what-a-flush-costs).
 * **A write to `R14`.** The upper eight bits of the Status Register select
   which of the 256 pages of `R0`-`R7` the register file presents, so changing
   them is a control transfer in disguise: an instruction already in flight has
@@ -119,7 +119,7 @@ precise version is recorded next to each in the RTL.
   does, and costs nothing otherwise. That last case is the common one: all ten
   bank switches in `prog.asm` are free, the standard `INCRB` / `MOVE R8, R0`
   prologue and `DECRB` / `MOVE @R13++, R15` epilogue included. See
-  [Register bank switch](../src/cpu_main/README.md#Register-bank-switch).
+  [Register bank switch](../src/cpu_main/README.md#register-bank-switch).
 * **A store landing within 32 words after the current instruction.** Instruction
   and data memory are two ports of the same RAM, so a store can overwrite an
   instruction that FETCH, the ICACHE, DECODE or PREPARE has already read. WRITE
@@ -128,7 +128,7 @@ precise version is recorded next to each in the RTL.
   and that is safe by construction, since a spurious flush costs cycles rather
   than correctness. A store *through* `R15` is simply forced to hit, since the
   register file's `R15` copy is stale and the distance calculation would be
-  meaningless. See [Self-modifying code](#Self-modifying-code).
+  meaningless. See [Self-modifying code](#self-modifying-code).
 
 Reset is the fifth case, and it goes through the first of those four rather
 than around it: while `rst_i` is asserted, `p_reg` in `write.vhd` forces a write
@@ -155,7 +155,7 @@ target is the immediate word FETCH already delivered alongside the instruction.
 DECODE therefore issues the redirect itself, two cycles before WRITE would
 have, cutting the penalty to **two cycles, and one for `ASUB`/`RSUB`**. What
 that is worth on real code, and what it cost in timing margin, is in
-[Optimizations](#Optimizations).
+[Optimizations](#optimizations).
 
 This is a *partial* flush, and the distinction is load-bearing. The early
 redirect resets FETCH and the ICACHE only — never DECODE or PREPARE. By the end
@@ -170,15 +170,15 @@ separate signals in [cpu.vhd](../src/cpu.vhd). WRITE must then not redirect
 again when the branch finally retires, or it would discard exactly what the
 early redirect went to fetch; `prep_stage_i.early_jmp` carries that fact down
 the pipeline. See
-[Early redirect](../src/cpu_main/README.md#Early-redirect) and
-[Flush](../src/icache/README.md#Flush).
+[Early redirect](../src/cpu_main/README.md#early-redirect) and
+[Flush](../src/icache/README.md#flush).
 
 One further detail lives in FETCH: a redirect does **not** tear down the
 Wishbone cycle. `CYC` stays asserted and the first request of the new
 instruction stream goes out on the very next clock cycle, which is worth
 another cycle per redirect. The requests abandoned by the redirect still owe
 acknowledgements, and FETCH counts and discards them; see
-[Redirect](../src/fetch/README.md#Redirect).
+[Redirect](../src/fetch/README.md#redirect).
 
 
 ## Back-pressure
@@ -199,8 +199,8 @@ There are three sources of back-pressure in the design:
   `R0`-`R7` — its register read is going out against the outgoing bank, and one
   cycle of back-pressure is enough to make it read again against the new one.
   This is the cheap half of
-  [Register bank switch](../src/cpu_main/README.md#Register-bank-switch); the
-  expensive half is a [pipeline flush](#Pipeline-flush).
+  [Register bank switch](../src/cpu_main/README.md#register-bank-switch); the
+  expensive half is a [pipeline flush](#pipeline-flush).
 
 
 ## Detailed design description
@@ -215,7 +215,7 @@ The four stages and the two shared blocks are all built from a small set of
 reusable valid/ready primitives in `src/sub/` (`one_stage_buffer`,
 `one_stage_fifo`, `two_stage_buffer`, `two_stage_fifo`, `dp_ram`,
 `pipe_concat`); they are described in the top-level
-[CLAUDE.md](../CLAUDE.md#Elastic-pipeline-building-blocks-srcsub) and each has
+[CLAUDE.md](../CLAUDE.md#elastic-pipeline-building-blocks-srcsub) and each has
 its own formal job in `formal/`. How to run the test programs, and how to tell a
 passing run from a failing one, is in [test/README.md](../test/README.md).
 
@@ -258,7 +258,7 @@ apart:
   requirement, not just a description: the [MEMORY module](../src/memory/README.md)
   needs at least one cycle between accepting a request and acknowledging it. A
   slave that answers in the same cycle was built and measured, and rejected —
-  see [Optimizations](#Optimizations).
+  see [Optimizations](#optimizations).
 
 Because acknowledgements are just pulses carrying no identifying information,
 and because several requests may be outstanding at once, the master has to
@@ -296,7 +296,7 @@ measures it over whole programs: it counts accepted beats on each Wishbone bus,
 and cycles in which *both* buses accepted one. The counts are written to
 `test/<program>.stats` and diffed against a committed reference copy by
 `make check`, so they cannot silently drift — see
-[test/README.md](../test/README.md#The-statistics-comparison).
+[test/README.md](../test/README.md#the-statistics-comparison).
 
 Every simultaneous request is a cycle a single-ported design would have had to
 serialise. For `test/prog.asm`, the longest of the test programs:
@@ -323,7 +323,7 @@ experiment described above, is at the other end: 21 data requests in 54 cycles,
 
 ## A polling loop, cycle by cycle
 
-The [Interleaving](#Interleaving) section above looks at pairs of instructions.
+The [Interleaving](#interleaving) section above looks at pairs of instructions.
 This one takes a whole loop apart — the shape a device driver spins in while it
 waits for a status bit:
 
@@ -447,7 +447,7 @@ only five of them survive the branch; the instruction bus is busy in nine cycles
 out of ten, doing five cycles of useful work.
 
 Finally, `early_valid_o` never fires. The
-[early redirect](../src/cpu_main/README.md#Early-redirect) resolves only
+[early redirect](../src/cpu_main/README.md#early-redirect) resolves only
 *unconditional* branches in DECODE, and this one is conditional on `Z`, so it
 has to travel all the way to WRITE. Changing it to `RBRA loop, 1` — which of
 course no longer polls anything — takes two cycles off the front of the table
@@ -513,7 +513,7 @@ to −9.1% on the branch-dense programs. The per-program figures are in
 `test/*.stats.golden`; the memory-request counts there are unchanged, i.e. the
 same bus traffic simply happens a cycle earlier. Cost: 6 LUTs and 2 flip-flops
 in FETCH, and a new requirement that the slave acknowledge in order — see
-[fetch/README.md](../src/fetch/README.md#Redirect).
+[fetch/README.md](../src/fetch/README.md#redirect).
 
 **Done: a register bank switch no longer always flushes the pipeline.** Changing
 the upper eight bits of `R14` moves the page of `R0`-`R7` that the REGISTERS
@@ -533,8 +533,8 @@ now cost nothing at all: all ten bank switches in `test/prog.asm` are free,
 the saving scales with how bank-switch-heavy a program is rather than showing up
 in this suite, which barely uses them. Cost: 23 LUTs *fewer* and 3 flip-flops
 more, and 0.072 ns of timing margin that the change does not explain — see
-[The critical path](#The-critical-path). More detail under
-[Register bank switch](../src/cpu_main/README.md#Register-bank-switch).
+[The critical path](#the-critical-path). More detail under
+[Register bank switch](../src/cpu_main/README.md#register-bank-switch).
 
 **Done: an unconditional branch to an immediate target no longer waits for the
 WRITE stage.** `ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1` is the one branch DECODE
@@ -563,7 +563,7 @@ wants stating plainly: it still closes, and at the shipping frequency the cycles
 are free, but there is now essentially no margin left for the next change. The
 critical path is *unmoved* — register-to-register inside PREPARE through the ALU
 operand muxing, which none of this touches — so the cost is the placement
-sensitivity [The critical path](#The-critical-path) already describes, not logic
+sensitivity [The critical path](#the-critical-path) already describes, not logic
 added to the path. Four builds, all closing: +0.093 (baseline), +0.036 (early
 redirect with no reset guard, which is unsafe), +0.002 (guard in `write.vhd`,
 twice, Vivado being deterministic) and +0.007 (guard in `prepare.vhd`'s reset
@@ -572,8 +572,8 @@ between them is not worth the reset-duration assumption the second one needs.
 
 It also needs a soft-flush port on the ICACHE — the ordinary reset gates
 `m_valid_o`, which would withdraw the very handshake the flush is derived from.
-See [Early redirect](../src/cpu_main/README.md#Early-redirect) and
-[The soft flush](../src/icache/README.md#The-soft-flush).
+See [Early redirect](../src/cpu_main/README.md#early-redirect) and
+[The soft flush](../src/icache/README.md#the-soft-flush).
 
 **Rejected: removing the register on `wbi_addr_o`.** The obvious way to take a
 cycle off *every* redirect is to put the branch target straight onto the
@@ -697,7 +697,7 @@ particular RAM mapping.
 from WNS at a loose constraint: −1.084 ns at 8.50 implies 9.58 ns, and the
 zero-latency design actually needs 10.70. And a single failing build well above
 the floor means nothing — this design's placement noise is ±0.284 ns (see
-[The critical path](#The-critical-path) below), so isolated failures at 7.15,
+[The critical path](#the-critical-path) below), so isolated failures at 7.15,
 7.45 and 7.55 sit between builds that close at 7.05. What identifies the floor
 is the point below which *every* constraint fails, not the first one that does.
 The 3.65 ns gap between the two configurations is an order of magnitude beyond
@@ -780,7 +780,7 @@ Remaining ideas:
   so a half-finished implementation cannot look like a working one. Two
   constraints to know before starting: `RTI` restores `R14` and so can change
   the register bank, which must reach the flush described under
-  [Register bank switch](../src/cpu_main/README.md#Register-bank-switch); and an
+  [Register bank switch](../src/cpu_main/README.md#register-bank-switch); and an
   interrupt would be a fourth driver of `fetch_valid_o`, a net whose timing
   history is documented under "Register bank switch" in the same file.
   [interrupts.md](interrupts.md) works this up in full: what the ISA requires,
@@ -883,7 +883,7 @@ with the adder, left the adder facing a single 2:1 select: 11 logic levels
 became 7, and WNS went from +0.272 ns to +0.344 ns.
 
 Keeping the bus cycle alive across a redirect (see
-[Optimizations](#Optimizations)) went the other way: +0.260 ns to +0.400 ns, at
+[Optimizations](#optimizations)) went the other way: +0.260 ns to +0.400 ns, at
 6 LUTs more in FETCH, and the worst path moved off this loop entirely. Since
 FETCH is nowhere near the loop, read that as placement noise rather than as a
 gain — the point is that it is not a regression.
@@ -902,7 +902,7 @@ in [write.vhd](../src/cpu_main/write.vhd).
 **Making that flush conditional cost 0.072 ns**, and is the sharpest example on
 this page of the noise described below. Skipping the flush when nothing in
 flight reads a banked register (see
-[Register bank switch](../src/cpu_main/README.md#Register-bank-switch)) removes
+[Register bank switch](../src/cpu_main/README.md#register-bank-switch)) removes
 logic rather than adding it — 971 LUTs to 948 — and still gave back +0.165 ns to
 +0.093 ns at the 7.25 ns constraint, on the same PREPARE loop as always, which
 the new logic is nowhere near. The first attempt gave back *all* of it: +0.165
@@ -993,7 +993,7 @@ Two things stand out:
 * **WRITE holds no registers at all.** It is purely combinatorial: the ALU is
   combinatorial, and the Status Register shadow registers it used to carry were
   removed once they were shown to be dead — see
-  [cpu_main/README.md](../src/cpu_main/README.md#Why-the-WRITE-stage-needs-no-Status-Register-bypass).
+  [cpu_main/README.md](../src/cpu_main/README.md#why-the-write-stage-needs-no-status-register-bypass).
 
 The two tables do not add up to each other (971 vs 963 LUTs). That is expected,
 and note that the *sign* of the gap is not stable — it has landed both ways
