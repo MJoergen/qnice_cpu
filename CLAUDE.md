@@ -30,13 +30,13 @@ All from the repo root unless noted.
 make test                             # run every test program headless; the CI entry point
 make check TEST=prog_r15              # run one test program headless (sim + golden writes diff)
 make run   TEST=prog_r15              # same, without the golden writes diff
-make golden                           # regenerate every test/*.writes.golden reference file
+make golden                           # regenerate every test/*.{writes,stats}.golden file
 make sim                              # assemble test/prog.asm, run GHDL simulation, open gtkwave
 make sim TEST=prog_interleave         # run a different test program (test/<name>.asm)
 make sim REGISTER_BANK_WIDTH=8        # override register bank address width (default 8)
 make system.bit                       # Vivado synthesis + bitstream (needs Vivado at $XILINX_DIR)
 make utilization                      # refresh the measured numbers in doc/README.md (needs Vivado)
-make diagrams                           # re-render every timing diagram (.tex -> .png; needs pdflatex)
+make diagrams                         # re-render every .tex diagram to .png (needs pdflatex)
 make synth                            # Yosys synthesis (ghdl -a, then yosys -m ghdl synth_xilinx)
 make formal                           # run all formal verification (delegates to formal/Makefile)
 make lint                             # check every VHDL file against CODING_STYLE.md (needs vsg)
@@ -80,7 +80,7 @@ that makes the CPU flush twice as often produces an identical writes log and pas
 `test_monitor.vhd` counts cycles (reset release to the retiring `HALT`), accepted beats on each
 Wishbone bus (`cyc and stb and not stall`), and cycles in which *both* buses accepted a beat. That
 last one measures the Harvard split directly: for `prog.asm`, 1822 of 1848 data requests coincide
-with an instruction fetch, so serialising them onto one port would cost at least +11.5% of the run.
+with an instruction fetch, so serialising them onto one port would cost at least +12.2% of the run.
 Note the instruction count includes speculative fetches that a flush later discarded, which is part
 of why it is worth watching.
 
@@ -270,7 +270,8 @@ see [doc/README.md](doc/README.md#Self-modifying-code).
 
 A branch normally costs **four cycles**: one to register the new PC in FETCH, one for the
 instruction memory's read latency, one in the ICACHE, and one because DECODE and PREPARE are then
-empty. Measured on `prog.asm`, the 731 redirects cost 3625 cycles — **24% of the run**.
+empty. Measured on `prog.asm` before the early redirect below, the 731 redirects cost 3625 cycles
+of a then-15030-cycle run — **24%**.
 
 `ABRA`/`ASUB`/`RBRA`/`RSUB <label>, 1` escapes most of that, because DECODE can resolve it without
 help: the condition selects `SR` bit 0, which reads as 1 always, and the target is the immediate
@@ -478,7 +479,7 @@ has Vivado.
   SEQUENCER sits beside the stages rather than in `sub/` because `cpu_main.vhd` instantiates it
   itself, on the DECODE→PREPARE link.
 - `src/sub/` — reusable elastic-pipeline building blocks, see
-  [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-src-sub) above.
+  [Elastic pipeline building blocks](#Elastic-pipeline-building-blocks-srcsub) above.
 - `src/cpu.vhd` — top-level entity tying FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN together.
 - `test/` — testbench (`tb_cpu.vhd`), memory models, the pass/fail monitor (`test_monitor.vhd`),
   and `.asm` test programs. See [test/README.md](test/README.md) for how to tell a passing run

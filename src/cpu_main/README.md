@@ -267,8 +267,8 @@ operand values at all: nothing between the register file and PREPARE does. The
 SEQUENCER joins the read ports onto the record as live wires:
 
 ```vhdl
-m_stage_o.src_val <= reg_src_val_i; -- One clock cycle after DECODE's reg_src_addr_o
-m_stage_o.dst_val <= reg_dst_val_i; -- One clock cycle after DECODE's reg_dst_addr_o
+m_stage_o.src_reg_val <= reg_src_val_i; -- One cycle after DECODE's reg_src_addr_o
+m_stage_o.dst_reg_val <= reg_dst_val_i; -- One cycle after DECODE's reg_dst_addr_o
 ```
 
 So the write-before-read bypass inside the REGISTERS module (see
@@ -334,9 +334,9 @@ That latency is why the two halves of this interface belong to two different
 modules. By the time a value arrives, the instruction that asked for it has
 already left DECODE and is being presented to the SEQUENCER, so the values are
 wired from REGISTERS into the SEQUENCER, which joins them onto the stage record
-(`m_stage_o.src_val`/`.dst_val`/`.r14`). Routing them back into DECODE first, as
-this design used to, only made them a combinational pass-through of a stage they
-have nothing left to do with.
+(`m_stage_o.src_reg_val`/`.dst_reg_val`/`.r14`). Routing them back into DECODE
+first, as this design used to, only made them a combinational pass-through of a
+stage they have nothing left to do with.
 
 We could have used the standard AXI-interface with `VALID` and `READY` signals,
 but since the latency is constant, I've chosen not to. However, we do need the
@@ -486,8 +486,8 @@ gates the call to the `disassemble` procedure inside a `pragma synthesis_off`
 block in [write.vhd](write.vhd).
 
 ## Internal interfaces
-This section describes the interfaces interfaces between the three stages
-DECODE, PREPARE, and WRITE.
+This section describes the interfaces between the three stages DECODE, PREPARE,
+and WRITE.
 
 The interface from DECODE to the SEQUENCER, from the SEQUENCER to PREPARE, and
 from PREPARE to WRITE is a standard AXI-interface, each carrying a record of its
@@ -599,9 +599,10 @@ The consumer only ever samples them at the moment it accepts a beat, so their
 movement in between is harmless. Freezing them — or latching them anywhere on
 the way — would silently reintroduce stale-operand hazards.
 
-The remaining elements, the five marked `[P]`, are filled in by PREPARE and so
-are only live from PREPARE to WRITE. They contain all the values needed by the
-ALU.
+The remaining six elements of `t_prep2wr` — `src_val_pc`, `dst_val_pc`,
+`alu_oper`, `alu_ctrl`, `alu_src_val` and `alu_dst_val` — are filled in by
+PREPARE and so exist only on the PREPARE-to-WRITE link. They are the operands,
+resolved: everything the ALU and the write-back need.
 
 ## Stages
 
@@ -643,12 +644,13 @@ hold an `R15`, but it is only written when an instruction actually targets
 `R15` — i.e. on branches — so during sequential execution it is stale and must
 never be used as an operand value.
 
-PREPARE therefore substitutes the real PC into `src_val`/`dst_val` before
-anything downstream sees them (`src_val_pc`/`dst_val_pc` in
-[prepare.vhd](prepare.vhd)). Doing the substitution on the stage record, rather
+PREPARE therefore substitutes the real PC into the register file's
+`src_reg_val`/`dst_reg_val` before anything downstream sees them, and hands the
+result on under a different name — `src_val_pc`/`dst_val_pc` in
+[prepare.vhd](prepare.vhd). Doing the substitution on the stage record, rather
 than only on the ALU inputs, matters because the WRITE stage derives two other
-things from `src_val`/`dst_val`: the memory address for `@R15` and `@--R15`,
-and the pre/post-increment write-back. All three have to agree.
+things from `src_val_pc`/`dst_val_pc`: the memory address for `@R15` and
+`@--R15`, and the pre/post-increment write-back. All three have to agree.
 
 The substituted value is the address of the next word to be fetched at the
 point the operand is read, matching `qnice.c`, which advances a single PC
@@ -779,8 +781,8 @@ pipeline.
 A branch costs four cycles because WRITE resolves it two stages after DECODE
 read it: one cycle to register the new PC in FETCH, one for the instruction
 memory's read latency, one in the ICACHE, and one because DECODE and PREPARE are
-then empty. Measured on `test/prog.asm`, redirects account for 3625 cycles of a
-15030-cycle run — **24%**.
+then empty. Measured on `test/prog.asm` immediately before this optimisation,
+redirects accounted for 3625 cycles of a 15030-cycle run — **24%**.
 
 For one class of branch none of that has to wait, because everything the
 redirect needs is already sitting in DECODE:
@@ -903,7 +905,7 @@ outgoing bank by the time the switch retires in WRITE:
 
 | | Where it is | What its register read did | Remedy |
 |---|---|---|---|
-| I1 | DECODE's output register | Issued a cycle ago, against the old bank. DECODE passes `src_val`/`dst_val` through as *live* wires, so the values are already gone. | Flush. |
+| I1 | DECODE's output register | Issued a cycle ago, against the old bank. The SEQUENCER joins `src_reg_val`/`dst_reg_val` onto the record as *live* wires, so the values are already gone. | Flush. |
 | I2 | DECODE's input | Being issued in this very cycle, still against the old bank: `reg_sr` does not take the new value until this cycle's clock edge. But nothing has accepted it yet. | Hold `fetch_ready_o` low for one cycle, so it reads again from the new bank. |
 
 Anything further back issues its read at least one cycle from now and picks up
@@ -981,10 +983,10 @@ the stale copy would then execute with nothing noticing.
 `smc_hit` in [write.vhd](write.vhd) detects this and joins `fetch_valid_o`. The
 subtlety is entirely in keeping it cheap: this net is the reset pin of every
 flip-flop in two stages, so the comparison subtracts two *raw* stage registers
-(`prep_stage_i.dst_val` and `prep_stage_i.addr`) and tests a power-of-two window,
-rather than comparing the exact store address against the exact re-fetch address.
-The exact form puts a four-way mux and an adder in front of the subtraction and
-does not meet timing; the numbers and the derivation of the constant are in the
+(`prep_stage_i.dst_val_pc` and `prep_stage_i.addr`) and tests a power-of-two
+window, rather than comparing the exact store address against the exact re-fetch
+address. The exact form puts a four-way mux and an adder in front of the
+subtraction and does not meet timing; the numbers and the derivation of the constant are in the
 comment above `smc_delta`.
 
 See [Self-modifying code](../../doc/README.md#Self-modifying-code) for the
@@ -1073,7 +1075,7 @@ The assertions fall into four groups:
   reach `R14` through the Status Register port and the `reg_addr_o` term never
   sees them. `f_flush_on_smc` does the same for self-modifying code, and
   deliberately measures `mem_req_addr_o` — the address the store really goes to,
-  after the pre-decrement mux — rather than the `prep_stage_i.dst_val` that
+  after the pre-decrement mux — rather than the `prep_stage_i.dst_val_pc` that
   `smc_hit` subtracts, so it constrains the window instead of copying it.
 
   The `c_flush_*` covers show each antecedent is reachable, including the two

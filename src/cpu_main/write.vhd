@@ -347,10 +347,11 @@ begin
    -- the worst path landing on i_prepare/wr_stage_o_reg[alu_src_val]. The
    -- syntactic version below gives +0.246 ns and 4 LUTs FEWER than baseline.
    --
-   -- Everything below comes from stage REGISTERS instead -- prep_stage_i.is_crb
-   -- and prep_stage_i.microcode, and reg_addr_o/reg_we_o, which p_reg builds
-   -- out of prep_stage_i.src_addr/dst_addr/res_reg and the microcodes. None of
-   -- it depends on the ALU, so the flush condition is ready early in the cycle.
+   -- Everything below comes from the stage registers instead -- that is, from
+   -- prep_stage_i: is_crb and microcode directly, and reg_addr_o/reg_we_o,
+   -- which p_reg builds out of src_addr/dst_addr/res_reg and the micro-op.
+   -- None of it depends on the ALU, so the flush condition is ready early in
+   -- the cycle.
    --
    -- The price is that any write to R14 flushes, even one that leaves the bank
    -- alone. That covers "MOVE ST____C_, R14" and friends; they cost a branch
@@ -427,18 +428,19 @@ begin
    -- starts the carry chain at a register output instead.
    --
    -- The price is that the difference is off by a small constant. The store
-   -- address is dst_val or dst_val-1 (pre-decrement), and the re-fetch address
-   -- is addr+1 or addr+2, so
+   -- address is dst_val_pc or dst_val_pc-1 (pre-decrement), and the re-fetch
+   -- address is addr+1 or addr+2, so
    --
-   --    mem_addr - next_pc  =  (dst_val - addr) - k,   k in {1,2,3}
+   --    mem_addr - next_pc  =  (dst_val_pc - addr) - k,   k in {1,2,3}
    --
-   -- and a store that really is within 8 of next_pc has dst_val - addr in
+   -- and a store that really is within 8 of next_pc has dst_val_pc - addr in
    -- [1,11). Testing "< 32" covers that with room to spare, and being a power
    -- of two it is an 11-bit zero-test rather than a magnitude comparison.
    -- Over-approximating is free of correctness risk -- it can only cause a
    -- flush that was not needed - which is also why R15 as a store pointer is
-   -- simply forced to hit rather than handled: dst_val is the register file's
-   -- stale R15 copy in that case, so the subtraction would be meaningless.
+   -- simply forced to hit rather than handled: dst_val_pc is the register
+   -- file's stale R15 copy in that case, so the subtraction would be
+   -- meaningless.
 
 
    smc_delta <= prep_stage_i.dst_val_pc - prep_stage_i.addr;

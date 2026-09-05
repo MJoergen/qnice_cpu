@@ -518,7 +518,7 @@ The reference halts on both.
   commits to a reading of it. The diagram is
   [src/interrupt/timing.tex](../src/interrupt/timing.tex) and the prose around it
   is [src/interrupt/README.md](../src/interrupt/README.md); `make diagrams` renders
-  the `.png`, and both are committed. The `timing` rule is now a pattern rule
+  the `.png`, and both are committed. The `diagrams` rule is now a pattern rule
   over a `TIMINGS` list, and the shared LaTeX macros moved to `doc/timing.sty`
   (`src/cpu_main/timing.png` re-renders byte-identical after that move).
 

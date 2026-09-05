@@ -39,11 +39,15 @@ architecture and the design.
 The current makefile supports the following targets:
 * `make test`       : Run all test programs headless; this is the CI entry point
 * `make check`      : Run a single test program headless
+* `make run`        : Run a single test program without the golden comparisons
 * `make sim`        : Run simulation, then open the waveform in gtkwave
-* `make golden`     : Regenerate the `test/*.writes.golden` reference files
+* `make golden`     : Regenerate the `test/*.{writes,stats}.golden` files
 * `make system.bit` : Run synthesis using Vivado
+* `make utilization`: Refresh `doc/README.md`'s numbers (needs Vivado)
 * `make synth`      : Run synthesis using yosys
+* `make diagrams`   : Re-render every `.tex` diagram to `.png` (needs pdflatex)
 * `make formal`     : Run formal verification
+* `make lint`       : Check every VHDL file against `CODING_STYLE.md` (needs vsg)
 * `make clean`      : Remove all generated files
 
 By default these assemble and run [`test/prog.asm`](test/prog.asm); pass
@@ -67,12 +71,14 @@ memory write against a committed reference copy.
 
 [`test/README.md`](test/README.md) describes both checks in full.
 
-CI runs `make test` and `make formal` on every push to `main` and every pull
-request, as two independent workflows so that each gets its own badge above:
-[`test.yml`](.github/workflows/test.yml) builds the QNICE assembler from the
-upstream project (only `qasm` and `qasm2rom` are needed, not the whole
+CI runs `make test`, `make formal` and `make lint` on every push to `main` and
+every pull request, as three independent workflows so that each can go red on
+its own: [`test.yml`](.github/workflows/test.yml) builds the QNICE assembler
+from the upstream project (only `qasm` and `qasm2rom` are needed, not the whole
 toolchain) and points the Makefile at it with `ASSEMBLER=<path>`;
 [`formal.yml`](.github/workflows/formal.yml) takes SymbiYosys, Yosys with the
 GHDL plugin, GHDL and the SMT solvers from a pinned
-[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release.
+[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release; and
+[`lint.yml`](.github/workflows/lint.yml) runs VSG from a pinned release. The two
+badges above are `test.yml` and `formal.yml`.
 

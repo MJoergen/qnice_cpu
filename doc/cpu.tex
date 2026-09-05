@@ -6,14 +6,14 @@
 % Anything that changes the module hierarchy has to change this file too, so
 % keeping the source as text next to the RTL is the point.
 %
-% What it shows, and what it deliberately does not: the six pipeline stages in
-% pipeline order, the two shared modules they hang off (REGISTERS on the left,
-% MEMORY on the right), the two Wishbone buses leaving on the right, and the
-% dotted boundary of the CPU_MAIN entity. It does NOT show the valid/ready
-% handshaking, the redirect paths from WRITE and DECODE back to FETCH, or the
-% bank-switch signals -- those are described in doc/README.md and in the
-% per-module READMEs, and drawing them here would turn the picture into a net
-% list.
+% What it shows, and what it deliberately does not: the six blocks of the
+% pipeline in pipeline order, the two shared modules they hang off (REGISTERS
+% on the left, MEMORY on the right), the two Wishbone buses leaving on the
+% right, and the dotted boundary of the CPU_MAIN entity. It does NOT show the
+% valid/ready handshaking, the redirect paths from WRITE and DECODE back to
+% FETCH, or the bank-switch signals -- those are described in doc/README.md
+% and in the per-module READMEs, and drawing them here would turn the picture
+% into a net list.
 
 \documentclass[border=8pt]{standalone}
 

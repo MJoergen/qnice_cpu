@@ -108,10 +108,10 @@ begin
                  seq_stage_i.addr+1 when seq_stage_i.dst_addr = C_REG_PC else
                  seq_stage_i.dst_reg_val;
 
-   alu_src_val <= seq_stage_i.immediate when seq_stage_i.src_imm = '1'                      else
+   alu_src_val <= seq_stage_i.immediate when seq_stage_i.src_imm = '1'                   else
                   mem_src_data_i        when seq_stage_i.microcode(C_MEM_WAIT_SRC) = '1' else
                   src_val_pc;
-   alu_dst_val <= seq_stage_i.immediate when seq_stage_i.dst_imm = '1'                      else
+   alu_dst_val <= seq_stage_i.immediate when seq_stage_i.dst_imm = '1'                   else
                   mem_dst_data_i        when seq_stage_i.microcode(C_MEM_WAIT_DST) = '1' else
                   dst_val_pc;
 

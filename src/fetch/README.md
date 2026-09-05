@@ -97,9 +97,9 @@ WISHBONE B4 lets the master neither withdraw `STB` nor alter the request while
 `STALL` is asserted. A slave that never stalls — the dual-port RAM this CPU is
 built around — never reaches that path.
 
-Measured over the nine test programs, this removes one clock cycle from every
-redirect: 741 cycles off `test/prog.asm` (−4.7%), and up to −9.1% on the
-branch-dense ones. The per-program figures live in `test/*.stats.golden`; the
+Measured over the nine test programs of the time, this removes one clock cycle
+from every redirect: 741 cycles off `test/prog.asm` (−4.7%), and up to −9.1% on
+the branch-dense ones. The per-program figures live in `test/*.stats.golden`; the
 memory-request counts in those files are unchanged, i.e. the same bus traffic
 happens one cycle earlier rather than more of it happening.
 

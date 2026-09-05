@@ -176,8 +176,8 @@ which holds a stale value until the next read is issued, so it needs term 3;
 `R14` falls back to `reg_sr` (term 5), which `p_sr` refreshes on every clock
 edge regardless of whether a read was issued. A `wr_sr_val_d` term was added and
 then removed again — a simulation probe comparing the output with and without it
-never differed once across all seven test programs at full fetch throughput, and
-`formal/registers.psl` passes without it.
+never differed once across all seven test programs of the time at full fetch
+throughput, and `formal/registers.psl` passes without it.
 
 The `or X"0001"` on term 2 mirrors `p_sr` and `sr_val_o`, which force bit 0 of
 the Status Register to `1`; it is redundant in practice, since the WRITE stage

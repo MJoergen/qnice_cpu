@@ -1,14 +1,17 @@
 # A pipelined implementation of the QNICE CPU
 
 ## Architecture
-This implementation is essentially a six-stage pipeline consisting of:
+This implementation is a four-stage pipeline — FETCH, DECODE, PREPARE, WRITE —
+with two further blocks sitting on the links between them. Six blocks in
+pipeline order:
 
 * FETCH: Fetches one word from the instruction memory.
 * ICACHE: Presents up to two words (instruction plus immediate operand) at a
   time to the DECODE stage.
 * DECODE: Translates the instruction into a list of up to three
   micro-operations, and reads the operand registers.
-* SEQUENCER: Forwards one micro-operation at a time to the PREPARE stage.
+* SEQUENCER: Forwards one micro-operation at a time to the PREPARE stage. Not a
+  stage of its own: it holds no payload registers and adds no latency.
 * PREPARE: Prepares the input operands for the ALU.
 * WRITE: Contains the ALU and performs write-back of the result to register
   and/or memory.
@@ -142,8 +145,8 @@ it. [`test/prog_pipeline.asm`](../test/prog_pipeline.asm) branches over twelve
 A flush costs **four cycles**: one to register the new PC in FETCH, one for the
 instruction memory's read latency, one in the ICACHE, and one because DECODE and
 PREPARE are then empty. That is the single largest overhead in the design —
-measured on `prog.asm`, 731 redirects account for 3625 cycles of a 15030-cycle
-run, **24%**.
+measured on `prog.asm` before the early redirect below existed, 731 redirects
+accounted for 3625 cycles of a 15030-cycle run, **24%**.
 
 One class of branch escapes most of it. For `ABRA`/`ASUB`/`RBRA`/`RSUB
 <label>, 1`, DECODE has everything the redirect needs the moment it accepts the
@@ -212,7 +215,7 @@ The four stages and the two shared blocks are all built from a small set of
 reusable valid/ready primitives in `src/sub/` (`one_stage_buffer`,
 `one_stage_fifo`, `two_stage_buffer`, `two_stage_fifo`, `dp_ram`,
 `pipe_concat`); they are described in the top-level
-[CLAUDE.md](../CLAUDE.md#Elastic-pipeline-building-blocks-src-sub) and each has
+[CLAUDE.md](../CLAUDE.md#Elastic-pipeline-building-blocks-srcsub) and each has
 its own formal job in `formal/`. How to run the test programs, and how to tell a
 passing run from a failing one, is in [test/README.md](../test/README.md).
 
@@ -300,21 +303,21 @@ serialise. For `test/prog.asm`, the longest of the test programs:
 
 | | |
 | --- | --- |
-| cycles | 15811 |
-| instruction requests | 13484 (85% of cycles) |
+| cycles | 14883 |
+| instruction requests | 13297 (89% of cycles) |
 | data requests | 1848 |
 | ...of which simultaneous | 1822 (**98.6%** of data requests) |
 
 Almost every data access collides with an instruction fetch — which follows from
-the instruction bus being busy 85% of the time. Serialising them onto one port
-would cost at least 1822 cycles, i.e. **+11.5%**, and more in practice, since
+the instruction bus being busy 89% of the time. Serialising them onto one port
+would cost at least 1822 cycles, i.e. **+12.2%**, and more in practice, since
 each inserted stall also delays whatever was behind it in the pipeline. It is a
 lower bound in a second sense as well: it counts only the collisions that
 actually occurred in a machine built not to have to avoid them.
 
 The gain is uneven across programs, as the reasoning above predicts.
 `test/prog_flags.asm` is almost pure register arithmetic — 2 data requests in
-271 cycles — and gains essentially nothing. `test/prog_interleave.asm`, the
+248 cycles — and gains essentially nothing. `test/prog_interleave.asm`, the
 experiment described above, is at the other end: 21 data requests in 54 cycles,
 17 of them simultaneous.
 
@@ -551,8 +554,8 @@ and 308 conditional `RBRA` — **62% unconditional with an immediate target**,
 since that is what every subroutine call and every unconditional jump assembles
 to. `test/prog_subroutine.asm` was added to keep an honest number in the suite,
 and falls from 678 to 580 cycles, **−14.5%**. Redirects cost 3625 of
-`prog.asm`'s 15030 cycles, so on monitor-shaped code this is worth several per
-cent of total run time.
+`prog.asm`'s 15030 cycles before this change, so on monitor-shaped code it is
+worth several per cent of total run time.
 
 Cost: **0.091 ns of the 0.093 ns that was there** — WNS +0.093 ns to +0.002 ns at
 the 7.25 ns constraint. That is the uncomfortable part of this change and it
@@ -581,7 +584,7 @@ worth being precise about both sides of the ledger, because the gap looks like
 free money.
 
 *What it would buy.* One cycle per redirect, and every redirect goes through
-this port — WRITE's and DECODE's early one alike. Counted over the nine test
+this port — WRITE's and DECODE's early one alike. Counted over the ten test
 programs: **904 redirects in 16678 cycles, 5.4%**; `prog.asm` alone is 731
 (658 from WRITE, 73 early) in 14883, **4.9%**. Wall time is cycles times period,
 so the clock may lengthen by at most **5.7%** — 7.05 ns to 7.45 ns against the
@@ -642,9 +645,10 @@ cycle of its own. It was built and measured in full on the
 **not merged**. The short version: it buys cycles and gives back more than it
 buys on the clock.
 
-*What it buys.* Cycle counts over the nine test programs fall **9.9%** in total
-(16130 → 14531), ranging from −0.4% on `prog_flags` (nearly all ALU, almost no
-memory operands) to −18.5% on `prog_interleave` (the opposite); `prog.asm`
+*What it buys.* Cycle counts over the nine test programs of the time fall
+**9.9%** in total (16130 → 14531), ranging from −0.4% on `prog_flags` (nearly
+all ALU, almost no memory operands) to −18.5% on `prog_interleave` (the
+opposite); `prog.asm`
 itself drops 10.3%, 15070 → 13511. Bus traffic is unchanged, and the writes logs
 are byte-identical in both modes — a zero-latency slave changes *when* data
 arrives, never what it is. On the branch it also has real value as a
@@ -704,11 +708,11 @@ that noise.
 state (the response buffers' `tsb_*_fill`) instead of `msrc_valid_o`/
 `mdst_valid_o` and `msrc_ready_i`/`mdst_ready_i`, which reach back to `wb_ack_i`
 and splice the response path onto the front of the request path. It is free in
-cycles — all nine programs are bit-identical — and worth 0.18 ns of slack at the
-8.50 ns constraint (WNS +0.135 → +0.316) and 26 LUTs in the per-module
-measurement (929 → 903), as the shorter path lets synthesis simplify either side
-of it. The rest of the branch is the zero-latency support itself, and stays
-there.
+cycles — all nine programs of the time are bit-identical — and worth 0.18 ns of
+slack at the 8.50 ns constraint (WNS +0.135 → +0.316) and 26 LUTs in the
+per-module measurement (929 → 903), as the shorter path lets synthesis simplify
+either side of it. The rest of the branch is the zero-latency support itself,
+and stays there.
 
 **Rejected: a combinatorial DECODE stage.** DECODE's output register looks
 removable: the stage is a decoder, its logic is thin, and the ICACHE already
@@ -824,10 +828,10 @@ in routing rather than logic.
 **In the build measured above, the worst path is the one this section
 describes** — the Status Register loop. Both endpoints are `wr_stage_o` fields,
 and the full listing shows it leaving PREPARE, passing through the register
-file's forwarding (`src_val_d`) and the SEQUENCER (`wr_stage_o[src_val]`), and
-being latched again by PREPARE. (That leg used to be declared in DECODE; moving
-the register file's read data to the SEQUENCER renamed the module it belongs to
-without changing the net.) It is not always: some builds instead put a Block RAM
+file's forwarding (`src_val_d`) and the SEQUENCER, and being latched again by
+PREPARE. (That leg used to be declared in DECODE; moving the register file's
+read data to the SEQUENCER renamed the module it belongs to without changing the
+net.) It is not always: some builds instead put a Block RAM
 clock-to-out path inside the register file on top, with zero logic levels,
 nothing to optimise and nothing this design controls.
 

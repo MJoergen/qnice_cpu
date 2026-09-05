@@ -21,7 +21,8 @@ entity registers is
    port (
       clk_i       : in  std_logic;
       rst_i       : in  std_logic;
-      -- Read interface (with two simultaneous read ports), connected to DECODE stage
+      -- Read interface (two simultaneous read ports). DECODE drives the
+      -- addresses; the values arrive a cycle later, at the SEQUENCER.
       rd_en_i     : in  std_logic;
       src_reg_i   : in  std_logic_vector(3 downto 0); -- Only valid when rd_en_i = '1'
       src_val_o   : out std_logic_vector(15 downto 0);

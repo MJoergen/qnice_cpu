@@ -86,7 +86,7 @@ help:
 	@echo "  make sim        : Run simulation and open the waveform viewer"
 	@echo "  make test       : Run all test programs headless, for CI"
 	@echo "  make check      : Run one test program headless"
-	@echo "  make golden     : Regenerate the test/*.writes.golden reference files"
+	@echo "  make golden     : Regenerate the test/*.{writes,stats}.golden files"
 	@echo "  make system.bit : Run synthesis using Vivado"
 	@echo "  make utilization: Refresh the utilization numbers in doc/README.md (needs Vivado)"
 	@echo "  make synth      : Run synthesis using yosys"
@@ -172,14 +172,14 @@ $(ROM): $(ASM)
 ## Documentation
 ################################################
 
-# The pipeline timing diagram in src/cpu_main/README.md#Waveforms. The .tex is
-# hand-written -- every value in it was read off a simulation of
-# test/prog_waveform.asm -- so this target only renders it, it does not derive
-# it. If you change the pipeline, re-read the values from a fresh simulation
-# before running this.
-# Every hand-written timing diagram in the tree.  Each is a standalone LaTeX
+# Every hand-written timing diagram in the tree. Each is a standalone LaTeX
 # document that pulls in the shared macros from doc/timing.sty; both the .tex
 # and the rendered .png are committed.
+#
+# These targets only RENDER the diagrams, they do not derive them: every value
+# in a .tex was read off a simulation by hand (src/cpu_main/timing.tex from
+# test/prog_waveform.asm, doc/loop_timing.tex from test/prog_poll.asm). If you
+# change the pipeline, re-read the values from a fresh simulation first.
 TIMINGS = src/cpu_main/timing src/interrupt/timing doc/loop_timing
 
 # Block diagrams: standalone TikZ, no shared macros. doc/cpu.tex replaced a

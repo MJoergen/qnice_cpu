@@ -66,7 +66,7 @@ When a test does fail, the address of the last disassembled `HALT` still tells
 you *which* one was reached:
 
 ```
-src/cpu_constants.vhd:238:13:@143550ns:(report note): 1696 (E000) HALT
+src/cpu_constants.vhd:331:13:@143550ns:(report note): 1696 (E000) HALT
                                                       ^^^^
 ```
 
@@ -89,12 +89,13 @@ Two details of the mechanism are worth knowing:
 
 ## What each program covers
 
-`prog.asm` is the broad self-checking instruction suite; the other six are
-narrow. `prog_simple.asm` walks the addressing modes of `MOVE`/`ADD`/`CMP` and
-the branch instructions. `prog_pipeline.asm` and `prog_interleave.asm` exist to
-exercise pipeline behaviour rather than instruction semantics — respectively a
-`@R7++, @R7++` hazard and the throughput of interleaved instruction/data memory
-accesses.
+`prog.asm` is the broad self-checking instruction suite; the other nine in
+`TESTS` are narrow, and two further programs are deliberately outside `TESTS`
+(see the end of this section). `prog_simple.asm` walks the addressing modes of
+`MOVE`/`ADD`/`CMP` and the branch instructions. `prog_pipeline.asm` and
+`prog_interleave.asm` exist to exercise pipeline behaviour rather than
+instruction semantics — respectively a `@R7++, @R7++` hazard and the
+throughput of interleaved instruction/data memory accesses.
 
 `prog_flags.asm` covers the ALU's *flags input* path, i.e. the value that
 reaches `sr_i` in `src/cpu_main/sub/alu_flags.vhd` and `alu_data.vhd`. That path
@@ -138,7 +139,7 @@ read through it:
   the immediate).
 * `T4` — `@R15`, PC-relative memory addressing, which reaches the PC through a
   different path again: the WRITE stage derives the memory address from
-  `src_val`, not from the ALU operand.
+  `src_val_pc`, not from the ALU operand.
 
 `prog_hazard.asm` covers read-after-write data hazards between *adjacent*
 instructions: a register written and then read, used as a memory pointer, used
@@ -191,7 +192,8 @@ instruction executes and nothing reports a problem.
 * `T4` — rewrite the instruction two ahead; the one in between must still run as
   originally written.
 * `T5` — reach the instruction through a pre-decrement pointer, which is a
-  different path to the store address in WRITE (`dst_val-1`, not `dst_val`).
+  different path to the store address in WRITE (`dst_val_pc-1` rather than
+  `dst_val_pc`).
 * `T7` — patch an instruction inside a loop, so the hazard is hit on every one
   of three iterations.
 
@@ -250,7 +252,7 @@ TEST=prog_poll` would therefore run until the `G_TIMEOUT` watchdog in
 the program itself gives the command. Nothing guards its numbers the way `TESTS`
 membership guards `prog_waveform.asm`'s, so a change to the pipeline that alters
 the loop's ten-cycle period will not fail CI — re-read the values and run `make
-timing` when the pipeline changes.
+diagrams` when the pipeline changes.
 
 `prog_poll_reg.asm` is its control, and carries all of the same warnings: it
 never halts either, and it is not in `TESTS`. It is the same five-word loop at
@@ -269,7 +271,7 @@ Independently of the verdict protocol above, `p_unimplemented` in
 instruction retires that nothing in the CPU decodes:
 
 ```
-write.vhd:132:13:@180ns:(assertion failure): UNIMPLEMENTED instruction at
+write.vhd:138:13:@180ns:(assertion failure): UNIMPLEMENTED instruction at
 address 0x0002: control command 01 (RTI). It is not decoded anywhere and would
 otherwise retire as a no-op.
 ```
@@ -330,8 +332,8 @@ the file named by `G_STATS_FILE`, which `make` points at
 `test/<program>.stats`:
 
 ```
-cycles: 15811
-instruction memory requests: 13484
+cycles: 14883
+instruction memory requests: 13297
 data memory requests: 1848
 simultaneous requests: 1822
 ```
@@ -357,20 +359,20 @@ a single-ported design would have had to serialise. For `prog.asm`:
 
 | | |
 | --- | --- |
-| cycles | 15811 |
-| instruction requests | 13484 (85% of cycles) |
+| cycles | 14883 |
+| instruction requests | 13297 (89% of cycles) |
 | data requests | 1848 |
 | ...of which simultaneous | 1822 (**98.6%** of data requests) |
 
 Almost every data access collides with an instruction fetch, which follows from
-the instruction bus being busy 85% of the time. Serialising them would cost at
-least 1822 extra cycles, i.e. **+11.5%**, and in practice more, since each
+the instruction bus being busy 89% of the time. Serialising them would cost at
+least 1822 extra cycles, i.e. **+12.2%**, and in practice more, since each
 inserted stall also delays whatever was behind it in the pipeline. That is a
 lower bound in a second sense too: it counts only the collisions that actually
 happened in a machine built not to have to avoid them.
 
 The ratio is not uniform across the programs. `prog_flags.asm` is almost pure
-register arithmetic (2 data requests in 271 cycles) and gains nothing;
+register arithmetic (2 data requests in 248 cycles) and gains nothing;
 `prog_interleave.asm` is the store-heavy one (21 data requests in 54 cycles,
 17 of them simultaneous) and gains most.
 

@@ -1,6 +1,6 @@
 -- This module accepts a list of microcode instructions (in
 -- s_stage_i.microcodes) and sequences them into fixed-width chunks
--- (in m_stage_o.microcodes), emitting one chunk per PREPARE beat.
+-- (one per beat, in m_stage_o.microcode), emitting one chunk per PREPARE beat.
 --
 -- It sits on the DECODE-to-PREPARE link, instantiated by cpu_main.vhd alongside
 -- the two stages it joins rather than inside either of them: it is an elastic

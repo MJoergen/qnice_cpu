@@ -28,10 +28,10 @@
 % and WRITE/prep_valid_i + prep_stage_i.addr. A low line means the stage is
 % empty in that cycle.
 %
-% WRITE/prep_stage_i.microcodes is 36 bits wide -- the whole list of up to three
-% micro-operations -- but only the low 12 bits, the one being executed, are
-% shown. 0x084 is MEM_READ_SRC + REG_MOD_SRC, 0x828 is LAST + MEM_WAIT_SRC +
-% REG_WRITE, and 0x808 is LAST + REG_WRITE.
+% WRITE/prep_stage_i.microcode is the single 12-bit micro-operation the
+% SEQUENCER selected out of DECODE's list, i.e. the one being executed. 0x084 is
+% MEM_READ_SRC + REG_MOD_SRC, 0x828 is LAST + MEM_WAIT_SRC + REG_WRITE, and
+% 0x808 is LAST + REG_WRITE.
 
 \documentclass{standalone}
 \usepackage{timing}
@@ -65,7 +65,7 @@
  \nextwave{DECODE/seq\_stage\_o.addr}       \unknown[000A]{1} \unknown[x]{3} \cmove{0005}{3} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1} \unknown[000A]{1}
  \nextwave{WRITE/prep\_valid\_i}            \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1} \bit{1}{2} \bit{0}{1} \bit{1}{1}
  \nextwave{WRITE/prep\_stage\_i.addr}       \crbra{0008}{1} \unknown[x]{4} \cmove{0005}{1} \unknown[x]{1} \cmove{0005}{1} \cand{0006}{1} \unknown[x]{1} \crbra{0008}{1}
- \nextwave{WRITE/prep\_stage\_i.microcodes} \crbra{808}{1} \unknown[x]{4} \cmove{084}{1} \unknown[x]{1} \cmove{828}{1} \cand{808}{1} \unknown[x]{1} \crbra{808}{1}
+ \nextwave{WRITE/prep\_stage\_i.microcode}  \crbra{808}{1} \unknown[x]{4} \cmove{084}{1} \unknown[x]{1} \cmove{828}{1} \cand{808}{1} \unknown[x]{1} \crbra{808}{1}
  \nextwave{WRITE/mem\_req\_valid\_o}        \bit{0}{5} \bit{1}{1} \bit{0}{5}
  \nextwave{WRITE/mem\_req\_addr\_o}         \unknown[x]{5} \cmove{000A}{1} \unknown[x]{5}
  \nextwave{MEMORY/msrc\_valid\_o}           \bit{0}{6} \bit{1}{1} \bit{0}{4}

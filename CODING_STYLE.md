@@ -18,7 +18,7 @@ library ieee;
    use ieee.std_logic_1164.all;
    use ieee.numeric_std_unsigned.all;
 
-   use work.cpu_constants.t_stage;
+   use work.cpu_constants.t_seq2prep;
 
 entity foo is
    generic (...);
@@ -78,7 +78,7 @@ Header comments are plain `--` lines at column 0. **Do not** wrap them in `-- --
 | Generic | `G_UPPER_SNAKE` | `G_REGISTER_BANK_WIDTH` |
 | Constant | `C_UPPER_SNAKE` | `C_OPCODE_JMP` |
 | Bit-field `subtype` / bit index into an instruction word | `R_UPPER_SNAKE` | `R_SRC_MODE`, `R_JMP_NEG` |
-| Type | `t_` prefix | `t_stage` |
+| Type | `t_` prefix | `t_seq2prep` |
 | Signal, variable | `lower_snake_case` | `wb_outstanding` |
 | Process label | `p_` prefix | `p_wishbone` |
 | Instance label | `i_` prefix | `i_two_stage_fifo_addr` |
@@ -164,8 +164,8 @@ the *register* file, the Status *Register*.
 * `when ... else` chains put `else` at the **end** of the line and align the conditions:
 
   ```vhdl
-     alu_src_val <= seq_stage.immediate when seq_stage.src_imm = '1'                    else
-                    mem_src_data_i      when seq_stage.microcodes(C_MEM_WAIT_SRC) = '1' else
+     alu_src_val <= seq_stage_i.immediate when seq_stage_i.src_imm = '1'                   else
+                    mem_src_data_i        when seq_stage_i.microcode(C_MEM_WAIT_SRC) = '1' else
                     src_val_pc;
   ```
 
@@ -354,7 +354,7 @@ and the rest. Those stay this document's job, and a reviewer's.
 `vsg.yml` deliberately overrides only what this document actually says. Everything else is left at
 VSG's shipped defaults, so the tool will also flag things no rule here mentions.
 
-**`make lint` is clean** — zero errors. What remains is 42 `length_001` warnings, which are the
+**`make lint` is clean** — zero errors. What remains is 40 `length_001` warnings, which are the
 100-column *target* of section 3 doing exactly what it is supposed to: advising, not failing. Keep
 it that way.
 

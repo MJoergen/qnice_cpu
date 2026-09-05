@@ -25,8 +25,8 @@ entity decode is
       -- Register file: the read ports only. The values come back one clock
       -- cycle later, by which time this instruction has left this stage, so
       -- they are wired straight from REGISTERS into the SEQUENCER, which joins
-      -- them onto the stage record (seq_stage_o.src_val/.dst_val/.r14 are
-      -- therefore not driven here). See the header of sequencer.vhd.
+      -- them onto the stage record. t_dec2seq has no element for them at all;
+      -- they first appear on t_seq2prep. See the header of sequencer.vhd.
       reg_rd_en_o    : out std_logic;
       reg_src_addr_o : out std_logic_vector(3 downto 0);  -- combinatorial
       reg_dst_addr_o : out std_logic_vector(3 downto 0);  -- combinatorial

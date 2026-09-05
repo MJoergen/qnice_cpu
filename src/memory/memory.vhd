@@ -127,11 +127,11 @@ begin
    --   makes SRC-ready depend on DST-valid, which depends on wb_ack_i through
    --   the buffer above -- so this one reaches back to the ack as well, just
    --   outside this file. It is also worth nothing: dropping it left the
-   --   cycle count of all nine test programs bit-identical, while the
-   --   synthesised CPU got SMALLER (929 -> 903 LUTs, this module 57 -> 56,
-   --   with FETCH, CACHE, DECODE, PREPARE and WRITE all shrinking as the
-   --   shorter path lets synthesis simplify) and 0.18 ns faster at the
-   --   8.50 ns constraint.
+   --   cycle count of every test program of the time (nine of them)
+   --   bit-identical, while the synthesised CPU got SMALLER (929 -> 903
+   --   LUTs, this module 57 -> 56, with FETCH, ICACHE, DECODE, PREPARE and
+   --   WRITE all shrinking as the shorter path lets synthesis simplify)
+   --   and 0.18 ns faster at the 8.50 ns constraint.
    --
    -- Both forms are also combinational LOOPS against a zero-latency slave --
    -- one that acks in the cycle it accepts the request. This module does not
