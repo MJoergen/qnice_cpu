@@ -497,27 +497,38 @@ joins on itself (`src_val`, `dst_val`, `r14` — see below), so the
 DECODE-to-PREPARE path really is one interface with an adapter in the middle:
 ```
 type t_stage is record
-   microcodes  : std_logic_vector(35 downto 0);
-   addr        : std_logic_vector(15 downto 0);
-   inst        : std_logic_vector(15 downto 0);
-   immediate   : std_logic_vector(15 downto 0);
-   src_addr    : std_logic_vector(3 downto 0);
-   src_mode    : std_logic_vector(1 downto 0);
-   src_val     : std_logic_vector(15 downto 0);
-   src_imm     : std_logic;
-   dst_addr    : std_logic_vector(3 downto 0);
-   dst_mode    : std_logic_vector(1 downto 0);
-   dst_val     : std_logic_vector(15 downto 0);
-   dst_imm     : std_logic;
-   res_reg     : std_logic_vector(3 downto 0);
-   r14         : std_logic_vector(15 downto 0);
-   alu_oper    : std_logic_vector(3 downto 0);
-   alu_ctrl    : std_logic_vector(5 downto 0);
-   alu_flags   : std_logic_vector(15 downto 0);
-   alu_src_val : std_logic_vector(15 downto 0);
-   alu_dst_val : std_logic_vector(15 downto 0);
+   microcodes  : std_logic_vector(35 downto 0); -- [D] SEQUENCER narrows it to one chunk
+   addr        : std_logic_vector(15 downto 0); -- [D]
+   inst        : std_logic_vector(15 downto 0); -- [D]
+   immediate   : std_logic_vector(15 downto 0); -- [D]
+   src_addr    : std_logic_vector(3 downto 0);  -- [D]
+   src_mode    : std_logic_vector(1 downto 0);  -- [D]
+   src_val     : std_logic_vector(15 downto 0); -- [S] PREPARE swaps in the PC for R15
+   src_imm     : std_logic;                     -- [D]
+   dst_addr    : std_logic_vector(3 downto 0);  -- [D]
+   dst_mode    : std_logic_vector(1 downto 0);  -- [D]
+   dst_val     : std_logic_vector(15 downto 0); -- [S] PREPARE swaps in the PC for R15
+   dst_imm     : std_logic;                     -- [D]
+   res_reg     : std_logic_vector(3 downto 0);  -- [D]
+   r14         : std_logic_vector(15 downto 0); -- [S]
+   is_crb      : std_logic;                     -- [D] INCRB/DECRB, decoded early (decode.vhd)
+   early_jmp   : std_logic;                     -- [D] Redirect already issued (decode.vhd)
+   alu_oper    : std_logic_vector(3 downto 0);  -- [P]
+   alu_ctrl    : std_logic_vector(5 downto 0);  -- [P]
+   alu_flags   : std_logic_vector(15 downto 0); -- [P]
+   alu_src_val : std_logic_vector(15 downto 0); -- [P]
+   alu_dst_val : std_logic_vector(15 downto 0); -- [P]
 end record t_stage;
 ```
+
+No link carries all of it: an element stays undriven until the stage that fills
+it in has run, and the marker on each line says which stage that is — `[D]`
+DECODE, so live on all three links; `[S]` the SEQUENCER, so live from
+SEQUENCER-to-PREPARE onwards; `[P]` PREPARE, so live on PREPARE-to-WRITE only.
+Read the other way round, the SEQUENCER looks at `microcodes` alone, PREPARE at
+eleven of the `[D]`/`[S]` elements, and WRITE at all 21. The markers are kept in
+step with the copy in [cpu_constants.vhd](../cpu_constants.vhd), which is
+authoritative.
 
 The element `microcodes` carries the whole list of up to three 12-bit
 micro-operations produced by the microcode ROM (3 x 12 = 36 bits). The SEQUENCER
@@ -543,17 +554,23 @@ branch target lands in the Program Counter. For the subroutine variants
 with pre-decrement addressing, so that the return address is pushed onto the
 stack while `res_reg` still points at `R15`.
 
-Finally, `r14` contains the current value of the Status Register.
+The element `r14` contains the current value of the Status Register.
 
-**Not every element is latched, and not every element comes from DECODE.**
-DECODE registers `microcodes`, `addr`, `inst`, `immediate`, `src_addr`,
-`src_mode`, `src_imm`, `dst_addr`, `dst_mode`, `dst_imm` and `res_reg` in its
-output process. It does not drive `src_val`, `dst_val` and `r14` at all: those
-are *concurrent* assignments straight from the register file read ports, made in
-the SEQUENCER. DECODE issues the read — it owns the register numbers — but the
-values come back a clock cycle later, by which time the instruction is already
-in DECODE's output register and being presented to the SEQUENCER, so they are
-wired from REGISTERS to there directly rather than through DECODE.
+Finally, `is_crb` and `early_jmp` are single bits that DECODE computes and
+carries down rather than letting WRITE re-derive them from `inst`. Both land on
+`fetch_valid_o`, the reset pin of every flip-flop in DECODE and PREPARE, and
+neither re-derivation fits in front of it: see
+[Register bank switch](#Register-bank-switch) and
+[Early redirect](#Early-redirect).
+
+**The `[D]` elements are latched; the `[S]` ones are not.** DECODE registers its
+eleven in its output process, and `is_crb`/`early_jmp` with them. The three
+marked `[S]` are *concurrent* assignments straight from the register file read
+ports, made in the SEQUENCER. DECODE issues the read — it owns the register
+numbers — but the values come back a clock cycle later, by which time the
+instruction is already in DECODE's output register and being presented to the
+SEQUENCER, so they are wired from REGISTERS to there directly rather than
+through DECODE.
 
 They therefore keep moving while the pipeline is stalled, and that is
 deliberate: it is how a stalled instruction picks up a register or Status
@@ -563,8 +580,9 @@ The consumer only ever samples them at the moment it accepts a beat, so their
 movement in between is harmless. Freezing them — or latching them anywhere on
 the way — would silently reintroduce stale-operand hazards.
 
-The remaining elements `alu_*` are only used from PREPARE to WRITE. They contain
-all the values needed by the ALU.
+The remaining elements, the five marked `[P]`, are filled in by PREPARE and so
+are only live from PREPARE to WRITE. They contain all the values needed by the
+ALU.
 
 ## Stages
 
