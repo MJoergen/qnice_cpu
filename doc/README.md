@@ -342,7 +342,18 @@ instructions has its own colour, and the top four rows summarise which
 instruction each stage is working on in each cycle. A flat line there means the
 stage is empty. Every row is named after the module that *drives* it, so all of
 them are output ports; where a link's two ends have different names, the name
-shown is the driver's.
+shown is the driver's. A signal's name is **bold** when it comes straight off a
+flip-flop and upright when a combinational chain stands between the nearest
+register and the port — so the bold rows settle early in the cycle and the
+upright ones late. That is not a detail of the drawing: the upright rows at the
+bottom are WRITE's outputs, and they are upright because `p_reg` in `write.vhd`
+is a combinational process, which is exactly why they are the design's
+timing-critical nets (see [The critical path](#the-critical-path)). The upright
+`*_ready_o` rows are the same story in the backward direction, each reaching
+back through the stage below it. Two of the bold rows are only *almost*:
+`ICACHE/m_valid_o` and `m_double_o` are their registers ANDed with `rst_i`, and
+that `rst_i` is `WRITE/fetch_valid_o` — so they follow their flip-flop on every
+cycle except a flush.
 
 ![Polling loop waveform](loop_timing.png)
 
