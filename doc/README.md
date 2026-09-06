@@ -1,5 +1,20 @@
 # A pipelined implementation of the QNICE CPU
 
+Table of contents:
+* [Architecture](#architecture)
+* [Harvard architecture](#harvard-architecture)
+* [Pipeline flush](#pipeline-flush)
+* [Back-pressure](#back-pressure)
+* [Detailed design description](#detailed-design-description)
+* [Wishbone](#wishbone)
+* [Interleaving](#interleaving)
+* [A polling loop, cycle by cycle](#a-polling-loop-cycle-by-cycle)
+* [Self-modifying code](#self-modifying-code)
+* [Where the pipeline registers are](#where-the-pipeline-registers-are)
+* [Optimizations](#optimizations)
+* [TODO](#todo)
+* [Utilization](#utilization)
+
 ## Architecture
 This implementation is a four-stage pipeline — FETCH, DECODE, PREPARE, WRITE —
 with two further blocks sitting on the links between them. Six blocks in
