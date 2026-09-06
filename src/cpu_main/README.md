@@ -1,8 +1,7 @@
 # The main QNICE pipeline
 
-This is a detailed design description of the main CPU pipeline, particularly
-the stages DECODE, PREPARE, and WRITE, and SEQUENCER, which joins the first
-two.
+This is a detailed design description of the main CPU pipeline, namely
+the stages DECODE, SEQUENCER, PREPARE, and WRITE.
 
 Table of contents:
 * [Block diagram](#block-diagram)
