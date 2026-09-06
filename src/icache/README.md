@@ -4,24 +4,6 @@ A two-word instruction buffer that presents DECODE with an instruction and its
 possible immediate operand in the same cycle. It sits between FETCH and DECODE,
 and `icache.vhd` is instantiated directly in [src/cpu.vhd](../cpu.vhd):
 
-```
-              wbi_*            fetch2icache_*         icache2decode_*
-   WISHBONE <------->  FETCH  ---------------->  ICACHE  ------------> DECODE
-   (instr)                ^   valid/ready/          ^ ^   valid/ready/
-                          |   addr/data             | |   addr/data(32)/
-                          |                         | |   double_o/double_i
-                          +---- wr2fetch_valid -----+ |
-                          |     wr2fetch_addr         |   (new PC, hard flush)
-                          +---- dc2fetch_valid -------+
-                                dc2fetch_addr             (early redirect,
-                                                           soft flush)
-```
-
-The two entities used to be wrapped in a `fetch_cache.vhd`. That wrapper is
-gone; `cpu.vhd` wires them together itself, which is why both flush signals are
-visible at the top level (see [Flush](#flush) below). The FETCH half is
-documented in [fetch/README.md](../fetch/README.md).
-
 ## icache.vhd
 
 ```
@@ -135,11 +117,6 @@ leaves the output asserted and they fire normally. `abort` does not cover the
 trigger cycle in GHDL, so the qualifier has to be in the trigger.
 
 ## Formal verification
-
-`icache.sby` is in `DUTS` in [formal/Makefile](../../formal/Makefile), as is
-FETCH's own job; see
-[fetch/README.md](../fetch/README.md#formal-verification) for what the two
-together do *not* prove.
 
 `bmc`, `cover`, and `prove` (k-induction), depth 10, elaborated with the small
 generics `G_ADDR_SIZE=4`, `G_DATA_SIZE=8`. Self-contained — `icache.vhd` has no

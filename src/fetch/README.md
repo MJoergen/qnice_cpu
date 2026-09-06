@@ -144,12 +144,6 @@ buffer (filled when the response *arrives*), so the address is always present
 first and that ordering is unreachable by construction. It stays covered by
 `pipe_concat.sby` standalone, where both orderings are reachable.
 
-Note that the two jobs verify the two entities separately; nothing currently
-proves the *composition* — in particular that `cpu.vhd` really does drive
-`icache_rst` with the same redirect FETCH sees. That wiring is the one thing
-that used to be internal to `fetch_cache.vhd` and is now the top level's
-responsibility.
-
 #### The shadow model and the redirect fast path
 
 `fetch.psl` maintains shadow state recomputed from the module's **ports only**,
@@ -215,12 +209,3 @@ The same reasoning is why `icache.psl`'s stability properties carry an
 Omitting one of these is the trap described in the top-level `CLAUDE.md`, and
 BMC finds it immediately.
 
-### A note on stale properties
-
-`fetch.sby` did not elaborate at all for a while: `s_fill_o` on
-`two_stage_fifo`/`two_stage_buffer` changed from `std_logic_vector(1 downto 0)`
-to `natural range 0 to 2`, and `fetch.psl` kept calling `to_integer()` on it and
-comparing it against `"10"`/`"00"`. Because a job that fails to elaborate looks
-much like any other red result, the four property bugs above sat behind it
-undetected. Worth re-running `make formal` after changing any port type shared
-across modules.
