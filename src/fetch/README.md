@@ -5,17 +5,6 @@ A one-word-at-a-time WISHBONE instruction fetcher. It is followed by the
 instruction and its possible immediate operand in the same cycle; both are
 instantiated directly in [src/cpu.vhd](../cpu.vhd).
 
-```
-              wbi_*            fetch2icache_*         icache2decode_*
-   WISHBONE <------->  FETCH  ---------------->  ICACHE  ------------> DECODE
-   (instr)                ^   valid/ready/       ^   valid/ready/
-                          |   addr/data          |   addr/data(32)/
-                          |                      |   double_o/double_i
-                          |                      |
-                          +---- wr2fetch_valid --+   (new PC / flush)
-                                wr2fetch_addr
-```
-
 The two used to be wrapped in a `fetch_cache.vhd`. That wrapper is gone;
 `cpu.vhd` wires them together itself, which is why the redirect/flush signal is
 visible at the top level — see [Flush](../icache/README.md#flush) in the ICACHE
