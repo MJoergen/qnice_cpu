@@ -826,7 +826,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `ccb3eb7-dirty`.
+Measured with Vivado 2022.2 on commit `c184e8a`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
