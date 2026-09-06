@@ -3,7 +3,7 @@
 -- This unit has four interfaces:
 -- 1. Sending read requests to WISHBONE (with possible backpressure)
 -- 2. Receiving read responses from WISHBONE
--- 3. Sending instructions to DECODE (with possible backpressure)
+-- 3. Sending instructions to ICACHE (with possible backpressure)
 -- 4. Receiving a new PC from WRITE
 --
 -- THEORY OF OPERATION
@@ -11,7 +11,7 @@
 -- the address most recently supplied by WRITE. Each WISHBONE read request
 -- reserves one "slot". A slot is allocated when the request is issued (STB
 -- asserted) and released when the corresponding instruction word is handed
--- over to DECODE. At most C_MAX_PENDING slots may be in use at any time, which
+-- over to ICACHE. At most C_MAX_PENDING slots may be in use at any time, which
 -- bounds the occupancy of both internal FIFOs and therefore guarantees that
 -- neither of them can ever overflow.
 --
@@ -21,7 +21,7 @@
 -- WISHBONE requests are used.
 --
 -- REDIRECT
--- A redirect (dc_valid_i) does NOT normally terminate the bus cycle. CYC
+-- A redirect (wr_valid_i) does NOT normally terminate the bus cycle. CYC
 -- stays asserted and the first request of the new instruction stream goes out
 -- on the very next clock cycle, which takes one cycle off the branch penalty.
 -- The price is that requests the slave has already accepted still owe an
@@ -38,11 +38,11 @@
 -- path.
 --
 -- INTERFACE CONTRACTS -- these are requirements on the environment:
--- a) dc_valid_i is an unconditional, single-cycle flush. It has no
+-- a) wr_valid_i is an unconditional, single-cycle flush. It has no
 --    backpressure and takes effect immediately: everything already fetched is
 --    abandoned, both internal FIFOs are cleared, and fetching restarts at
---    dc_addr_i.
--- b) WRITE MUST supply a new PC (dc_valid_i) before any fetched
+--    wr_addr_i.
+-- b) WRITE MUST supply a new PC (wr_valid_i) before any fetched
 --    instruction is meaningful. wb_addr_o is reset to zero, so without a new
 --    PC the unit will start fetching from address 0.
 -- c) The attached WISHBONE slave MUST NOT assert ACK after CYC has been
@@ -80,17 +80,16 @@ entity fetch is
       wb_ack_i   : in  std_logic;
       wb_data_i  : in  std_logic_vector(15 downto 0);
 
-      -- Send instruction to DECODE (i.e. to ICACHE)
-      dc_valid_o : out std_logic := '0';
-      dc_ready_i : in  std_logic;
-      dc_addr_o  : out std_logic_vector(15 downto 0);
-      dc_data_o  : out std_logic_vector(15 downto 0);
+      -- Send instruction to ICACHE
+      ic_valid_o : out std_logic := '0';
+      ic_ready_i : in  std_logic;
+      ic_addr_o  : out std_logic_vector(15 downto 0);
+      ic_data_o  : out std_logic_vector(15 downto 0);
 
       -- Receive a new PC from WRITE. Every write to R15 is a branch, and
-      -- WRITE forwards it here; the dc_ prefix on these two ports is historical
-      -- and does NOT mean they come from DECODE.
-      dc_valid_i : in  std_logic;
-      dc_addr_i  : in  std_logic_vector(15 downto 0)
+      -- WRITE forwards it here.
+      wr_valid_i : in  std_logic;
+      wr_addr_i  : in  std_logic_vector(15 downto 0)
    );
 end entity fetch;
 
@@ -105,7 +104,7 @@ architecture synthesis of fetch is
    signal wb_req_accept : std_logic;   -- Request accepted by the slave
    signal wb_ack_any    : std_logic;   -- Any acknowledgement from the slave
    signal wb_rsp_accept : std_logic;   -- Response for a request still wanted
-   signal dc_accept     : std_logic;   -- Instruction accepted by DECODE
+   signal ic_accept     : std_logic;   -- Instruction accepted by ICACHE
 
    -- Requests accepted by the slave but not yet acknowledged. This counts
    -- both live requests and the stale ones left behind by a redirect; the
@@ -120,7 +119,7 @@ architecture synthesis of fetch is
    signal wb_stale : natural range 0 to C_MAX_PENDING := 0;
 
    -- Slots allocated: requests issued but whose instruction word has not yet
-   -- been delivered to DECODE. Invariant:
+   -- been delivered to ICACHE. Invariant:
    --    wb_pending = <STB waiting> + <address FIFO occupancy>
    --    <address FIFO occupancy> = <data buffer occupancy> + wb_outstanding
    signal wb_pending : natural range 0 to 3 := 0;
@@ -144,7 +143,7 @@ begin
    -- redundant, but it is kept for readability and protocol clarity.
    wb_req_accept <= wb_cyc_o and wb_stb_o and not wb_stall_i;
    wb_ack_any    <= wb_cyc_o and wb_ack_i;
-   dc_accept     <= dc_valid_o and dc_ready_i;
+   ic_accept     <= ic_valid_o and ic_ready_i;
 
 
    -- Only an acknowledgement that is not owed to an abandoned request carries
@@ -203,8 +202,8 @@ begin
             end if;
          end if;
 
-         -- 3. DECODE accepted an instruction, releasing its slot.
-         if dc_accept = '1' then
+         -- 3. ICACHE accepted an instruction, releasing its slot.
+         if ic_accept = '1' then
             pending_v := pending_v - 1;
          end if;
 
@@ -212,8 +211,8 @@ begin
          --    This runs BEFORE the issue step below, so that the first request
          --    of the new instruction stream goes out on the very next cycle
          --    rather than the one after it -- one clock cycle off every branch.
-         if dc_valid_i = '1' then
-            addr_v    := dc_addr_i;
+         if wr_valid_i = '1' then
+            addr_v    := wr_addr_i;
             pending_v := 0;
 
             if stb_v = '1' then
@@ -297,7 +296,7 @@ begin
       )
       port map (
          clk_i     => clk_i,
-         rst_i     => rst_i or dc_valid_i,
+         rst_i     => rst_i or wr_valid_i,
          s_valid_i => wb_req_accept,
          s_ready_o => tsf_in_addr_ready,
          s_data_i  => wb_addr_o,
@@ -315,7 +314,7 @@ begin
       )
       port map (
          clk_i     => clk_i,
-         rst_i     => rst_i or dc_valid_i,
+         rst_i     => rst_i or wr_valid_i,
          s_valid_i => wb_rsp_accept,
          s_ready_o => tsb_in_data_ready,
          s_data_i  => wb_data_i,
@@ -334,17 +333,17 @@ begin
       )
       port map (
          clk_i                  => clk_i,
-         rst_i                  => rst_i or dc_valid_i,
+         rst_i                  => rst_i or wr_valid_i,
          s1_valid_i             => tsf_out_addr_valid,
          s1_ready_o             => tsf_out_addr_ready,
          s1_data_i              => tsf_out_addr_data,
          s0_valid_i             => tsb_out_data_valid,
          s0_ready_o             => tsb_out_data_ready,
          s0_data_i              => tsb_out_data_data,
-         m_valid_o              => dc_valid_o,
-         m_ready_i              => dc_ready_i,
-         m_data_o(31 downto 16) => dc_addr_o,
-         m_data_o(15 downto 0)  => dc_data_o
+         m_valid_o              => ic_valid_o,
+         m_ready_i              => ic_ready_i,
+         m_data_o(31 downto 16) => ic_addr_o,
+         m_data_o(15 downto 0)  => ic_data_o
       ); -- i_pipe_concat
 
 end architecture synthesis;

@@ -83,7 +83,7 @@ this section.
 icache_rst <= rst_i or wr2fetch_valid;
 ```
 
-with `wr2fetch_valid` being the same redirect that reaches `fetch.dc_valid_i`
+with `wr2fetch_valid` being the same redirect that reaches `fetch.wr_valid_i`
 and that resets FETCH's own internal FIFOs. This is mandatory, not a
 convenience: when FETCH is redirected it discards its buffers, so any words
 still held here belong to the abandoned instruction stream and must be discarded

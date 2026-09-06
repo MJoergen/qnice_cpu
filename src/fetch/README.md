@@ -37,19 +37,19 @@ wb_addr_o  : out std_logic_vector(15 downto 0);
 wb_ack_i   : in  std_logic;
 wb_data_i  : in  std_logic_vector(15 downto 0);
 
--- Send instruction to DECODE (i.e. to ICACHE)
-dc_valid_o : out std_logic;
-dc_ready_i : in  std_logic;
-dc_addr_o  : out std_logic_vector(15 downto 0);
-dc_data_o  : out std_logic_vector(15 downto 0);
+-- Send instruction to ICACHE
+ic_valid_o : out std_logic;
+ic_ready_i : in  std_logic;
+ic_addr_o  : out std_logic_vector(15 downto 0);
+ic_data_o  : out std_logic_vector(15 downto 0);
 
--- Receive a new PC from WRITE (the dc_ prefix here is historical)
-dc_valid_i : in  std_logic;
-dc_addr_i  : in  std_logic_vector(15 downto 0)
+-- Receive a new PC from WRITE
+wr_valid_i : in  std_logic;
+wr_addr_i  : in  std_logic_vector(15 downto 0)
 ```
 
 It speculatively fetches a linear sequence of instruction words starting at the
-address most recently supplied on `dc_valid_i`/`dc_addr_i`. Each WISHBONE read
+address most recently supplied on `wr_valid_i`/`wr_addr_i`. Each WISHBONE read
 request reserves one *slot*: allocated when the request is issued (`STB`
 asserted), released when the corresponding word is handed to ICACHE. At most
 `C_MAX_PENDING = 2` slots may be in use, which bounds the occupancy of both
@@ -60,11 +60,11 @@ held until every accepted request is acknowledged.
 Internally it is three of the [elastic-pipeline primitives](../sub):
 `two_stage_fifo` holds the issued addresses, `two_stage_buffer` catches the
 returning data, and `pipe_concat` joins the two streams into
-`dc_addr_o`/`dc_data_o`. All three are reset with `rst_i or dc_valid_i`.
+`ic_addr_o`/`ic_data_o`. All three are reset with `rst_i or wr_valid_i`.
 
 ### Redirect
 
-A redirect (`dc_valid_i`) does **not** normally terminate the bus cycle. `CYC`
+A redirect (`wr_valid_i`) does **not** normally terminate the bus cycle. `CYC`
 stays asserted and the first request of the new instruction stream goes out on
 the very next clock cycle. Tearing the bus cycle down instead — which is what
 this module used to do — costs an extra cycle before `STB` can be reasserted,
@@ -107,9 +107,9 @@ happens one cycle earlier rather than more of it happening.
 
 Also stated in the file header:
 
-* `dc_valid_i` is an unconditional, single-cycle flush with no back-pressure:
+* `wr_valid_i` is an unconditional, single-cycle flush with no back-pressure:
   everything already fetched is abandoned, both internal FIFOs are cleared, and
-  fetching restarts at `dc_addr_i`.
+  fetching restarts at `wr_addr_i`.
 * WRITE **must** supply a PC before any fetched instruction is meaningful —
   `wb_addr_o` resets to zero, so without one the unit fetches from address 0.
 * The WISHBONE slave **must not** assert `ACK` after `CYC` has been deasserted.
@@ -167,7 +167,7 @@ responsibility.
 then cross-checks it against the RTL (`f_outstanding_match`). That gives the
 properties independence from the implementation and hands k-induction strong
 invariants. The redirect fast path moved one line of it that is easy to get
-wrong: `f_wb_outstanding` used to be cleared on `dc_valid_i`, because a redirect
+wrong: `f_wb_outstanding` used to be cleared on `wr_valid_i`, because a redirect
 always tore the bus cycle down. It no longer does, so the counter is now cleared
 only when the design actually cancels — a request stuck in a stall.
 
@@ -196,22 +196,22 @@ Two invariants carry the induction proof across the change:
   induction begins from an arbitrary state where a stale count and a non-empty
   buffer can coexist, and from there a discarded response lets a buffered one be
   paired with an address from the new stream. That is exactly what
-  `f_dc_data_integrity` forbids, and without this invariant it is true but not
+  `f_ic_data_integrity` forbids, and without this invariant it is true but not
   inductive.
 
 ### Reset and flush escapes
 
 `fetch` resets its address FIFO, data buffer, and `pipe_concat` with
-`rst_i or dc_valid_i`, so a PC redirect from WRITE flushes them mid-stream.
+`rst_i or wr_valid_i`, so a PC redirect from WRITE flushes them mid-stream.
 Combined with the fact that `one_stage_buffer`/`two_stage_buffer` gate
 `m_valid_o` and `s_ready_o` combinationally with `and not rst_i`, this means a
 valid or ready signal can legitimately drop *within the cycle* the flush is
 asserted. Every "stable until accepted" property along this path therefore needs
 an escape on the **consequent** side, not just the trigger side — `abort rst_i`,
-or an explicit `dc_valid_i` term:
+or an explicit `wr_valid_i` term:
 
 * `f_data_ready` (fetch.psl) — mirrors the escape `f_addr_ready` already had.
-* `f_dc_assert_stable` (fetch.psl) — `abort (rst_i or dc_valid_i)`.
+* `f_ic_assert_stable` (fetch.psl) — `abort (rst_i or wr_valid_i)`.
 * `f_output_stable`, `f_input0_stable`, `f_input1_stable` (pipe_concat.psl).
 * `f_input_stable` (two_stage_buffer.psl) — this one matters most: under
   `assume2assert` it demands that `wb_cyc_o and wb_ack_i` obey the valid/ready

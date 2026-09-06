@@ -276,7 +276,7 @@ vunit i_icache(icache(synthesis))
 
    -- Input contract (b): words arrive in consecutive, increasing addresses
    -- between flushes.  FETCH guarantees this - it is the same property its
-   -- own f_dc_assert_addr asserts on the interface between the two modules -
+   -- own f_ic_assert_addr asserts on the interface between the two modules -
    -- so it is an assumption here and an assertion at the system level.
    f_input_consecutive : assume always {f_s_addr_valid = '1' and s_valid_i = '1' and s_ready_o = '1'}
                                    |-> {s_addr_i = f_s_addr + 1};

@@ -127,12 +127,12 @@ begin
          wb_addr_o  => wbi_addr_o,
          wb_ack_i   => wbi_ack_i,
          wb_data_i  => wbi_data_i,
-         dc_valid_o => fetch2icache_valid,
-         dc_ready_i => fetch2icache_ready,
-         dc_addr_o  => fetch2icache_addr,
-         dc_data_o  => fetch2icache_data,
-         dc_valid_i => redirect_valid,
-         dc_addr_i  => redirect_addr
+         ic_valid_o => fetch2icache_valid,
+         ic_ready_i => fetch2icache_ready,
+         ic_addr_o  => fetch2icache_addr,
+         ic_data_o  => fetch2icache_data,
+         wr_valid_i => redirect_valid,
+         wr_addr_i  => redirect_addr
       ); -- i_fetch
 
 

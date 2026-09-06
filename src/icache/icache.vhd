@@ -22,7 +22,7 @@
 -- INTERFACE CONTRACTS -- these are requirements on the environment:
 --
 -- a) rst_i IS ALSO THE PIPELINE FLUSH. It must be driven by the logical OR of
---    the global reset and FETCH's redirect signal (fetch.dc_valid_i),
+--    the global reset and FETCH's redirect signal (fetch.wr_valid_i),
 --    exactly as DECODE's reset is. This is not a convenience: when
 --    FETCH is redirected to a new PC it discards its own buffers, so any words
 --    still held here belong to the abandoned instruction stream and MUST be

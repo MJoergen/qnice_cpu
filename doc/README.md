@@ -423,7 +423,7 @@ arithmetic: that the ten cycles are three instructions plus the overheads around
 them. The useful reading is that they are **one instruction-memory refill**.
 FETCH delivers one word per clock cycle, the loop is five words long, and the
 branch puts a fixed cost either side of those five. Follow the
-`FETCH/dc_addr_o` row, and the cycles in which ICACHE actually takes what is
+`FETCH/ic_addr_o` row, and the cycles in which ICACHE actually takes what is
 offered there (`ICACHE/s_ready_o` high):
 
 | cycles | | |
@@ -745,7 +745,7 @@ into 3.625 — and it would apply to only 111 of the 904 redirects, 0.7%.
 So the honest arithmetic is a period of at least 9.7 ns, **+38%**, to buy 5.4%
 of cycles: roughly **30% worse** in wall time. The RTL is no cheaper than the
 timing. A request issued in the redirect cycle has to push its address onto
-`i_two_stage_fifo_addr`, which is held in reset by that same `dc_valid_i` and
+`i_two_stage_fifo_addr`, which is held in reset by that same `wr_valid_i` and
 gates `s_ready_o` while it is — the push is swallowed, and every later response
 pairs with the wrong address. `wb_stale := outstanding_v` in step 4 would mark
 the new request stale and discard its response. And WISHBONE B4 forbids altering

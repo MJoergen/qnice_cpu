@@ -4,18 +4,18 @@ vunit i_fetch(fetch(synthesis))
    -- FREE CONSTANTS USED FOR THE END-TO-END DATA INTEGRITY PROOF
    -----------------------------------------------------------------
    -- The slave is assumed to always return f_const_data for f_const_addr.
-   -- Since both are unconstrained constants, proving that DECODE receives
+   -- Since both are unconstrained constants, proving that ICACHE receives
    -- f_const_data whenever it receives f_const_addr proves payload correctness
    -- for every address, without needing a scoreboard.
    --
-   -- NOTE ON K-INDUCTION: f_dc_data_integrity is not expected to close under
+   -- NOTE ON K-INDUCTION: f_ic_data_integrity is not expected to close under
    -- pure k-induction.  The induction hypothesis has to relate the CONTENTS of
    -- the address FIFO and the data buffer to f_const_addr / f_const_data, and
    -- neither block's internal storage is visible from this vunit.  Run it in
    -- bmc mode; to get it through prove mode, add matching invariants inside
    -- two_stage_fifo.psl and two_stage_buffer.psl, or comment out this
    -- declaration block together with f_const_addr_stable, f_const_data_stable,
-   -- f_wb_slave_data, and f_dc_data_integrity -- nothing else depends on them.
+   -- f_wb_slave_data, and f_ic_data_integrity -- nothing else depends on them.
    signal f_const_addr : std_logic_vector(15 downto 0);
    signal f_const_data : std_logic_vector(15 downto 0);
 
@@ -41,9 +41,9 @@ vunit i_fetch(fetch(synthesis))
    signal f_wb_addr            : std_logic_vector(15 downto 0) := (others => '0');
    signal f_wb_stall_delay     : integer range 0 to 3 := 0;
    signal f_wb_ack_delay       : integer range 0 to 3 := 0;
-   signal f_dc_stall_delay     : integer range 0 to 3 := 0;
-   signal f_dc_last_addr_valid : std_logic := '0';
-   signal f_dc_last_addr       : std_logic_vector(15 downto 0) := (others => '0');
+   signal f_ic_stall_delay     : integer range 0 to 3 := 0;
+   signal f_ic_last_addr_valid : std_logic := '0';
+   signal f_ic_last_addr       : std_logic_vector(15 downto 0) := (others => '0');
    signal f_stb_pending        : integer range 0 to 1 := 0;
 
    -- Shadow queue holding the addresses of the outstanding requests, oldest
@@ -52,9 +52,9 @@ vunit i_fetch(fetch(synthesis))
    signal f_ack_addr1 : std_logic_vector(15 downto 0) := (others => '0');
 
    -- Address latched on abort, used to check the first instruction delivered
-   -- to DECODE after a new PC.
-   signal f_dc_new_pc_valid : std_logic := '0';
-   signal f_dc_new_pc       : std_logic_vector(15 downto 0) := (others => '0');
+   -- to ICACHE after a new PC.
+   signal f_ic_new_pc_valid : std_logic := '0';
+   signal f_ic_new_pc       : std_logic_vector(15 downto 0) := (others => '0');
 
    -- set all declarations to run on clk
    default clock is rising_edge(clk_i);
@@ -75,7 +75,7 @@ vunit i_fetch(fetch(synthesis))
    -- FETCH now keeps CYC asserted across a redirect where it can, and discards
    -- the acknowledgements owed to the abandoned requests itself, so a redirect
    -- on its own cancels nothing on the bus. Getting this wrong in the obvious
-   -- direction -- clearing on dc_valid_i, as before -- makes
+   -- direction -- clearing on wr_valid_i, as before -- makes
    -- f_wb_slave_ack_idle forbid exactly the stale acknowledgements that the
    -- discard logic exists to handle, and the whole mechanism goes unexercised
    -- while every property still passes.
@@ -105,7 +105,7 @@ vunit i_fetch(fetch(synthesis))
          -- the registered CYC goes low one cycle after the decision, which
          -- leaves a window where this counter is non-zero while CYC is already
          -- low, and f_inv_cyc_outstanding fails on it.
-         if dc_valid_i = '1' and wb_stb_o = '1' and wb_stall_i = '1' then
+         if wr_valid_i = '1' and wb_stb_o = '1' and wb_stall_i = '1' then
             n := 0;
          end if;
 
@@ -125,8 +125,8 @@ vunit i_fetch(fetch(synthesis))
             f_wb_addr <= f_wb_addr + 1;
          end if;
 
-         if dc_valid_i = '1' then
-            f_wb_addr <= dc_addr_i;
+         if wr_valid_i = '1' then
+            f_wb_addr <= wr_addr_i;
          end if;
 
          if rst_i = '1' then
@@ -165,40 +165,40 @@ vunit i_fetch(fetch(synthesis))
       end if;
    end process p_stb_pending;
 
-   -- Record the last address delivered to DECODE.
-   p_dc_last_addr : process (clk_i)
+   -- Record the last address delivered to ICACHE.
+   p_ic_last_addr : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if dc_accept = '1' then
-            f_dc_last_addr_valid <= '1';
-            f_dc_last_addr       <= dc_addr_o;
+         if ic_accept = '1' then
+            f_ic_last_addr_valid <= '1';
+            f_ic_last_addr       <= ic_addr_o;
          end if;
 
-         if rst_i = '1' or dc_valid_i = '1' then
-            f_dc_last_addr_valid <= '0';
+         if rst_i = '1' or wr_valid_i = '1' then
+            f_ic_last_addr_valid <= '0';
          end if;
       end if;
-   end process p_dc_last_addr;
+   end process p_ic_last_addr;
 
    -- Record the new PC supplied by WRITE, until the first instruction fetched
    -- from it has been delivered.
-   p_dc_new_pc : process (clk_i)
+   p_ic_new_pc : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if dc_accept = '1' then
-            f_dc_new_pc_valid <= '0';
+         if ic_accept = '1' then
+            f_ic_new_pc_valid <= '0';
          end if;
 
-         if dc_valid_i = '1' then
-            f_dc_new_pc_valid <= '1';
-            f_dc_new_pc       <= dc_addr_i;
+         if wr_valid_i = '1' then
+            f_ic_new_pc_valid <= '1';
+            f_ic_new_pc       <= wr_addr_i;
          end if;
 
          if rst_i = '1' then
-            f_dc_new_pc_valid <= '0';
+            f_ic_new_pc_valid <= '0';
          end if;
       end if;
-   end process p_dc_new_pc;
+   end process p_ic_new_pc;
 
 
    --------------------------------------------
@@ -209,7 +209,7 @@ vunit i_fetch(fetch(synthesis))
    -- This prevents data loss and/or corruption.
    --
    -- Qualified by the abort and reset, because the FIFO's rst_i is driven by
-   -- "rst_i or dc_valid_i" and its s_ready_o is now gated by that signal. A
+   -- "rst_i or wr_valid_i" and its s_ready_o is now gated by that signal. A
    -- request already asserted on STB may be accepted by the slave in the very
    -- cycle WRITE issues a redirect, so wb_req_accept and a low
    -- tsf_in_addr_ready coincide. That is not data loss: the address belongs
@@ -218,20 +218,20 @@ vunit i_fetch(fetch(synthesis))
    -- it one edge later via its own reset
    -- same outcome, different handshake.
    f_addr_ready : assert always
-      {wb_req_accept = '1' and dc_valid_i = '0' and rst_i = '0'} |-> {tsf_in_addr_ready = '1'};
+      {wb_req_accept = '1' and wr_valid_i = '0' and rst_i = '0'} |-> {tsf_in_addr_ready = '1'};
 
    -- The data buffer must always accept an incoming response.
    -- This prevents data loss and/or corruption.
    --
    -- Same escape clause, and same reasoning, as f_addr_ready above:
-   -- i_two_stage_buffer_data is reset with "rst_i or dc_valid_i", and
+   -- i_two_stage_buffer_data is reset with "rst_i or wr_valid_i", and
    -- one_stage_buffer gates s_ready_o with "and not rst_i". So a response the
    -- slave acks in the very cycle WRITE issues a redirect (or in reset) meets
    -- a low tsb_in_data_ready. That is not data loss: the response belongs to
    -- the instruction stream being abandoned, and the buffer is flushed on the
    -- same edge. Without the escape, BMC finds this immediately.
    f_data_ready : assert always
-      {wb_rsp_accept = '1' and dc_valid_i = '0' and rst_i = '0'} |-> {tsb_in_data_ready = '1'};
+      {wb_rsp_accept = '1' and wr_valid_i = '0' and rst_i = '0'} |-> {tsb_in_data_ready = '1'};
 
    -- The RTL bookkeeping must agree with the port-derived shadow state.
    f_outstanding_match : assert always
@@ -264,13 +264,13 @@ vunit i_fetch(fetch(synthesis))
    -- decrement, so "or f_wb_outstanding = 0" excuses exactly the drain case
    -- and nothing else.
    f_wb_master_cyc_hold : assert always
-      {f_wb_outstanding > 0 and dc_valid_i = '0' and rst_i = '0'} |=>
+      {f_wb_outstanding > 0 and wr_valid_i = '0' and rst_i = '0'} |=>
       {wb_cyc_o = '1' or f_wb_outstanding = 0};
 
    -- WISHBONE MASTER: While a request is stalled it must not change, except on
    -- reset or abort.
    f_wb_master_stable : assert always
-      {wb_stb_o and wb_stall_i and not dc_valid_i and not rst_i} |=>
+      {wb_stb_o and wb_stall_i and not wr_valid_i and not rst_i} |=>
       {stable(wb_stb_o) and stable(wb_addr_o)};
 
    -- WISHBONE MASTER: At most two outstanding requests.
@@ -283,47 +283,48 @@ vunit i_fetch(fetch(synthesis))
 
 
    ---------------------------------------
-   -- PROPERTIES OF THE DECODE INTERFACE
+   -- PROPERTIES OF THE ICACHE INTERFACE
    --
-   -- NOTE: "dc_" covers both directions. dc_valid_o/dc_addr_o/dc_data_o carry
-   -- instructions towards DECODE (via ICACHE); dc_valid_i/dc_addr_i are the PC
-   -- redirect, which comes from WRITE, not from DECODE.
+   -- ic_valid_o/ic_ready_i/ic_addr_o/ic_data_o carry instructions to ICACHE,
+   -- and on to DECODE behind it. The PC redirect that flushes them
+   -- (wr_valid_i/wr_addr_i) comes from WRITE and is assumed about, not
+   -- asserted, so it lives with the other input assumptions below.
    ---------------------------------------
 
-   -- DECODE ASSERT: The output must be stable while not accepted, unless the
+   -- ICACHE ASSERT: The output must be stable while not accepted, unless the
    -- transaction is aborted.
    -- The "abort" is required on the consequent side as well as the trigger
-   -- side: dc_valid_o comes straight out of i_pipe_concat, whose producers gate
+   -- side: ic_valid_o comes straight out of i_pipe_concat, whose producers gate
    -- their m_valid_o with "and not rst_i", and whose reset here is
-   -- "rst_i or dc_valid_i". A redirect asserted by WRITE in the consequent
-   -- cycle therefore drops dc_valid_o in that same cycle -- which is exactly
+   -- "rst_i or wr_valid_i". A redirect asserted by WRITE in the consequent
+   -- cycle therefore drops ic_valid_o in that same cycle -- which is exactly
    -- what WRITE just asked for, not a stability violation.
-   f_dc_assert_stable : assert always
-      {dc_valid_o and not dc_ready_i and not rst_i and not dc_valid_i} |=>
-      {stable(dc_valid_o) and stable(dc_addr_o) and stable(dc_data_o)}
-      abort (rst_i or dc_valid_i);
+   f_ic_assert_stable : assert always
+      {ic_valid_o and not ic_ready_i and not rst_i and not wr_valid_i} |=>
+      {stable(ic_valid_o) and stable(ic_addr_o) and stable(ic_data_o)}
+      abort (rst_i or wr_valid_i);
 
-   -- DECODE ASSERT: Addresses forwarded to DECODE increment by one.  Note that
-   -- f_dc_last_addr_valid is already cleared on reset and abort, so the
+   -- ICACHE ASSERT: Addresses forwarded to ICACHE increment by one.  Note that
+   -- f_ic_last_addr_valid is already cleared on reset and abort, so the
    -- antecedent does not need to observe the preceding handshake; this checks
    -- the increment across stall cycles as well.
-   f_dc_assert_addr : assert always
-      {f_dc_last_addr_valid and dc_valid_o} |-> {dc_addr_o = f_dc_last_addr + 1};
+   f_ic_assert_addr : assert always
+      {f_ic_last_addr_valid and ic_valid_o} |-> {ic_addr_o = f_ic_last_addr + 1};
 
-   -- DECODE ASSERT: A new PC flushes the pipeline; no stale instruction may be
+   -- ICACHE ASSERT: A new PC flushes the pipeline; no stale instruction may be
    -- presented in the following cycle.
-   f_dc_flush_on_abort : assert always
-      {dc_valid_i} |=> {not dc_valid_o};
+   f_ic_flush_on_abort : assert always
+      {wr_valid_i} |=> {not ic_valid_o};
 
-   -- DECODE ASSERT: The first instruction delivered after a new PC must be the
+   -- ICACHE ASSERT: The first instruction delivered after a new PC must be the
    -- instruction at that PC.
-   f_dc_new_pc_addr : assert always
-      {f_dc_new_pc_valid and dc_valid_o} |-> {dc_addr_o = f_dc_new_pc};
+   f_ic_new_pc_addr : assert always
+      {f_ic_new_pc_valid and ic_valid_o} |-> {ic_addr_o = f_ic_new_pc};
 
-   -- DECODE ASSERT: End-to-end data integrity.  The instruction word delivered
+   -- ICACHE ASSERT: End-to-end data integrity.  The instruction word delivered
    -- for a given address must be the word the slave returned for that address.
-   f_dc_data_integrity : assert always
-      {dc_valid_o = '1' and dc_addr_o = f_const_addr} |-> {dc_data_o = f_const_data};
+   f_ic_data_integrity : assert always
+      {ic_valid_o = '1' and ic_addr_o = f_const_addr} |-> {ic_data_o = f_const_data};
 
 
    -----------------------------
@@ -355,17 +356,17 @@ vunit i_fetch(fetch(synthesis))
       end if;
    end process p_wb_ack_delay;
 
-   -- Count the number of consecutive cycles DECODE applies backpressure.
-   p_dc_stall_delay : process (clk_i)
+   -- Count the number of consecutive cycles ICACHE applies backpressure.
+   p_ic_stall_delay : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if dc_valid_o = '1' and dc_ready_i = '0' then
-            f_dc_stall_delay <= f_dc_stall_delay + 1;
+         if ic_valid_o = '1' and ic_ready_i = '0' then
+            f_ic_stall_delay <= f_ic_stall_delay + 1;
          else
-            f_dc_stall_delay <= 0;
+            f_ic_stall_delay <= 0;
          end if;
       end if;
-   end process p_dc_stall_delay;
+   end process p_ic_stall_delay;
 
    -- Require reset at startup.
    f_reset : assume {rst_i};
@@ -396,44 +397,44 @@ vunit i_fetch(fetch(synthesis))
       {f_wb_ack_delay = 2} |=> {wb_ack_i = '1' or f_wb_outstanding = 0};
 
    -- WRITE ASSUME: Send a new PC right after reset.
-   f_dc_after_reset : assume always
-      {rst_i} |=> {dc_valid_i};
+   f_wr_after_reset : assume always
+      {rst_i} |=> {wr_valid_i};
 
-   -- DECODE ASSUME: Artificially constrain the maximum DECODE backpressure.
-   f_dc_assume_stall_delay_max : assume always
-      {f_dc_stall_delay = 2} |=> {dc_ready_i or not dc_valid_o};
+   -- ICACHE ASSUME: Artificially constrain the maximum ICACHE backpressure.
+   f_ic_assume_stall_delay_max : assume always
+      {f_ic_stall_delay = 2} |=> {ic_ready_i or not ic_valid_o};
 
 
    --------------------------------------------
    -- COVER STATEMENTS TO VERIFY REACHABILITY
    --------------------------------------------
 
-   -- DECODE accepts data
-   f_dc_accept : cover {dc_valid_o; not dc_valid_o};
+   -- ICACHE accepts data
+   f_ic_accept : cover {ic_valid_o; not ic_valid_o};
 
-   -- DECODE receives two data cycles back-to-back
-   f_dc_back2back : cover {dc_valid_o and dc_ready_i; dc_valid_o};
+   -- ICACHE receives two data cycles back-to-back
+   f_ic_back2back : cover {ic_valid_o and ic_ready_i; ic_valid_o};
 
-   -- DECODE receives three data cycles back-to-back
-   f_dc_back3back : cover {dc_valid_o and dc_ready_i; dc_valid_o and dc_ready_i; dc_valid_o};
+   -- ICACHE receives three data cycles back-to-back
+   f_ic_back3back : cover {ic_valid_o and ic_ready_i; ic_valid_o and ic_ready_i; ic_valid_o};
 
    -- An abort while a transaction is in progress
-   f_cover_abort_active : cover {wb_cyc_o and dc_valid_i};
+   f_cover_abort_active : cover {wb_cyc_o and wr_valid_i};
 
    -- An abort while two requests are outstanding.  This is now also the case
    -- that forces the bus cycle to be torn down rather than redirected, since
    -- redirecting it would need a third request slot.
-   f_cover_abort_full : cover {f_wb_outstanding = 2 and dc_valid_i = '1'};
+   f_cover_abort_full : cover {f_wb_outstanding = 2 and wr_valid_i = '1'};
 
    -- A redirect that keeps the bus cycle alive, leaving an acknowledgement
    -- owed to a request nobody wants any more.  This is the scenario the whole
    -- fast path turns on: without this cover the discard logic could be dead
    -- code and every assertion above would still pass.
-   f_cover_abort_redirect : cover {f_wb_outstanding = 1 and dc_valid_i = '1' and wb_stb_o = '0'};
+   f_cover_abort_redirect : cover {f_wb_outstanding = 1 and wr_valid_i = '1' and wb_stb_o = '0'};
 
    -- ...and the acknowledgement actually arriving afterwards, which is the
    -- moment the discard either works or corrupts the instruction stream.
-   f_cover_stale_ack : cover {f_wb_outstanding = 1 and dc_valid_i = '1' and wb_stb_o = '0'; wb_ack_i = '1'};
+   f_cover_stale_ack : cover {f_wb_outstanding = 1 and wr_valid_i = '1' and wb_stb_o = '0'; wb_ack_i = '1'};
 
    -- Both outstanding request slots in use
    f_cover_two_outstanding : cover {f_wb_outstanding = 2};
@@ -447,10 +448,10 @@ vunit i_fetch(fetch(synthesis))
    -- The bus cycle terminating and later restarting
    f_cover_cyc_restart : cover {wb_cyc_o; not wb_cyc_o; wb_cyc_o};
 
-   -- VACUITY CHECK for f_dc_data_integrity.
+   -- VACUITY CHECK for f_ic_data_integrity.
    --
-   -- f_dc_data_integrity only says something if its antecedent is reachable,
-   -- i.e. if an instruction is ever delivered to DECODE at the address held in
+   -- f_ic_data_integrity only says something if its antecedent is reachable,
+   -- i.e. if an instruction is ever delivered to ICACHE at the address held in
    -- the free constant f_const_addr.  If the trace is never long enough for
    -- that to happen, the assertion passes without checking anything.  These
    -- covers make that failure mode visible.
@@ -464,15 +465,15 @@ vunit i_fetch(fetch(synthesis))
    -- reachable.  In ASSERT mode the quantification runs the other way (the
    -- proof must hold for every value), which is what gives the integrity
    -- property its strength.
-   f_cover_const_fetched : cover {dc_valid_o = '1' and dc_addr_o = f_const_addr};
+   f_cover_const_fetched : cover {ic_valid_o = '1' and ic_addr_o = f_const_addr};
 
    -- Stronger variant: the constant address is delivered AND is not the PC
-   -- that DECODE supplied, so at least one address increment and a full
+   -- that WRITE supplied, so at least one address increment and a full
    -- request/response round trip must have occurred to reach it.  This closes
    -- the loophole where the solver satisfies the cover above by pointing
    -- f_const_addr at the very first instruction after a branch.
    f_cover_const_fetched_deep : cover
-      {dc_valid_o = '1' and dc_addr_o = f_const_addr and f_dc_last_addr_valid = '1'};
+      {ic_valid_o = '1' and ic_addr_o = f_const_addr and f_ic_last_addr_valid = '1'};
 
 
    ----------------------------------------------
@@ -511,7 +512,7 @@ vunit i_fetch(fetch(synthesis))
    -- state, in which a non-zero wb_stale and a non-empty data buffer can
    -- coexist -- and from there the next acknowledgement is discarded while a
    -- response already in the buffer gets paired with an address from the new
-   -- stream, which is exactly the corruption f_dc_data_integrity forbids.
+   -- stream, which is exactly the corruption f_ic_data_integrity forbids.
    -- Without this invariant that property is true but not inductive.
    f_inv_stale_data_empty : assert always
       {rst_i = '0' and wb_stale > 0} |-> {tsb_in_data_fill = 0};
@@ -535,12 +536,12 @@ vunit i_fetch(fetch(synthesis))
    f_inv_cyc_outstanding : assert always
       {f_wb_outstanding > 0} |-> {wb_cyc_o = '1'};
 
-   -- STRENGTHENING INVARIANTS FOR f_dc_assert_addr
+   -- STRENGTHENING INVARIANTS FOR f_ic_assert_addr
    --
-   -- f_dc_assert_addr is true but not inductive on its own.  Induction begins
-   -- from an arbitrary state, and nothing above relates f_dc_last_addr to the
+   -- f_ic_assert_addr is true but not inductive on its own.  Induction begins
+   -- from an arbitrary state, and nothing above relates f_ic_last_addr to the
    -- addresses actually held in the address FIFO, so the solver may posit
-   -- f_dc_last_addr_valid = '1' with a FIFO head bearing no relation to it.
+   -- f_ic_last_addr_valid = '1' with a FIFO head bearing no relation to it.
    --
    -- The anchor is f_wb_addr, the next address to be requested.  Every address
    -- currently in flight is determined by it:
@@ -549,14 +550,14 @@ vunit i_fetch(fetch(synthesis))
    --      (this is f_wb_master_address);
    --    - the FIFO holds the addresses f_wb_addr - fill .. f_wb_addr - 1,
    --      oldest first;
-   --    - therefore the next address due at the DECODE output is
+   --    - therefore the next address due at the ICACHE output is
    --      f_wb_addr - fill, and the one delivered before it was
    --      f_wb_addr - fill - 1.
    --
    -- Each invariant below is preserved by every transition: accepting a
    -- request increments both f_wb_addr and fill, leaving the differences
    -- unchanged; delivering a word decrements fill and advances
-   -- f_dc_last_addr by exactly one; an abort clears the FIFO and both valid
+   -- f_ic_last_addr by exactly one; an abort clears the FIFO and both valid
    -- flags in the same cycle, making the guarded invariants vacuous.
 
    -- The FIFO's output valid must agree with its occupancy.  Stated as two
@@ -573,26 +574,26 @@ vunit i_fetch(fetch(synthesis))
    f_inv_fifo_head : assert always {rst_i = '0' and tsf_out_addr_valid = '1'}
                                |-> {tsf_out_addr_data = f_wb_addr - tsf_in_addr_fill};
 
-   -- pipe_concat passes the FIFO head straight through to the DECODE output.
+   -- pipe_concat passes the FIFO head straight through to the ICACHE output.
    -- This holds structurally if pipe_concat is combinational; if it is a
    -- registered stage, this invariant is false and the two above must be
    -- re-expressed one pipeline stage further downstream.  The same caveat
    -- applies to f_inv_pending above.
-   f_inv_dc_addr : assert always {rst_i = '0' and dc_valid_o = '1'}
-                             |-> {dc_addr_o = tsf_out_addr_data};
+   f_inv_ic_addr : assert always {rst_i = '0' and ic_valid_o = '1'}
+                             |-> {ic_addr_o = tsf_out_addr_data};
 
-   -- The last address delivered to DECODE sits immediately below the oldest
+   -- The last address delivered to ICACHE sits immediately below the oldest
    -- address still in flight.  Together with f_inv_fifo_head and
-   -- f_inv_dc_addr, this is exactly what f_dc_assert_addr claims, so this is
+   -- f_inv_ic_addr, this is exactly what f_ic_assert_addr claims, so this is
    -- the load-bearing invariant of the group.
-   f_inv_last_addr : assert always {rst_i = '0' and f_dc_last_addr_valid = '1'}
-                               |-> {f_dc_last_addr = f_wb_addr - tsf_in_addr_fill - 1};
+   f_inv_last_addr : assert always {rst_i = '0' and f_ic_last_addr_valid = '1'}
+                               |-> {f_ic_last_addr = f_wb_addr - tsf_in_addr_fill - 1};
 
    -- Before the first delivery after a redirect, the oldest address in flight
    -- is the new PC itself.  This is the corresponding strengthening for
-   -- f_dc_new_pc_addr, which is non-inductive for the same reason.
-   f_inv_new_pc : assert always {rst_i = '0' and f_dc_new_pc_valid = '1'}
-                            |-> {f_dc_new_pc = f_wb_addr - tsf_in_addr_fill};
+   -- f_ic_new_pc_addr, which is non-inductive for the same reason.
+   f_inv_new_pc : assert always {rst_i = '0' and f_ic_new_pc_valid = '1'}
+                            |-> {f_ic_new_pc = f_wb_addr - tsf_in_addr_fill};
 
 
    ----------------------------------------------
@@ -602,11 +603,11 @@ vunit i_fetch(fetch(synthesis))
    -- Assume no reset after the first clock cycle
 --   f_reset2 : assume always {not rst_i} |=> {not rst_i};
 
-   -- Assume DECODE is always ready
---   f_dc_ready_always : assume always {dc_ready_i};
+   -- Assume ICACHE is always ready
+--   f_ic_ready_always : assume always {ic_ready_i};
 
-   -- Assume DECODE never resets the address
---   f_dc_after_reset2 : assume always {not rst_i} |=> {not dc_valid_i};
+   -- Assume WRITE never resets the address
+--   f_wr_after_reset2 : assume always {not rst_i} |=> {not wr_valid_i};
 
    -- Assume the WISHBONE slave never stalls.
 --   f_wb_no_stall : assume always {not wb_stall_i};
@@ -614,25 +615,25 @@ vunit i_fetch(fetch(synthesis))
    -- Assume the WISHBONE slave responds on the exact following cycle.
 --   f_wb_response : assume always {wb_stb_o and not wb_stall_i and not rst_i} |=> {wb_ack_i};
 
-   -- DECODE ASSUME: Always remain ready, when not receiving new data.
---   f_dc_ready_hold : assume always {dc_ready_i and not dc_valid_o} |=> {dc_ready_i};
+   -- ICACHE ASSUME: Always remain ready, when not receiving new data.
+--   f_ic_ready_hold : assume always {ic_ready_i and not ic_valid_o} |=> {ic_ready_i};
 
    -- BOUNDED PROGRESS: with the artificial stall/ack constraints above, an
-   -- always-ready DECODE must receive an instruction within a bounded
+   -- always-ready ICACHE must receive an instruction within a bounded
    -- number of cycles.  The bound is empirical -- enable this together with
-   -- f_dc_ready_always and f_reset2, and raise the limit if it trips.
+   -- f_ic_ready_always and f_reset2, and raise the limit if it trips.
 --   signal f_no_output_delay : integer range 0 to 31 := 0;
 --   p_no_output_delay : process (clk_i)
 --   begin
 --      if rising_edge(clk_i) then
---         if dc_valid_o = '0' and rst_i = '0' and dc_valid_i = '0' then
+--         if ic_valid_o = '0' and rst_i = '0' and wr_valid_i = '0' then
 --            f_no_output_delay <= f_no_output_delay + 1;
 --         else
 --            f_no_output_delay <= 0;
 --         end if;
 --      end if;
 --   end process p_no_output_delay;
---   f_dc_progress : assert always {f_no_output_delay <= 15};
+--   f_ic_progress : assert always {f_no_output_delay <= 15};
 
 } -- vunit i_fetch(fetch(synthesis))
 
