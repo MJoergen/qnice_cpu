@@ -304,10 +304,10 @@ resulting in higher performance.
 The instruction is always present in bits 15-0 and any immediate operand (or
 possibly the next instruction) is optionally present in bits 31-16. The signal
 `ic_addr_i` contains the address (i.e. Program Counter) of the instruction.
-
 It is here worth noting that even though REGISTERS contains all the CPU
 registers, the Program Counter (`R15`) is instead stored in FETCH and forwarded
-through the pipeline as a separate signal.
+through the pipeline as a separate signal. This is used by relative branching
+and by subrouting calls.
 
 ### Between DECODE, SEQUENCER, and REGISTERS
 ```
@@ -328,9 +328,7 @@ That latency is why the two halves of this interface belong to two different
 modules. By the time a value arrives, the instruction that asked for it has
 already left DECODE and is being presented to SEQUENCER, so the values are
 wired from REGISTERS into SEQUENCER, which joins them onto the stage record
-(`m_stage_o.src_reg_val`/`.dst_reg_val`/`.r14`). Routing them back into DECODE
-first, as this design used to, only made them a combinational pass-through of a
-stage they have nothing left to do with.
+(`m_stage_o.src_reg_val`/`.dst_reg_val`/`.r14`).
 
 We could have used the standard AXI-interface with `VALID` and `READY` signals,
 but since the latency is constant, I've chosen not to. However, we do need the
