@@ -108,7 +108,7 @@ begin
    end process p_index;
 
 
-   -- Combinatorial output, to avoid inserting latency into the pipeline.
+   -- Combinational output, to avoid inserting latency into the pipeline.
    --
    -- 'microcode' is the one chunk this beat carries, sliced out of the list on
    -- the input; the input and output records are different types precisely so

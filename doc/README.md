@@ -74,7 +74,7 @@ The flow through the pipeline is that an instruction will spend one or two
 clock cycles in FETCH (two cycles if it uses an immediate operand), and up to
 three clock cycles in DECODE -- one per micro-operation, because SEQUENCER
 holds DECODE stalled until it has issued the last one. PREPARE additionally
-waits for any memory operands to be read. WRITE is entirely combinatorial, the
+waits for any memory operands to be read. WRITE is entirely combinational, the
 ALU included; the only registers it drives are the outputs of the other blocks.
 
 ## Harvard architecture
@@ -841,7 +841,7 @@ per-module measurement (929 → 903), as the shorter path lets synthesis simplif
 either side of it. The rest of the branch is the zero-latency support itself,
 and stays there.
 
-**Rejected: a combinatorial DECODE stage.** DECODE's output register looks
+**Rejected: a combinational DECODE stage.** DECODE's output register looks
 removable: the stage is a decoder, its logic is thin, and ICACHE already
 presents its input from a register. What the register actually buys is not
 DECODE's own logic but the **one-cycle read latency of REGISTERS**. DECODE
@@ -853,7 +853,7 @@ operands catch up.
 That latency is the price of a design goal. This CPU puts the register file in
 **block RAM**, where the original QNICE-FPGA builds it from LUTRAMs; a block RAM
 read is registered by construction, a LUTRAM read is asynchronous. So "make
-DECODE combinatorial" is really "put the register file back in LUTRAM", and it
+DECODE combinational" is really "put the register file back in LUTRAM", and it
 was measured that way — `registers.vhd` rewritten around an asynchronous array,
 `p_output` in `decode.vhd` turned into a `process (all)`.
 
@@ -870,8 +870,8 @@ It does not close.
 | --- | --- | --- | --- |
 | baseline | 256 | **+0.002 ns** | 0 |
 | baseline | 2 | +0.001 ns | 0 |
-| combinatorial DECODE | 256 | **−0.660 ns** | 688 |
-| combinatorial DECODE | 2 | **−0.234 ns** | 75 |
+| combinational DECODE | 256 | **−0.660 ns** | 688 |
+| combinational DECODE | 2 | **−0.234 ns** | 75 |
 
 The 2-bank builds separate two independent costs. At the shipping width the
 worst path is the asynchronous read itself — ICACHE `m_data` through DECODE into
@@ -1145,8 +1145,8 @@ Two things stand out:
   unconstrained integer made the synthesiser build a far wider shifter than
   necessary. Further reduction there is the most promising area optimisation
   left.
-* **WRITE holds no registers at all.** It is purely combinatorial: the ALU is
-  combinatorial, and the Status Register shadow registers it used to carry were
+* **WRITE holds no registers at all.** It is purely combinational: the ALU is
+  combinational, and the Status Register shadow registers it used to carry were
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#why-write-needs-no-status-register-bypass).
 

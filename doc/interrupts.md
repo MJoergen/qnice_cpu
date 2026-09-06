@@ -248,7 +248,7 @@ DECISION: Make a timing diagram (similar to src/cpu_main/timing.tex) that shows
 the relationship between the important signals (e.g. int_n_i, igrant_n_o,
 isr_addr_i).
 Particularly important is whether changes are registered (i.e. delayed until
-next clock cycle) or combinatorial.  The current design already allows for data
+next clock cycle) or combinational.  The current design already allows for data
 input to be registered.
 
 **DONE — see [src/interrupt/README.md](../src/interrupt/README.md).** The diagram

@@ -18,10 +18,10 @@ entity prepare is
 
       -- MEMORY
       mem_src_valid_i : in  std_logic;
-      mem_src_ready_o : out std_logic;                        -- combinatorial
+      mem_src_ready_o : out std_logic;                        -- combinational
       mem_src_data_i  : in  std_logic_vector(15 downto 0);
       mem_dst_valid_i : in  std_logic;
-      mem_dst_ready_o : out std_logic;                        -- combinatorial
+      mem_dst_ready_o : out std_logic;                        -- combinational
       mem_dst_data_i  : in  std_logic_vector(15 downto 0);
 
       -- To WRITE

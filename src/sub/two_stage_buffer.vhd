@@ -5,9 +5,9 @@
 -- ("i_one_stage_buffer_first") interfaces to the external upstream (s_valid_i/s_ready_o/
 -- s_data_i), and the second ("i_one_stage_buffer_second") interfaces to the external
 -- downstream (m_valid_o/m_ready_i/m_data_o). Data may cut through both
--- stages combinatorially in the same cycle when both are empty and the
+-- stages combinationally in the same cycle when both are empty and the
 -- downstream is ready -- see one_stage_buffer's header for the timing
--- implications of that (both directions become combinatorial when empty).
+-- implications of that (both directions become combinational when empty).
 --
 -- s_fill_o reports the number of items currently stored (0, 1, or 2).
 -- Its priority-mux
@@ -83,7 +83,7 @@ begin
 
    -- Second stage: drives the external downstream interface. May accept
    -- and immediately forward (cut through) data from the first stage
-   -- combinatorially within the same cycle when it is itself empty.
+   -- combinationally within the same cycle when it is itself empty.
    i_one_stage_buffer_second : entity work.one_stage_buffer
       generic map (
          G_DATA_SIZE => G_DATA_SIZE

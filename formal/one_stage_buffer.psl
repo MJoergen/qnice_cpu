@@ -19,7 +19,7 @@ vunit i_one_stage_buffer (one_stage_buffer(synthesis))
    f_output_stable : assert always {m_valid_o and not m_ready_i and not rst_i} |=> {rst_i = '1' or (stable(m_valid_o) and stable(m_data_o))};
 
    -- Ready must be stable until new data or reset.
-   -- "abort rst_i" is required here: s_ready_o is gated combinatorially by
+   -- "abort rst_i" is required here: s_ready_o is gated combinationally by
    -- rst_i (see s_ready_s in the RTL), so reset asserting at the very next
    -- cycle legitimately changes s_ready_o even with no new data -- that is
    -- not a stability violation, it is the intended reset behavior.

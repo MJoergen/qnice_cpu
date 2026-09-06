@@ -1,7 +1,7 @@
 -- This module implements a FIFO consisting of only a single register layer.
 -- It has its use in elastic pipelines, where the data flow has back-pressure.
 -- It places registers on the valid and data signals in the downstream direction,
--- but the ready signal in the upstream direction is still combinatorial.
+-- but the ready signal in the upstream direction is still combinational.
 -- The FIFO supports simultaneous read and write, both when the FIFO is full
 -- and when it is empty.
 --
@@ -25,7 +25,7 @@
 --   immediately after reset until the first valid write occurs.
 --
 -- Timing note on chaining:
--- s_ready_o is purely combinatorial from m_ready_i (by design -- this is
+-- s_ready_o is purely combinational from m_ready_i (by design -- this is
 -- what keeps the module to a single register layer instead of a full skid
 -- buffer). Chaining N instances back-to-back therefore creates a single
 -- unbroken combinational path from the last stage's m_ready_i back to the

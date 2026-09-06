@@ -52,14 +52,14 @@ indicated by `m_double_o`. In either case `data(15 downto 0)` is the
 instruction and `data(31 downto 16)` is the immediate operand if present.
 
 DECODE cannot know whether the second word is an operand until it has decoded
-the first, so it reports back — combinatorially, in the same cycle as the
+the first, so it reports back — combinationally, in the same cycle as the
 handshake — how many words it consumed: `m_double_i = '0'` for one word,
-`'1'` for two. Therefore `m_double_i` must depend combinatorially on the output
+`'1'` for two. Therefore `m_double_i` must depend combinationally on the output
 signals. `m_double_i = '1'` is only legal when `m_valid_o = '1'` and
 `m_double_o = '1'`; consuming two words when only one is offered is a protocol
 violation.
 
-Buffer occupancy (`count`) is derived combinatorially from `m_valid_o`/
+Buffer occupancy (`count`) is derived combinationally from `m_valid_o`/
 `m_double_o` rather than kept in a separate register, so it cannot disagree with
 what is being offered. Internally, slot 0 is the low half of each vector (older
 word) and slot 1 the high half (newer word); the upper half of `m_addr` is never
@@ -93,7 +93,7 @@ to DECODE after every taken branch.
 Consequently this module is written for an `rst_i` that pulses during normal
 operation:
 
-* `m_valid_o` is gated combinatorially by `rst_i`, so the flush takes effect in
+* `m_valid_o` is gated combinationally by `rst_i`, so the flush takes effect in
   the same cycle and DECODE never observes a stale word.
 * `s_ready_o` is likewise gated, so no input handshake completes during a flush
   cycle — otherwise the module would signal acceptance of a word it is about to

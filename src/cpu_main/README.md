@@ -239,7 +239,7 @@ or whenever they belong to a neighbouring instruction rather than to this
   (`MEM_READ_DST`). Meanwhile WRITE, which now holds `0x084`, issues the first
   memory request `MEM_READ_SRC` from address `0x001B` and asks REGISTERS to
   write `0x001B`+1 = `0x001C` to register 0. This written value is bypassed
-  combinatorially and appears on `src_val_o`/`dst_val_o` in the very same
+  combinationally and appears on `src_val_o`/`dst_val_o` in the very same
   cycle.
 * At time t=3: SEQUENCER selects the last micro-operation `0x871` (`LAST` +
   `REG_MOD_DST` + `MEM_WAIT_SRC` + `MEM_WAIT_DST` + `MEM_WRITE`), and WRITE
@@ -424,8 +424,8 @@ immediately below.
 
 ### From DECODE to FETCH
 ```
-early_valid_o : out std_logic;                      -- combinatorial
-early_addr_o  : out std_logic_vector(15 downto 0);  -- combinatorial
+early_valid_o : out std_logic;                      -- combinational
+early_addr_o  : out std_logic_vector(15 downto 0);  -- combinational
 ```
 A second redirect port, driven by DECODE rather than WRITE, for the one class of
 branch DECODE can resolve by itself: an unconditional jump to an immediate
@@ -611,7 +611,7 @@ is encoded in the following four bits:
 
 The latter two bits are de-asserted in the special case of `@R15++`.
 
-The microcode ROM returns (combinatorially) a list of up to three
+The microcode ROM returns (combinationally) a list of up to three
 micro-operations, packed into the 36-bit `microcodes` element of `t_dec2seq`.
 DECODE forwards that entire list in a single beat; it is the
 [SEQUENCER](sequencer.vhd), sitting between DECODE and PREPARE, that splits
@@ -667,7 +667,7 @@ set `Z` only if the two paths agree.
 
 This stage's input comes from [SEQUENCER](sequencer.vhd), which expands the
 single beat DECODE emits into one beat per micro-operation. SEQUENCER adds no
-latency (it is combinatorial in the forward direction), but it holds its
+latency (it is combinational in the forward direction), but it holds its
 `s_ready_o` low until the chunk marked `LAST` has been accepted downstream.
 That is the first of the two sources of back-pressure towards FETCH. The second
 is the wait for memory read data, expressed by the `MEM_WAIT_SRC` and
@@ -689,8 +689,8 @@ beside the stages it joins, which leaves `sub/` holding exactly what the stages
 instantiate internally: the microcode ROM and the ALU.
 
 Apart from that, this stage is quite small and mainly serves the function of
-adding some flip-flops in an otherwise very long combinatorial path. In other words, this
-stage almost halves the longest combinatorial delay thus essentially doubling
+adding some flip-flops in an otherwise very long combinational path. In other words, this
+stage almost halves the longest combinational delay thus essentially doubling
 the maximum frequency. However, the cost is increased data hazards due to a
 longer pipeline, and therefore additional bypass handling is needed, as well as
 occasional pipeline stalls.

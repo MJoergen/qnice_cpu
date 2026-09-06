@@ -11,16 +11,16 @@ entity decode is
 
       -- From ICACHE
       icache_valid_i  : in  std_logic;
-      icache_ready_o  : out std_logic;                     -- combinatorial
+      icache_ready_o  : out std_logic;                     -- combinational
       icache_double_i : in  std_logic;
       icache_addr_i   : in  std_logic_vector(15 downto 0);
       icache_data_i   : in  std_logic_vector(31 downto 0);
-      icache_double_o : out std_logic;                     -- combinatorial
+      icache_double_o : out std_logic;                     -- combinational
 
       -- Early redirect to FETCH, for an unconditional branch with an immediate
       -- target. See "Early redirect" below.
-      early_valid_o   : out std_logic;                     -- combinatorial
-      early_addr_o    : out std_logic_vector(15 downto 0); -- combinatorial
+      early_valid_o   : out std_logic;                     -- combinational
+      early_addr_o    : out std_logic_vector(15 downto 0); -- combinational
 
       -- Register file: the read ports only. The values come back one clock
       -- cycle later, by which time this instruction has left this stage, so
@@ -28,12 +28,12 @@ entity decode is
       -- them onto the stage record. t_dec2seq has no element for them at all;
       -- they first appear on t_seq2prep. See the header of sequencer.vhd.
       reg_rd_en_o     : out std_logic;
-      reg_src_addr_o  : out std_logic_vector(3 downto 0);  -- combinatorial
-      reg_dst_addr_o  : out std_logic_vector(3 downto 0);  -- combinatorial
+      reg_src_addr_o  : out std_logic_vector(3 downto 0);  -- combinational
+      reg_dst_addr_o  : out std_logic_vector(3 downto 0);  -- combinational
 
       -- Register bank switch. See "Register bank switch" in write.vhd.
       bank_switch_i   : in  std_logic;
-      bank_stale_o    : out std_logic;                     -- combinatorial
+      bank_stale_o    : out std_logic;                     -- combinational
 
       -- To SEQUENCER, and through it to PREPARE. One beat per instruction,
       -- carrying its whole micro-op list; see cpu_main.vhd.
@@ -112,7 +112,7 @@ begin
 
 
    ------------------------------------------------------------
-   -- Generate combinatorial output values
+   -- Generate combinational output values
    ------------------------------------------------------------
 
    reg_rd_en_o    <= seq_ready_i; -- Read when next stage is ready to process data.

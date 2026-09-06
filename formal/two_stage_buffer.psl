@@ -26,7 +26,7 @@ vunit i_two_stage_buffer(two_stage_buffer(synthesis))
 
    -- Output must be stable until accepted or reset.
    -- "abort rst_i" is required here: the top-level m_valid_o is inherited
-   -- combinatorially from stage 2's own m_valid_o, which is itself gated by
+   -- combinationally from stage 2's own m_valid_o, which is itself gated by
    -- "and not rst_i" (see one_stage_buffer's m_valid_o). So asserting rst_i
    -- clears m_valid_o within the SAME cycle it is sampled as the "next"
    -- state, not merely in some later cycle -- that is intended reset

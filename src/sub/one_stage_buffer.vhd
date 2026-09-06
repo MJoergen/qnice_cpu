@@ -1,11 +1,11 @@
--- This is a simple buffer that is transparent (combinatorial) when the
+-- This is a simple buffer that is transparent (combinational) when the
 -- receiver is ready, but registers the incoming value if not. Unlike
 -- one_stage_fifo, data presented on s_data_i can reach m_data_o (and be
 -- consumed) on the very same clock cycle -- there is zero cut-through
 -- latency when the buffer is empty and the downstream is ready.
 --
 -- Ports:
--- * s_afull_o : combinatorial indicator that the single storage element is
+-- * s_afull_o : combinational indicator that the single storage element is
 --   currently occupied (m_valid_r = '1'). This is an "occupied" flag, NOT
 --   the same thing as "not ready" -- s_ready_o can still be '1' in the same
 --   cycle s_afull_o is '1', if the downstream is draining the buffer this
@@ -34,21 +34,21 @@
 --
 -- Timing note on chaining (important -- read before instantiating a chain):
 -- This module differs from one_stage_fifo in that BOTH directions are
--- combinatorial when the buffer is empty:
--- * s_ready_o is combinatorial in m_ready_i (ready propagates backward).
--- * m_valid_o/m_data_o are combinatorial in s_valid_i/s_data_i (valid and
+-- combinational when the buffer is empty:
+-- * s_ready_o is combinational in m_ready_i (ready propagates backward).
+-- * m_valid_o/m_data_o are combinational in s_valid_i/s_data_i (valid and
 --   data propagate forward).
 -- Chaining N instances back-to-back therefore creates, in the all-empty
 -- case, an unbroken combinational path of length O(N) in BOTH directions
 -- within a single clock cycle (valid+data rippling forward from source to
 -- sink, ready rippling backward from sink to source). This is a materially
 -- larger timing-closure risk than one_stage_fifo, where only the ready path
--- was combinatorial. Budget chain length against Fmax accordingly, and
+-- was combinational. Budget chain length against Fmax accordingly, and
 -- consider breaking long chains periodically with a fully-registered stage.
 -- Note this module does NOT itself violate the usual valid/ready
 -- convention (m_valid_o does not depend on m_ready_i, and s_ready_o does
 -- not depend on s_valid_i) -- but external logic that makes m_ready_i
--- depend combinatorially on this module's m_valid_o (or the symmetric case
+-- depend combinationally on this module's m_valid_o (or the symmetric case
 -- upstream) would create a genuine combinational loop.
 
 library ieee;
@@ -151,7 +151,7 @@ begin
 
    -- Connect output signals.
    -- m_valid_o combines the registered "buffer occupied" state with a
-   -- combinatorial cut-through of s_valid_i, masked during reset -- this
+   -- combinational cut-through of s_valid_i, masked during reset -- this
    -- is what gives zero-latency passthrough when the buffer is empty.
    s_afull_o <= m_valid_r;
    s_ready_o <= s_ready_s;

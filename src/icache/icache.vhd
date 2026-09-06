@@ -5,7 +5,7 @@
 -- see two words at once, because an instruction may be followed by an
 -- immediate operand occupying the following word. DECODE cannot know whether
 -- the second word is an operand until it has decoded the first, so it reports
--- back - combinatorially, in the same cycle as the handshake - how many words
+-- back - combinationally, in the same cycle as the handshake - how many words
 -- it actually consumed:
 --
 --    m_double_i = '0' : one word consumed  (no immediate operand)
@@ -16,7 +16,7 @@
 -- one is available is a protocol violation.
 --
 -- Buffer occupancy is fully determined by the output handshake signals, which
--- is why the internal signal "count" is derived combinatorially from
+-- is why the internal signal "count" is derived combinationally from
 -- m_valid_o/m_double_o rather than being a separate register.
 --
 -- INTERFACE CONTRACTS -- these are requirements on the environment:
@@ -31,7 +31,7 @@
 --
 --    Consequently rst_i pulses during normal operation, not merely at startup.
 --    All logic below is written with that in mind:
---      - m_valid_o is gated combinatorially by rst_i, so the flush takes
+--      - m_valid_o is gated combinationally by rst_i, so the flush takes
 --        effect in the same cycle and DECODE never observes a stale word.
 --      - s_ready_o is likewise gated, so no input handshake completes during a
 --        flush cycle. Without this the module would signal acceptance of a
@@ -103,7 +103,7 @@ entity icache is
       -- present (i.e. the word following the instruction). In conjunction
       -- with m_ready_i, the signal m_double_i indicates whether one or two
       -- words are consumed in this clock cycle. Therefore m_double_i must
-      -- depend combinatorially on the output signals.
+      -- depend combinationally on the output signals.
       m_valid_o  : out std_logic;
       m_ready_i  : in  std_logic;
       m_double_o : out std_logic;
@@ -115,7 +115,7 @@ end entity icache;
 
 architecture synthesis of icache is
 
-   -- Number of words currently buffered. Derived combinatorially from the
+   -- Number of words currently buffered. Derived combinationally from the
    -- output handshake signals rather than held in a register, so it cannot
    -- disagree with what is being offered to DECODE. Note that m_valid_o is
    -- already gated by rst_i, hence count is 0 throughout a flush cycle.
@@ -217,7 +217,7 @@ begin
                      -- m_double here is essential, not cosmetic: without it the
                      -- flag survives the drain and m_double_o is left asserted
                      -- while m_valid_o is low, which DECODE is entitled to
-                     -- sample combinatorially.
+                     -- sample combinationally.
                      m_valid  <= '0';
                      m_double <= '0';
                   else

@@ -15,11 +15,11 @@ entity write is
       prep_stage_i    : in  t_prep2wr;
 
       -- MEMORY
-      mem_req_valid_o : out std_logic;                        -- combinatorial
+      mem_req_valid_o : out std_logic;                        -- combinational
       mem_req_ready_i : in  std_logic;
-      mem_req_op_o    : out std_logic_vector(2 downto 0);     -- combinatorial
-      mem_req_addr_o  : out std_logic_vector(15 downto 0);    -- combinatorial
-      mem_req_data_o  : out std_logic_vector(15 downto 0);    -- combinatorial
+      mem_req_op_o    : out std_logic_vector(2 downto 0);     -- combinational
+      mem_req_addr_o  : out std_logic_vector(15 downto 0);    -- combinational
+      mem_req_data_o  : out std_logic_vector(15 downto 0);    -- combinational
 
       -- Register file
       reg_r14_we_o    : out std_logic;
@@ -31,13 +31,13 @@ entity write is
       fetch_addr_o    : out std_logic_vector(15 downto 0);
 
       -- Register bank switch, to and from DECODE. See below.
-      bank_switch_o   : out std_logic;                        -- combinatorial
+      bank_switch_o   : out std_logic;                        -- combinational
       bank_stale_i    : in  std_logic;
 
       inst_done_o     : out std_logic;
 
       -- Asserted for one clock cycle when a HALT instruction retires.
-      halt_o          : out std_logic                        -- combinatorial
+      halt_o          : out std_logic                        -- combinational
    );
 end entity write;
 
@@ -161,7 +161,7 @@ begin
 
 
    ------------------------------------------------------------
-   -- Update register (combinatorial)
+   -- Update register (combinational)
    ------------------------------------------------------------
 
    update_reg <= prep_stage_i.r14(to_integer(prep_stage_i.inst(R_JMP_COND))) xor prep_stage_i.inst(R_JMP_NEG)
