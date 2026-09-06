@@ -99,7 +99,7 @@ vsg release — the pin is load-bearing, because VSG adds and re-scopes rules be
 `vsg.yml` only overrides the defaults it knows about, so an unpinned bump can turn the job red
 with no VHDL change at all.
 
-**The tree is clean: zero errors.** What remains is 40 `length_001` warnings, which are the
+**The tree is clean: zero errors.** What remains is 38 `length_001` warnings, which are the
 100-column *target* of CODING_STYLE.md section 3 advising rather than failing; warnings do not fail
 the job. Every rule VSG applies here is now either stated in CODING_STYLE.md or deliberately
 disabled in `vsg.yml` with the reason written next to it, so wanting to change a `vsg.yml` rule is
@@ -289,8 +289,8 @@ Three things are load-bearing:
 
 * **The early redirect flushes FETCH and ICACHE only** — never DECODE or PREPARE. By the end of the
   cycle the branch is in DECODE's output register and everything downstream is *older*, so those
-  two are the only place wrong-path instructions live. Hence `icache_rst` (from WRITE) and
-  `icache_flush` (from DECODE) are separate signals in `cpu.vhd`.
+  two are the only place wrong-path instructions live. Hence `ic_rst` (from WRITE) and `ic_flush`
+  (from DECODE) are separate signals in `cpu.vhd`.
 * **The ICACHE flush must be soft.** `icache.vhd`'s `rst_i` gates `m_valid_o` combinationally, which
   is mandatory for WRITE's flush and fatal here: DECODE raises the flush *because* it is accepting
   the branch being offered this cycle, so gating `m_valid_o` withdraws the handshake the flush is

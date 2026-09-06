@@ -6,40 +6,40 @@ library ieee;
 
 entity decode is
    port (
-      clk_i           : in  std_logic;
-      rst_i           : in  std_logic;
+      clk_i          : in  std_logic;
+      rst_i          : in  std_logic;
 
       -- From ICACHE
-      icache_valid_i  : in  std_logic;
-      icache_ready_o  : out std_logic;                     -- combinational
-      icache_double_i : in  std_logic;
-      icache_addr_i   : in  std_logic_vector(15 downto 0);
-      icache_data_i   : in  std_logic_vector(31 downto 0);
-      icache_double_o : out std_logic;                     -- combinational
+      ic_valid_i     : in  std_logic;
+      ic_ready_o     : out std_logic;                     -- combinational
+      ic_double_i    : in  std_logic;
+      ic_addr_i      : in  std_logic_vector(15 downto 0);
+      ic_data_i      : in  std_logic_vector(31 downto 0);
+      ic_double_o    : out std_logic;                     -- combinational
 
       -- Early redirect to FETCH, for an unconditional branch with an immediate
       -- target. See "Early redirect" below.
-      early_valid_o   : out std_logic;                     -- combinational
-      early_addr_o    : out std_logic_vector(15 downto 0); -- combinational
+      early_valid_o  : out std_logic;                     -- combinational
+      early_addr_o   : out std_logic_vector(15 downto 0); -- combinational
 
       -- Register file: the read ports only. The values come back one clock
       -- cycle later, by which time this instruction has left this stage, so
       -- they are wired straight from REGISTERS into SEQUENCER, which joins
       -- them onto the stage record. t_dec2seq has no element for them at all;
       -- they first appear on t_seq2prep. See the header of sequencer.vhd.
-      reg_rd_en_o     : out std_logic;
-      reg_src_addr_o  : out std_logic_vector(3 downto 0);  -- combinational
-      reg_dst_addr_o  : out std_logic_vector(3 downto 0);  -- combinational
+      reg_rd_en_o    : out std_logic;
+      reg_src_addr_o : out std_logic_vector(3 downto 0);  -- combinational
+      reg_dst_addr_o : out std_logic_vector(3 downto 0);  -- combinational
 
       -- Register bank switch. See "Register bank switch" in write.vhd.
-      bank_switch_i   : in  std_logic;
-      bank_stale_o    : out std_logic;                     -- combinational
+      bank_switch_i  : in  std_logic;
+      bank_stale_o   : out std_logic;                     -- combinational
 
       -- To SEQUENCER, and through it to PREPARE. One beat per instruction,
       -- carrying its whole micro-op list; see cpu_main.vhd.
-      seq_valid_o     : out std_logic;
-      seq_ready_i     : in  std_logic;
-      seq_stage_o     : out t_dec2seq
+      seq_valid_o    : out std_logic;
+      seq_ready_i    : in  std_logic;
+      seq_stage_o    : out t_dec2seq
    );
 end entity decode;
 
@@ -105,10 +105,10 @@ begin
    -- Back-pressure to ICACHE
    ------------------------------------------------------------
 
-   icache_double_o <= immediate_src or immediate_dst;
-   icache_ready_o  <= '0' when icache_double_o and not icache_double_i else -- Wait for immediate value
-                      '0' when bank_switch_i and uses_bank             else -- Wait for the new bank
-                      seq_ready_i;
+   ic_double_o <= immediate_src or immediate_dst;
+   ic_ready_o  <= '0' when ic_double_o and not ic_double_i else -- Wait for immediate value
+                  '0' when bank_switch_i and uses_bank     else -- Wait for the new bank
+                  seq_ready_i;
 
 
    ------------------------------------------------------------
@@ -116,38 +116,38 @@ begin
    ------------------------------------------------------------
 
    reg_rd_en_o    <= seq_ready_i; -- Read when next stage is ready to process data.
-   reg_src_addr_o <= icache_data_i(R_SRC_REG);
-   reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when icache_data_i(R_OPCODE) = C_OPCODE_JMP else
-                     icache_data_i(R_DST_REG);
+   reg_src_addr_o <= ic_data_i(R_SRC_REG);
+   reg_dst_addr_o <= to_stdlogicvector(C_REG_SP, 4) when ic_data_i(R_OPCODE) = C_OPCODE_JMP else
+                     ic_data_i(R_DST_REG);
 
 
    ------------------------------------------------------------
    -- Instruction format decoding
    ------------------------------------------------------------
 
-   has_src_operand <= C_HAS_SRC_OPERAND(to_integer(icache_data_i(R_OPCODE)));
-   has_dst_operand <= C_HAS_DST_OPERAND(to_integer(icache_data_i(R_OPCODE)));
+   has_src_operand <= C_HAS_SRC_OPERAND(to_integer(ic_data_i(R_OPCODE)));
+   has_dst_operand <= C_HAS_DST_OPERAND(to_integer(ic_data_i(R_OPCODE)));
 
 
    -- Special case when src = @PC++. The two conditions of each chain align
    -- their `=` signs, which whitespace_100 would compact away.
 -- vsg_off whitespace_100
    immediate_src <= has_src_operand when
-                    icache_data_i(R_SRC_REG)  = C_REG_PC and
-                    icache_data_i(R_SRC_MODE) = C_MODE_POST else
+                    ic_data_i(R_SRC_REG)  = C_REG_PC and
+                    ic_data_i(R_SRC_MODE) = C_MODE_POST else
                     '0';
 
    -- Special case when dst = @PC++
    immediate_dst <= has_dst_operand when
-                    icache_data_i(R_DST_REG)  = C_REG_PC and
-                    icache_data_i(R_DST_MODE) = C_MODE_POST else
+                    ic_data_i(R_DST_REG)  = C_REG_PC and
+                    ic_data_i(R_DST_MODE) = C_MODE_POST else
                     '0';
 -- vsg_on whitespace_100
 
-   reads_from_dst <= C_READS_FROM_DST (to_integer(icache_data_i(R_OPCODE)));
-   writes_to_dst  <= C_WRITES_TO_DST  (to_integer(icache_data_i(R_OPCODE)));
-   src_memory     <= '0' when (icache_data_i(R_SRC_MODE) = C_MODE_REG or immediate_src = '1') else has_src_operand;
-   dst_memory     <= '0' when (icache_data_i(R_DST_MODE) = C_MODE_REG or immediate_dst = '1') else has_dst_operand;
+   reads_from_dst <= C_READS_FROM_DST (to_integer(ic_data_i(R_OPCODE)));
+   writes_to_dst  <= C_WRITES_TO_DST  (to_integer(ic_data_i(R_OPCODE)));
+   src_memory     <= '0' when (ic_data_i(R_SRC_MODE) = C_MODE_REG or immediate_src = '1') else has_src_operand;
+   dst_memory     <= '0' when (ic_data_i(R_DST_MODE) = C_MODE_REG or immediate_dst = '1') else has_dst_operand;
 
 
    ------------------------------------------------------------
@@ -184,9 +184,9 @@ begin
    -- the stage record rather than re-derived from prep_stage_i.inst in WRITE: it lands
    -- on fetch_valid_o, and that net cannot afford a ten-bit compare in front
    -- of it. See "Register bank switch" in write.vhd.
-   is_crb <= '1' when icache_data_i(R_OPCODE) = C_OPCODE_CTRL and
-                      (icache_data_i(R_CTRL_CMD) = C_CTRL_INCRB or
-                       icache_data_i(R_CTRL_CMD) = C_CTRL_DECRB) else
+   is_crb <= '1' when ic_data_i(R_OPCODE) = C_OPCODE_CTRL and
+                      (ic_data_i(R_CTRL_CMD) = C_CTRL_INCRB or
+                       ic_data_i(R_CTRL_CMD) = C_CTRL_DECRB) else
              '0';
 
    -- The instruction in this stage's output register read its operands one
@@ -231,39 +231,39 @@ begin
    -- discard the correctly fetched target. seq_stage_o.early_jmp carries that
    -- down the pipeline; see "Writes to R15" in write.vhd.
    --
-   -- seq_ready_i rather than icache_ready_o, although the condition being
+   -- seq_ready_i rather than ic_ready_o, although the condition being
    -- tested is "this stage accepts the instruction this cycle" and that is
-   -- icache_valid_i and icache_ready_o. The two are EQUAL for this instruction
-   -- class: icache_ready_o's first term needs icache_double_o and not
-   -- icache_double_i, and icache_double_i is required below; its second needs
+   -- ic_valid_i and ic_ready_o. The two are EQUAL for this instruction
+   -- class: ic_ready_o's first term needs ic_double_o and not
+   -- ic_double_i, and ic_double_i is required below; its second needs
    -- uses_bank, which is '0' here because the source register is R15 and JMP
-   -- has no destination operand. Using icache_ready_o instead would put
+   -- has no destination operand. Using ic_ready_o instead would put
    -- ICACHE's own output data in front of FETCH's address register, through
    -- this stage's whole ready cone -- the longest path in the design after the
    -- ALU. seq_ready_i comes from SEQUENCER, which passes on PREPARE's ready
    -- gated by its own chunk index register; behind that are PREPARE's
    -- registers and MEMORY. So both legs of the AND below start at a flip-flop.
-   early_jmp <= '1' when icache_data_i(R_OPCODE) = C_OPCODE_JMP and
-                         icache_data_i(R_JMP_COND) = "000" and
-                         icache_data_i(R_JMP_NEG) = '0' and
+   early_jmp <= '1' when ic_data_i(R_OPCODE) = C_OPCODE_JMP and
+                         ic_data_i(R_JMP_COND) = "000" and
+                         ic_data_i(R_JMP_NEG) = '0' and
                          immediate_src = '1' else
                 '0';
 
-   -- icache_double_i is what makes icache_data_i(R_IMMEDIATE) meaningful: it says
+   -- ic_double_i is what makes ic_data_i(R_IMMEDIATE) meaningful: it says
    -- ICACHE is offering the second word, not just the instruction. It is
-   -- implied by the handshake for this class (icache_ready_o holds the stage
+   -- implied by the handshake for this class (ic_ready_o holds the stage
    -- off until the operand arrives), but the target address is built from that
    -- word below, so it is named explicitly rather than left to be inferred.
-   early_valid_o <= early_jmp and icache_valid_i and icache_double_i and seq_ready_i;
+   early_valid_o <= early_jmp and ic_valid_i and ic_double_i and seq_ready_i;
 
    -- The same target p_output computes for seq_stage_o.immediate, which is
    -- where the branch would otherwise have picked it up two stages later: an
    -- absolute mode branches to the operand, a relative one to the operand plus
    -- the address of the word after it.
-   early_addr_o <= icache_data_i(R_IMMEDIATE) + icache_addr_i + 2
-                       when icache_data_i(R_JMP_MODE) = C_JMP_RBRA or
-                            icache_data_i(R_JMP_MODE) = C_JMP_RSUB else
-                    icache_data_i(R_IMMEDIATE);
+   early_addr_o <= ic_data_i(R_IMMEDIATE) + ic_addr_i + 2
+                       when ic_data_i(R_JMP_MODE) = C_JMP_RBRA or
+                            ic_data_i(R_JMP_MODE) = C_JMP_RSUB else
+                    ic_data_i(R_IMMEDIATE);
 
 
    ------------------------------------------------------------
@@ -296,17 +296,17 @@ begin
          end if;
 
          -- Ready to send new data to next stage
-         if icache_valid_i and icache_ready_o then
+         if ic_valid_i and ic_ready_o then
             seq_valid_o            <= '1';
             seq_stage_o.microcodes <= microcode_value;
-            seq_stage_o.addr       <= icache_addr_i;
-            seq_stage_o.immediate  <= icache_data_i(R_IMMEDIATE);
-            seq_stage_o.inst       <= icache_data_i(R_INSTRUCTION);
+            seq_stage_o.addr       <= ic_addr_i;
+            seq_stage_o.immediate  <= ic_data_i(R_IMMEDIATE);
+            seq_stage_o.inst       <= ic_data_i(R_INSTRUCTION);
             seq_stage_o.src_addr   <= reg_src_addr_o;
-            seq_stage_o.src_mode   <= icache_data_i(R_SRC_MODE);
+            seq_stage_o.src_mode   <= ic_data_i(R_SRC_MODE);
             seq_stage_o.src_imm    <= immediate_src;
             seq_stage_o.dst_addr   <= reg_dst_addr_o;
-            seq_stage_o.dst_mode   <= icache_data_i(R_DST_MODE);
+            seq_stage_o.dst_mode   <= ic_data_i(R_DST_MODE);
             seq_stage_o.dst_imm    <= immediate_dst;
             seq_stage_o.res_reg    <= reg_dst_addr_o;
             seq_stage_o.is_crb     <= is_crb;
@@ -314,7 +314,7 @@ begin
             uses_bank_d            <= uses_bank;
 
             -- Treat jumps as a special case
-            if icache_data_i(R_OPCODE) = C_OPCODE_JMP then
+            if ic_data_i(R_OPCODE) = C_OPCODE_JMP then
                -- Write new address to PC
                seq_stage_o.res_reg <= to_stdlogicvector(C_REG_PC, 4);
                if src_memory = '0' then
@@ -330,7 +330,7 @@ begin
                end if;
 
                -- Subroutine call
-               if icache_data_i(R_JMP_MODE) = C_JMP_ASUB or icache_data_i(R_JMP_MODE) = C_JMP_RSUB then
+               if ic_data_i(R_JMP_MODE) = C_JMP_ASUB or ic_data_i(R_JMP_MODE) = C_JMP_RSUB then
                   -- Artifically introduce a MOVE R15, @--R13
                   seq_stage_o.dst_addr <= to_stdlogicvector(C_REG_SP, 4);
                   seq_stage_o.dst_mode <= to_stdlogicvector(C_MODE_PRE, 2);
@@ -349,8 +349,8 @@ begin
 
                -- Relative jump
                if immediate_src = '1' and
-                  (icache_data_i(R_JMP_MODE) = C_JMP_RBRA or icache_data_i(R_JMP_MODE) = C_JMP_RSUB) then
-                  seq_stage_o.immediate <= icache_data_i(R_IMMEDIATE) + icache_addr_i + 2;
+                  (ic_data_i(R_JMP_MODE) = C_JMP_RBRA or ic_data_i(R_JMP_MODE) = C_JMP_RSUB) then
+                  seq_stage_o.immediate <= ic_data_i(R_IMMEDIATE) + ic_addr_i + 2;
                end if;
             end if;
          end if;

@@ -173,8 +173,8 @@ the *register* file, the Status *Register*.
 
   ```vhdl
      immediate_src <= has_src_operand when
-                      icache_data_i(R_SRC_REG)  = C_REG_PC and
-                      icache_data_i(R_SRC_MODE) = C_MODE_POST else
+                      ic_data_i(R_SRC_REG)  = C_REG_PC and
+                      ic_data_i(R_SRC_MODE) = C_MODE_POST else
                       '0';
   ```
 
@@ -218,7 +218,7 @@ the *register* file, the Status *Register*.
         ); -- i_fetch
 
 
-     icache_rst <= rst_i or wr2fetch_valid;
+     ic_rst <= rst_i or wr2fetch_valid;
 
 
      i_icache : entity work.icache

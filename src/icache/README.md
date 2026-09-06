@@ -62,7 +62,7 @@ this section.
 `cpu.vhd` drives it as
 
 ```vhdl
-icache_rst <= rst_i or wr2fetch_valid;
+ic_rst <= rst_i or wr2fetch_valid;
 ```
 
 with `wr2fetch_valid` being the same redirect that reaches `fetch.wr_valid_i`
@@ -92,8 +92,8 @@ an immediate target, see
 separately:
 
 ```vhdl
-icache_rst   <= rst_i or wr2fetch_valid;   -- hard
-icache_flush <= dc2fetch_valid;            -- soft
+ic_rst   <= rst_i or wr2fetch_valid;   -- hard
+ic_flush <= dc2fetch_valid;            -- soft
 ```
 
 It discards the buffered words at the end of the cycle in which it is asserted,

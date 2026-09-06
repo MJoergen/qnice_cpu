@@ -30,9 +30,9 @@
 % p_reg in write.vhd is a combinational process, so reg_addr_o and reg_we_o are
 % decoded from prep_stage_i within the cycle, fetch_addr_o muxes the register
 % file's read data behind them, and fetch_valid_o is derived from all of it.
-% ICACHE/s_ready_o, DECODE/icache_ready_o and SEQUENCER/s_ready_o are the
-% backward (ready) direction of the same story, each reaching back through the
-% stage below it; DECODE/icache_double_o is decoded from icache_data_i, and
+% ICACHE/s_ready_o, DECODE/ic_ready_o and SEQUENCER/s_ready_o are the backward
+% (ready) direction of the same story, each reaching back through the stage
+% below it; DECODE/ic_double_o is decoded from ic_data_i, and
 % MEMORY/msrc_valid_o cuts through combinationally from wb_ack_i.
 %
 % Two of the bold rows are "almost": ICACHE/m_valid_o and m_double_o are their
@@ -41,8 +41,8 @@
 %
 % Every row is named after the module that DRIVES it, so all of them are output
 % ports (*_o).  Where a link's two ends have different names, the name used is
-% the driver's: DECODE/icache_ready_o and icache_double_o are what ICACHE sees
-% as m_ready_i and m_double_i, SEQUENCER/s_ready_o is what DECODE sees as
+% the driver's: DECODE/ic_ready_o and ic_double_o are what ICACHE sees as
+% m_ready_i and m_double_i, SEQUENCER/s_ready_o is what DECODE sees as
 % seq_ready_i, PREPARE/wr_valid_o and wr_stage_o are what WRITE sees as
 % prep_valid_i and prep_stage_i, and WRITE/reg_we_o and reg_addr_o are what
 % REGISTERS sees as wr_en_i and wr_reg_i.

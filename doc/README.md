@@ -208,9 +208,9 @@ of it is *older*, so the wrong-path instructions live only in FETCH and ICACHE.
 The ICACHE flush must also be *soft*: DECODE raises it *because* it is
 accepting the branch being offered this cycle, so a reset that withdrew that
 handshake would withdraw the condition it was derived from and settle on "no
-branch accepted, no flush" — silently inert. Hence `icache_rst` (the hard
-flush, from WRITE) and `icache_flush` (the soft one, from DECODE) are separate
-signals in [cpu.vhd](../src/cpu.vhd). WRITE must then not redirect again when
+branch accepted, no flush" — silently inert. Hence `ic_rst` (the hard flush,
+from WRITE) and `ic_flush` (the soft one, from DECODE) are separate signals in
+[cpu.vhd](../src/cpu.vhd). WRITE must then not redirect again when
 the branch finally retires, or it would discard exactly what the early redirect
 went to fetch; `prep_stage_i.early_jmp` carries that fact down the pipeline.
 See [Early redirect](../src/cpu_main/README.md#early-redirect) and
@@ -466,8 +466,8 @@ because it runs backwards through four modules:
    until the device word arrives at t=6. `s_ready_o` is therefore low for
    *two* cycles, t=4 and t=5, rather than one.
 3. DECODE cannot accept a new instruction while SEQUENCER is holding it, so it
-   leaves `DECODE/icache_ready_o` low at t=4 and t=5 — the same net ICACHE
-   sees as its `m_ready_i`.
+   leaves `DECODE/ic_ready_o` low at t=4 and t=5 — the same net ICACHE sees
+   as its `m_ready_i`.
 4. ICACHE buffers two words, and by t=5 it is holding both — the `AND` and its
    immediate operand (`m_addr_o` = `0x0006`, `m_double_o` high). Nothing is
    draining it, so it has nowhere to put a third word and drops `s_ready_o` at

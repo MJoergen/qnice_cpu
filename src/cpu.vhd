@@ -54,8 +54,8 @@ architecture synthesis of cpu is
    signal halt_fetched : std_logic := '0';
 
    -- ICACHE to DECODE
-   signal icache_rst                   : std_logic;
-   signal icache_flush                 : std_logic;
+   signal ic_rst                       : std_logic;
+   signal ic_flush                     : std_logic;
    signal icache2decode_valid          : std_logic;
    signal icache2decode_ready          : std_logic;
    signal icache2decode_double_valid   : std_logic;
@@ -142,7 +142,7 @@ begin
    -- port, so its interface contracts and its formal job are untouched.
    --
    -- The two can never fire in the same cycle. icache2decode_valid is gated
-   -- combinationally by icache_rst, so while WRITE is flushing, DECODE has no
+   -- combinationally by ic_rst, so while WRITE is flushing, DECODE has no
    -- instruction to accept and dc2fetch_valid is low by construction. WRITE
    -- still takes priority in the mux below rather than the two being OR-ed:
    -- relying on the exclusivity for correctness of the ADDRESS would make this
@@ -160,8 +160,8 @@ begin
    -- offering DECODE in the same cycle. The early redirect from DECODE is the
    -- soft one, and deliberately must not: DECODE raises it because it is
    -- accepting the branch this cycle. See contract (d) in icache.vhd.
-   icache_rst   <= rst_i or wr2fetch_valid;
-   icache_flush <= dc2fetch_valid;
+   ic_rst   <= rst_i or wr2fetch_valid;
+   ic_flush <= dc2fetch_valid;
 
 
    i_icache : entity work.icache
@@ -171,8 +171,8 @@ begin
       )
       port map (
          clk_i      => clk_i,
-         rst_i      => icache_rst,
-         flush_i    => icache_flush,
+         rst_i      => ic_rst,
+         flush_i    => ic_flush,
          s_valid_i  => fetch2icache_valid,
          s_ready_o  => fetch2icache_ready,
          s_addr_i   => fetch2icache_addr,
@@ -243,12 +243,12 @@ begin
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i,
-         icache_valid_i  => icache2decode_valid_gated,
-         icache_ready_o  => icache2decode_ready,
-         icache_double_i => icache2decode_double_valid,
-         icache_addr_i   => icache2decode_addr,
-         icache_data_i   => icache2decode_data,
-         icache_double_o => icache2decode_double_consume,
+         ic_valid_i      => icache2decode_valid_gated,
+         ic_ready_o      => icache2decode_ready,
+         ic_double_i     => icache2decode_double_valid,
+         ic_addr_i       => icache2decode_addr,
+         ic_data_i       => icache2decode_data,
+         ic_double_o     => icache2decode_double_consume,
          early_valid_o   => dc2fetch_valid,
          early_addr_o    => dc2fetch_addr,
          reg_rd_en_o     => decode2reg_rd_en,
