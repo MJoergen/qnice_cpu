@@ -50,7 +50,9 @@ combinationally when empty. So on both the instruction and the data side the
 register that closes the round trip belongs to the RAM rather than to the
 module in front of it — which is why those two bars sit on the bus arrows
 instead of inside a block. The [polling-loop waveform](#a-polling-loop-cycle-by-cycle) below
-shows the same thing cycle by cycle.
+shows the same thing cycle by cycle, and
+[Where the pipeline registers are](#where-the-pipeline-registers-are) measures
+the worst path arriving at each of the seven.
 
 The block diagram contains two additional blocks:
 * REGISTERS: Contains the CPU registers and supports two read ports (addressed
@@ -536,6 +538,86 @@ so the hazard is hit on every iteration; each of those fails without the flush.
 the PC — both pass either way, and are there to pin the two edges.
 
 
+## Where the pipeline registers are
+
+[cpu.png](cpu.png) marks seven flip-flops on the main path with short black
+bars. Each one is a clock cycle of the loop, so the worst setup path arriving at
+each is the thing that sets how fast the loop can be clocked. All nine paths
+below were read off the shipping routed checkpoint (`post_route.dcp`, Vivado
+2022.2, `-flatten_hierarchy rebuilt`, at the 7.35 ns constraint) with
+`report_timing -to` the endpoint pins of each register.
+
+Two things about reading them. First, the *endpoints* are exact but the
+intermediate cell names are not, for the reason
+[The critical path](#the-critical-path) gives: `rebuilt` re-attributes logic
+across module boundaries, so most of a path is reported under whichever module
+Vivado chose. Second, **Vivado maps `dp_ram`'s two ports onto the RAMB36E1 the
+opposite way round from their names.** The primitive's B port carries the
+*read* — `IS_CLKBWRCLK_INVERTED` is set, which is the falling-edge staging
+`dp_ram`'s `G_RAM_STYLE` note describes, and `DOBDO` drives
+`a_rd_data_o_reg/D` — while the A port carries the write (`DIADI` is the write
+data, `WEBWE` is tied low). So the *instruction* address arrives on
+`ADDRBWRADDR` and the *data* address on `ADDRARDADDR`. Getting this backwards
+swaps two of the rows below and inverts the story about which side gets half a
+period.
+
+| # | Bar in the diagram | Endpoint | Launched from | Req | Data path | Lv | Slack |
+| --- | --- | --- | --- | ---: | --- | ---: | ---: |
+| 1 | FETCH `wb_addr_o` | `wb_addr_o_reg[4]/D` | `i_prepare/wr_stage_o_reg[alu_src_val][1]` | 7.350 | 6.939 (79% route) | 8 | +0.382 |
+| 2 | instruction memory | `dp_ram_r_reg_2/ADDRBWRADDR[5]` | `i_fetch/wb_addr_o_reg[3]` | **3.675** | 2.743 (83% route) | 0 | +0.176 |
+| 3 | ICACHE `m_data_o` | `m_data_reg[10]/D` | `i_prepare/wr_stage_o_reg[dst_val_pc][8]` | 7.350 | 6.899 (62% route) | 10 | +0.310 |
+| 4 | DECODE `seq_stage_o` | `seq_valid_o_reg/D` | `i_prepare/wr_stage_o_reg[dst_val_pc][8]` | 7.350 | 6.074 (57% route) | 10 | +1.250 |
+| 5a | REGISTERS, lower read address | `i_ram_lower_dst/dp_ram_r_reg/ADDRBWRADDR[4]` | `i_icache/m_data_reg[15]` | **3.675** | 2.900 (80% route) | 1 | +0.180 |
+| 5b | REGISTERS, lower read output | `i_ram_lower_src/…/a_rd_data_o_reg[15]/D` | that BRAM's `CLKBWRCLK` | **3.675** | 3.277 (25% route) | 0 | +0.240 |
+| 5c | REGISTERS, upper bank | `i_ram_upper_dst/…/a_rd_data_o_reg[13]/D` | `i_icache/m_data_reg[15]` | 7.350 | 4.527 (84% route) | 2 | +2.827 |
+| 6 | PREPARE `wr_stage_o` | `wr_stage_o_reg[alu_src_val][3]/D` | `i_prepare/wr_stage_o_reg[alu_src_val][8]` | 7.350 | 7.216 (78% route) | 9 | +0.087 |
+| 7 | data memory | `dp_ram_r_reg_3/DIADI[0]` | `i_prepare/wr_stage_o_reg[alu_src_val][8]` | 7.350 | 6.769 (82% route) | 6 | +0.239 |
+
+The one bar that is three rows is REGISTERS, because it is two banks. `R0`-`R7`
+live in Block RAM, where the falling-edge staging splits the read into an
+address half-cycle (5a) and an output half-cycle (5b); `R8`-`R15` live in
+LUTRAM, whose read is asynchronous, so the address path, the `RAMD32` itself and
+the capture are one full-cycle path (5c).
+
+Four things fall out of the table.
+
+**Almost everything is launched by PREPARE.** Five of the seven bars — 1, 3, 4,
+6 and 7 — have their worst path starting in `wr_stage_o`, and every one of the
+five starts at `alu_src_val` or `dst_val_pc`, the ALU operand registers. One
+register file feeds the ALU cone, and that cone reaches FETCH's address mux,
+ICACHE, DECODE, the data RAM, and back into PREPARE itself.
+
+**The distribution is flat.** Seven of the nine endpoints land between +0.087
+and +0.382 ns — a 0.295 ns band spread over five modules and both clock edges.
+That is the structural reason `make system.bit` was a coin flip at 7.25 ns and
+why the constraint was relaxed (see [Utilization](#utilization)): there is no
+single path to attack, and a placement perturbation moves several of these at
+once. Bar 6 is the design's WNS and is
+[the critical path](#the-critical-path) itself.
+
+**Both RAM bars get half a period, and one of them is pure wire.** Bar 2 has
+**zero logic levels**: 2.265 ns of its 2.743 ns is interconnect, against a
+3.675 ns budget rather than 7.350, because of the falling-edge staging. That is
+the measurement behind
+[Rejected: removing the register on `wbi_addr_o`](#optimizations) — bars 1 and 2
+are exactly the two legs that change would concatenate, and bar 2 alone spends
+three quarters of the budget on routing with nothing in it to optimise.
+
+**Bar 5b cannot be improved from the RTL.** 2.454 ns of its 3.277 ns is Block
+RAM clock-to-out, with only 0.823 ns of routing, inside a 3.675 ns window. It is
+the price of the falling-edge trick — and also what makes 5a affordable, since
+without it the address and the array read would share one period.
+
+The slack, such as it is, lives in DECODE (bar 4, +1.250) and the upper register
+bank (5c, +2.827). Everything else is inside 0.4 ns.
+
+These numbers are **hand-measured and not refreshed by `make utilization`**,
+which only rewrites the figures in [Utilization](#utilization). Treat them as a
+snapshot of one routed build rather than as a live figure, and re-measure before
+concluding anything from them — the placement sensitivity described under
+[The critical path](#the-critical-path) applies to every row.
+
+
 ## Optimizations
 
 **Done: FETCH no longer clears `wbi_cyc_o` at every branch.** A redirect now
@@ -639,6 +721,14 @@ B  i_fetch/wb_addr_o_reg[9]/C -> i_dp_ram/dp_ram_r_reg_1/ADDRBWRADDR[11]
       2.698 ns of 3.625  (slack +0.166, 0 logic levels, 84% route)
 ```
 
+Those two legs are bars 1 and 2 of
+[Where the pipeline registers are](#where-the-pipeline-registers-are), measured
+again on the current build: 6.939 ns and 2.743 ns at the 7.35 ns constraint,
+against the 7.002 ns and 2.698 ns quoted here at 7.25 ns. The conclusion does
+not move, and the second measurement adds the detail that matters most — leg B
+has **zero logic levels**, so 83% of it is interconnect and there is nothing on
+it to shorten.
+
 Deleting the register concatenates them: **about 9.7 ns**, plus the 16-bit mux
 choosing between the redirect and the incremented address, into a **3.625 ns**
 budget. The falling-edge staging is not what makes it fail — drop it, the RAM
@@ -667,7 +757,9 @@ The ICACHE register is worse. Instruction-RAM data to the ICACHE input is
 4.373 ns, and from ICACHE's `m_data` register it is 2.558 ns to the register
 file's RAM address — another half-cycle path, slack 0.218 — and 6.565 ns to
 FETCH's control registers through DECODE's ready cone. Making ICACHE
-cut-through merges those into 7-11 ns paths.
+cut-through merges those into 7-11 ns paths. Both ends of that middle leg are in
+the same table: it is the path from bar 3 to bar 5a, and 5a is now measured at
+2.900 ns with 0.180 ns of slack, so it has not grown any room since.
 
 Both of those are why the early redirect above attacks the *front* of the chain
 instead: it does not shorten the refill, it starts it two cycles sooner.
@@ -826,7 +918,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `c184e8a`.
+Measured with Vivado 2022.2 on commit `ef69bbc`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -883,6 +975,10 @@ The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][8]` to
 `i_prepare/wr_stage_o_reg[alu_src_val][3]`: 9 logic levels, with 78% of the
 delay in routing rather than logic.
 <!-- end -->
+
+It is bar 6 of
+[Where the pipeline registers are](#where-the-pipeline-registers-are), which
+measures the other six alongside it and shows how little separates them.
 
 **In the build measured above, the worst path is the one this section
 describes** — the Status Register loop. Both endpoints are `wr_stage_o` fields,
