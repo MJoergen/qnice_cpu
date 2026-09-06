@@ -14,6 +14,29 @@
 % bank-switch signals -- those are described in doc/README.md and in the
 % per-module READMEs, and drawing them here would turn the picture into a net
 % list.
+%
+% The short black bars are the pipeline registers that set the loop's latency:
+% every clock cycle a beat spends going round is one of them. There are seven,
+% and where they are NOT is as informative as where they are.
+%
+%   FETCH, at the base of the instruction-address arrow  wb_addr_o (p_wishbone)
+%   the instruction memory, at the far end of that arrow dp_ram's read register
+%   ICACHE, at its output                                m_data_o
+%   DECODE, at its output                                seq_stage_o (p_output)
+%   REGISTERS, in the middle                             dp_ram's read register
+%   PREPARE, at its output                               wr_stage_o (p_output)
+%   the data memory, at the far end of its address arrow dp_ram's read register
+%
+% SEQUENCER, WRITE and MEMORY have none. SEQUENCER's p_output is a
+% "process (all)" that slices one microcode chunk out of DECODE's registered
+% list; WRITE's p_reg is likewise combinational, which is why reg_addr_o,
+% fetch_addr_o and fetch_valid_o are decoded within the cycle and are the
+% design's timing-critical nets; and MEMORY buffers its Wishbone request in a
+% one_stage_buffer and its responses in one_stage_buffers, all of which cut
+% through combinationally when empty. So on both the instruction and the data
+% side the register that ends the round trip belongs to the RAM, not to the
+% module in front of it -- hence the two bars sitting on the bus arrows rather
+% than inside a block. doc/loop_timing.tex draws the same fact as a waveform.
 
 \documentclass[border=8pt]{standalone}
 
@@ -60,7 +83,16 @@
       wire/.style   = {draw, -{Stealth[length=2mm, width=2mm]}},
       % "above" or "below" is chosen per arrow, so that the two labels of a
       % bus pair sit outside the pair rather than in the gap between them.
-      buslabel/.style = {midway, font = \sffamily\scriptsize}
+      buslabel/.style = {midway, font = \sffamily\scriptsize},
+      % A pipeline register, drawn as a short bar ACROSS the path it cuts, so
+      % that the bar's long axis is always perpendicular to the flow: ffh for
+      % the vertical pipeline arrows, ffv for the horizontal buses. Both are
+      % 6mm long, which is exactly the 3mm-either-side spacing of a bus pair,
+      % so a bar dropped between the two arrows of a pair touches both.
+      ffh/.style = {fill = black, inner sep = 0pt,
+                    minimum width = 6mm, minimum height = 1.4mm},
+      ffv/.style = {fill = black, inner sep = 0pt,
+                    minimum width = 1.4mm, minimum height = 6mm}
    ]
 
    %% ---------------------------------------------------------------
@@ -157,6 +189,54 @@
       node[buslabel, above] {Memory address};
    \draw[wire] ([yshift = -3mm] dbusr) -- ([yshift = -3mm] dbusl)
       node[buslabel, below] {Memory data};
+
+   %% ---------------------------------------------------------------
+   %% The pipeline registers
+   %% ---------------------------------------------------------------
+   %
+   % Drawn last, so that a bar sits on top of the arrow it cuts rather than
+   % under it. See the header for which register each one is.
+
+   % FETCH/wb_addr_o, at the base of the instruction-address arrow. This is the
+   % one bar that is not 6mm long: the arrow leaves 3mm above centre and the
+   % block is only 11mm tall, so a full-length bar centred on the arrow would
+   % poke out through the top edge.
+   \node[ffv, minimum height = 5mm] at ([xshift = -4mm, yshift = 2.5mm] fetch.east) {};
+
+   % ICACHE/m_data_o, DECODE/seq_stage_o, PREPARE/wr_stage_o: each at the
+   % bottom of its own block, cutting the outgoing pipeline arrow. Note the
+   % three blocks BETWEEN them -- SEQUENCER, and WRITE, and (on the right)
+   % MEMORY -- get nothing, which is the point of the whole annotation.
+   \node[ffh] at ([yshift = 2.2mm] icache.south)  {};
+   \node[ffh] at ([yshift = 2.2mm] decode.south)  {};
+   \node[ffh] at ([yshift = 2.2mm] prepare.south) {};
+
+   % REGISTERS' dp_ram read register, in the middle of the block: DECODE
+   % presents the register numbers on the upper wire and the values come back
+   % on the lower one a clock cycle later, which is exactly this flip-flop.
+   % Placed halfway between those two wires, so it is well clear of the label.
+   \coordinate (regff) at ($ (decode.west)!0.5!(seq.west) $);
+   \node[ffv] at (regff -| regs.center) {};
+
+   % The two RAM read registers. Each sits at the far end of an address arrow,
+   % just outside the CPU, and is 6mm long -- exactly the 3mm-either-side
+   % spacing of a bus pair -- so it touches the address arrow that ends on it
+   % and the data arrow that starts from it.
+   \node[ffv] at ([xshift = 0.7mm] ibusr) {};
+   \node[ffv] at ([xshift = 0.7mm] dbusr) {};
+
+   %% ---------------------------------------------------------------
+   %% Legend
+   %% ---------------------------------------------------------------
+
+   % Below REGISTERS, in the empty band under the diagram. It has to clear the
+   % bottom edge of the CPU_MAIN box, which is 4mm below write.south.
+   \node[ffv, anchor = west] (legendff) at ([yshift = -11mm] regs.south west) {};
+   \node[anchor = west, font = \sffamily\scriptsize, align = left]
+      at ([xshift = 2.5mm] legendff.east)
+      {a pipeline register on the main path: one of the seven flip-flops that set the\\
+       loop's latency. SEQUENCER, WRITE and MEMORY have none --- they are combinational ---\\
+       and the register that ends each memory round trip belongs to the RAM.};
 
 \end{tikzpicture}
 

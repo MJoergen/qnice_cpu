@@ -31,6 +31,27 @@ The dotted outline in the diagram is CPU_MAIN, which exists mainly to give the
 formal verification of DECODE, SEQUENCER, PREPARE, and WRITE a single top
 level; see [formal/cpu_main.psl](../formal/cpu_main.psl).
 
+The short black bars are the pipeline registers on the main path — the
+flip-flops that set the loop's latency, one clock cycle each. There are seven:
+`wb_addr_o` in FETCH at the base of the instruction-address arrow, the
+instruction memory's own read register at the far end of that arrow,
+`m_data_o` at ICACHE's output, `seq_stage_o` at DECODE's, the register file's
+read register in the middle of REGISTERS, `wr_stage_o` at PREPARE's, and the
+data memory's read register at the far end of the memory-address arrow.
+
+Where they are *not* is the more useful half. SEQUENCER's `p_output` is a
+`process (all)` that slices one microcode chunk out of the list DECODE has
+already registered; WRITE's `p_reg` is likewise combinational, which is why
+`reg_addr_o`, `fetch_addr_o` and `fetch_valid_o` are decoded within the cycle
+and end up being the design's timing-critical nets (see
+[The critical path](#the-critical-path)); and MEMORY buffers its Wishbone
+request and both read responses in `one_stage_buffer`s, which cut through
+combinationally when empty. So on both the instruction and the data side the
+register that closes the round trip belongs to the RAM rather than to the
+module in front of it — which is why those two bars sit on the bus arrows
+instead of inside a block. The [polling-loop waveform](#a-polling-loop-cycle-by-cycle) below
+shows the same thing cycle by cycle.
+
 The block diagram contains two additional blocks:
 * REGISTERS: Contains the CPU registers and supports two read ports (addressed
   by DECODE, with the values arriving a cycle later at SEQUENCER) and one write
