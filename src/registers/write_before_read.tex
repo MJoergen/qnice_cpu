@@ -1,0 +1,28 @@
+% Write-Before-Read in the register file: the outputs keep following writes to
+% the register last read, even while no new read is issued.
+%
+% All values below are taken from a GHDL simulation of test/prog.asm, sampled
+% around the instruction "MOVE @--R1, @R1" at address 0x0D54 (label
+% L_MOVE_AM2_30).  R1 holds AM_BSS1 = 0x0B18 on entry and is pre-decremented to
+% AM_BSS = 0x0B17.
+
+\documentclass{standalone}
+\usepackage{timing}
+\begin{document}
+% Drawing convention, the same one src/cpu_main/timing.tex uses: handshake bits
+% are always drawn with their true value; a bus is greyed out ("x") in every
+% cycle in which it is not being driven for this instruction -- the read
+% addresses when rd_en_i is low, the write port when wr_en_i is low, and the two
+% output values at t=0, where they still carry the previous instruction's read.
+\begin{wave}{8}{5}
+ \nextwave{rd\_en\_i}    \bit{1}{1} \bit{0}{2} \bit{1}{2}
+ \nextwave{src\_reg\_i}  \known{1}{1}    \unknown[x]{2}  \known{1}{1}    \known{F}{1}
+ \nextwave{src\_val\_o}  \unknown[x]{1}  \known{0B18}{1} \known{0B17}{3}
+ \nextwave{dst\_reg\_i}  \known{1}{1}    \unknown[x]{2}  \known{F}{1}    \known{D}{1}
+ \nextwave{dst\_val\_o}  \unknown[x]{1}  \known{0B18}{1} \known{0B17}{2} \known{0D37}{1}
+ \nextwave{wr\_en\_i}    \bit{0}{1} \bit{1}{2} \bit{0}{2}
+ \nextwave{wr\_reg\_i}   \unknown[x]{1}  \known{1}{2}                    \unknown[x]{2}
+ \nextwave{wr\_val\_i}   \unknown[x]{1}  \known{0B18}{1} \known{0B17}{1} \unknown[x]{2}
+\end{wave}
+
+\end{document}

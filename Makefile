@@ -178,9 +178,11 @@ $(ROM): $(ASM)
 #
 # These targets only RENDER the diagrams, they do not derive them: every value
 # in a .tex was read off a simulation by hand (src/cpu_main/timing.tex from
-# test/prog_waveform.asm, doc/loop_timing.tex from test/prog_poll.asm). If you
-# change the pipeline, re-read the values from a fresh simulation first.
-TIMINGS = src/cpu_main/timing src/interrupt/timing doc/loop_timing
+# test/prog_waveform.asm, doc/loop_timing.tex from test/prog_poll.asm, the two
+# src/registers ones from test/prog.asm). If you change the pipeline, re-read
+# the values from a fresh simulation first.
+TIMINGS  = src/cpu_main/timing src/interrupt/timing doc/loop_timing
+TIMINGS += src/registers/write_before_read src/registers/write_before_read_2
 
 # Block diagrams: standalone TikZ, no shared macros. doc/cpu.tex replaced a
 # diagrams.net drawing that could only be edited in the GUI -- see its header.

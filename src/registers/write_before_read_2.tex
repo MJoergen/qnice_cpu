@@ -1,0 +1,28 @@
+% A second Write-Before-Read example, with a longer stretch of cycles in which
+% the outputs are held without a read: two forwarded writes, then the delayed
+% copy of the second one, then the plain hold.
+%
+% All values below are taken from a GHDL simulation of test/prog.asm, sampled
+% around the instruction "SUB @R1++, @R1" at address 0x13C4 (label
+% L_SUB_AM2_080).  R1 holds AM2_SRC1 = 0x1294 on entry and is post-incremented
+% to AM2_SRC2 = 0x1295.
+
+\documentclass{standalone}
+\usepackage{timing}
+\begin{document}
+% Same drawing convention as write_before_read.tex.  Note that the register
+% file's own RAM still answers 0xCD2E for R1 throughout t=1..t=4: every value
+% shown on src_val_o/dst_val_o in those cycles comes from the forwarding path,
+% not from the RAM.  The read issued at t=4 is the first one to land, at t=5.
+\begin{wave}{8}{6}
+ \nextwave{rd\_en\_i}    \bit{1}{1} \bit{0}{3} \bit{1}{2}
+ \nextwave{src\_reg\_i}  \known{1}{1}    \unknown[x]{3}  \known{F}{2}
+ \nextwave{src\_val\_o}  \unknown[x]{1}  \known{1294}{1} \known{1295}{3} \unknown[x]{1}
+ \nextwave{dst\_reg\_i}  \known{1}{1}    \unknown[x]{3}  \known{1}{1}    \known{D}{1}
+ \nextwave{dst\_val\_o}  \unknown[x]{1}  \known{1294}{1} \known{1295}{4}
+ \nextwave{wr\_en\_i}    \bit{0}{1} \bit{1}{2} \bit{0}{3}
+ \nextwave{wr\_reg\_i}   \unknown[x]{1}  \known{1}{2}                    \unknown[x]{3}
+ \nextwave{wr\_val\_i}   \unknown[x]{1}  \known{1294}{1} \known{1295}{1} \unknown[x]{3}
+\end{wave}
+
+\end{document}

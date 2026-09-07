@@ -62,22 +62,40 @@ write. This is shown in the diagram below.
 
 ![Write-Before-Read](write_before_read.png)
 
-Here we see the execution of the `MOVE @--R1, @R1` instruction.
-* In the first clock cycle DECODE reads from register 1.
-* In the second clock cycle the result of the read operation (`0AF6`) is
-  presented on `src_val_o` and `dst_val_o`. Simultaneously, a write (`0AF5`) is
-  being performed to register 1, but no new read is issued.
-* In the third clock cycle, despite the lack of a read request, the outputs are
-  updated with the new value just written.
+Here we see the execution of the `MOVE @--R1, @R1` instruction at address
+`0x0D54` of [`test/prog.asm`](../../test/prog.asm), where `R1` holds `0x0B18` on
+entry and is pre-decremented to `0x0B17`.
+* At `t=0` DECODE issues a read of register 1 on both ports.
+* At `t=1` no new read is issued, but the preceding `MOVE AM_BSS1, R1` retires
+  and writes `0B18` to register 1. Both outputs present the value just written.
+* At `t=2` the pre-decrement writes `0B17`. Again there is no read, and again
+  both outputs follow the write in the same cycle it is issued.
+* At `t=3` nothing is written at all, and the outputs still hold `0B17` — this
+  is term 3 of the [priority chain](#implementation) below, the delayed copy of
+  the previous cycle's write. A fresh read is issued in this cycle.
+* At `t=4` that read lands, and `src_val_o` gets register 1 back out of the RAM,
+  which by now really holds `0B17`. (`dst_val_o` is reading `R15` by then, hence
+  the unrelated `0D37`.)
 
 
 Here is another example with a similar behaviour:
 
 ![Write-Before-Read-2](write_before_read_2.png)
 
-This is during execution of the `SUB @R1++, @R1` instruction.  The first cycle
-shows a read from register 1, the second cycle shows a write to register 1, and
-cycles 3 and 4 both present the new value, despite no read request.
+This is during execution of the `SUB @R1++, @R1` instruction at address
+`0x13C4`, where `R1` holds `0x1294` on entry and is post-incremented to `0x1295`.
+The shape is the same, but the outputs go four cycles without a read landing:
+`t=0` reads register 1, `t=1` and `t=2` each forward a write in the cycle it is
+issued (the preceding `MOVE AM2_SRC1, R1`, then the post-increment), `t=3` has
+neither a read nor a write and holds `1295` from the delayed copy, and the read
+issued at `t=4` only lands at `t=5` — where `dst_val_o` reads `1295` back out of
+the RAM. Throughout `t=1` to `t=4` the RAM's own output for register 1 is still
+the value it returned for the read at `t=0`, i.e. the content from *before* the
+two writes: every value shown in those cycles comes from the forwarding path.
+
+Both pictures are drawn by hand in [write_before_read.tex](write_before_read.tex)
+and [write_before_read_2.tex](write_before_read_2.tex), with the values read off
+a GHDL simulation; `make diagrams` regenerates the `.png` files from them.
 
 ### Bank switching
 `R0`-`R7` live in a `2**G_REGISTER_BANK_WIDTH` deep RAM, and the page is
