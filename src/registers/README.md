@@ -26,15 +26,17 @@ real PC instead (see [cpu_main/README.md](../cpu_main/README.md#reading-r15)).
 The top-level interface of REGISTERS is as follows:
 
 ```
--- Read interface: addresses from DECODE, values to SEQUENCER
+-- Read interface: request addresses from DECODE
 rd_en_i     : in  std_logic;
 src_reg_i   : in  std_logic_vector(3 downto 0);
-src_val_o   : out std_logic_vector(15 downto 0);
 dst_reg_i   : in  std_logic_vector(3 downto 0);
+
+-- Read interface: response values to SEQUENCER
+src_val_o   : out std_logic_vector(15 downto 0);
 dst_val_o   : out std_logic_vector(15 downto 0);
 sr_val_o    : out std_logic_vector(15 downto 0);
 
--- Write interface, connected to WRITE
+-- Write interface, from WRITE
 wr_sr_en_i  : in  std_logic;
 wr_sr_val_i : in  std_logic_vector(15 downto 0);
 wr_en_i     : in  std_logic;

@@ -20,17 +20,11 @@ Table of contents:
 The remaining blocks are described else-where, see [main
 documentation](../../doc/README.md#detailed-design-description).
 
-The three stages DECODE, PREPARE, and WRITE are combined into a single module
-CPU_MAIN, drawn as the dotted outline in the diagram. This is mainly to
+The four stages DECODE, SEQUENCER, PREPARE, and WRITE are combined into a single
+module CPU_MAIN, drawn as the dotted outline in the diagram. This is mainly to
 simplify the formal verification: `formal/cpu_main.psl` can then state
-properties about the interfaces *between* the stages, which is where most of
-the interesting behaviour is.
-
-CPU_MAIN also instantiates [SEQUENCER](sequencer.vhd), on the link from DECODE
-to PREPARE. It is not a fourth stage: it holds no payload registers, adds no
-latency, and its only state is the index of the micro-operation it is currently
-presenting. It is a one-to-many adapter, taking one beat per instruction from
-DECODE and producing one beat per micro-operation for PREPARE.
+properties about the interfaces *between* the stages, which is where most of the
+interesting behaviour is.
 
 ## Microcoding of instructions
 
