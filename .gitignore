@@ -11,9 +11,9 @@ test/*.writes
 test/*.stats
 # Work directory for the two differential tests. "make crosscheck" puts the
 # reference emulator's sources here, extracted at the pinned upstream commit,
-# and the binary built from them; "make crosscheck_rtl" puts upstream's vhdl/
-# here from the same commit, patched and analysed into a GHDL library of its
-# own. Both leave their memory dumps here too. All generated -- what IS
+# and the binary built from them; "make crosscheck_rtl" puts the seven files it
+# needs from upstream's vhdl/ here from the same commit, patched and analysed
+# into a GHDL library of its own. Both leave their memory dumps here too. All generated -- what IS
 # committed is the harness, test/crosscheck.py, the testbench the RTL reference
 # runs in, test/tb_upstream.vhd, and the patch, test/upstream.patch.
 test/crosscheck/

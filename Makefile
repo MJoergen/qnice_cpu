@@ -372,8 +372,17 @@ UPSTREAM_SOURCES += $(UPSTREAM_DIR)/register_file.vhd
 UPSTREAM_SOURCES += $(UPSTREAM_DIR)/qnice_cpu.vhd
 UPSTREAM_SOURCES += $(UPSTREAM_DIR)/EAE.vhd
 
-# Extract upstream's vhdl/ at the pinned commit, patch it, and analyse it into
-# a GHDL library of its own.
+# Extract those files at the pinned commit, patch one of them, and analyse them
+# into a GHDL library of their own.
+#
+# The extract names the seven files rather than taking upstream's whole vhdl/,
+# which is 64 files and 1.6 MB of somebody else's VHDL -- the boards, the VGA,
+# the SD card, the HyperRAM. None of it is analysed, and left in place it lands
+# in every "grep -r" run in this repository, inside test/ of all places. The
+# paths come from UPSTREAM_SOURCES above with the work directory stripped off,
+# so the list cannot drift from what is actually compiled; naming a file that
+# upstream has moved or removed makes "git archive" fail rather than leave the
+# analysis to discover it.
 #
 # The separate --workdir is not tidiness: upstream's cpu_constants.vhd and this
 # repo's src/cpu_constants.vhd declare packages of the same name, so the two
@@ -392,7 +401,8 @@ UPSTREAM_SOURCES += $(UPSTREAM_DIR)/EAE.vhd
 $(UPSTREAM_STAMP): $(UPSTREAM_TB) $(UPSTREAM_PATCH) Makefile
 	@mkdir -p $(CROSSCHECK_DIR)
 	rm -rf $(UPSTREAM_DIR) $(UPSTREAM_WORK)
-	git -C $(QNICE_FPGA) archive $(QNICE_REF) vhdl | tar -x -C $(CROSSCHECK_DIR)
+	git -C $(QNICE_FPGA) archive $(QNICE_REF) \
+	   $(patsubst $(CROSSCHECK_DIR)/%,%,$(UPSTREAM_SOURCES)) | tar -x -C $(CROSSCHECK_DIR)
 	patch -p1 -d $(CROSSCHECK_DIR) < $(UPSTREAM_PATCH)
 	@mkdir -p $(UPSTREAM_WORK)
 	ghdl -a --std=08 -fsynopsys --workdir=$(UPSTREAM_WORK) $(UPSTREAM_SOURCES) $(UPSTREAM_TB)
