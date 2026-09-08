@@ -85,8 +85,8 @@ The statistics file is the performance counterpart of the writes log, and exists
 that makes the CPU flush twice as often produces an identical writes log and passes CI green.
 `test_monitor.vhd` counts cycles (reset release to the retiring `HALT`), accepted beats on each
 Wishbone bus (`cyc and stb and not stall`), and cycles in which *both* buses accepted a beat. That
-last one measures the Harvard split directly: for `prog.asm`, 1820 of 1846 data requests coincide
-with an instruction fetch, so serialising them onto one port would cost at least +12.2% of the run.
+last one measures the Harvard split directly: for `prog.asm`, 1861 of 1902 data requests coincide
+with an instruction fetch, so serialising them onto one port would cost at least +12.1% of the run.
 Note the instruction count includes speculative fetches that a flush later discarded, which is part
 of why it is worth watching.
 

@@ -12,7 +12,17 @@
 ; Instead, this program tests:
 ; 1. All combinations of flags and branching.
 ; 2. All combinations of instructions and status flags.
-; 3. All combinations of instructions and addressing modes.
+; 3. All addressing modes, for MOVE and SUB.
+; 4. Conditional branching against every addressing mode.
+; 5. Every remaining instruction with its operands in memory, checked against
+;    its own register form rather than against a constant.
+;
+; Groups 3 and 5 divide the instruction-by-addressing-mode square between
+; them: group 3 takes two instructions through every mode exhaustively, which
+; is what pins the modes themselves down, and group 5 takes every other
+; instruction through the hardest mode combination once, which is what pins
+; down the instruction. Doing both exhaustively would be a much longer program
+; for very little more.
 
 ; Tests in this file:
 ; Group 1. All combinations of flags and branching.
@@ -53,6 +63,11 @@
 ; Group 4. Conditional branching and addressing modes.
 ; COND_ABRA: Test the ABRA instruction with all addressing modes (different registers)
 ; COND_ASUB: Test the ASUB instruction with all addressing modes (different registers)
+
+; Group 5. Instructions with memory operands.
+; MEM_OP   : Test every remaining instruction with both operands in memory,
+;            differentially against its own register form
+; COND_RSUB: Test the RSUB instruction with a condition, not taken and taken
 
 ; Instructions:
 ; MOVE, ADD, ADDC, SUB, SUBC, SHL, SHR, SWAP
@@ -4317,6 +4332,288 @@ D_COND_ASUB_1   .DW     0x0000
 D_COND_ASUB_2   .DW     0x0000
 
 L_COND_ASUB_40
+
+; ---------------------------------------------------------------------------
+; Group 5. Instructions with memory operands.
+
+; MEM_OP: every remaining instruction with BOTH operands in memory.
+;
+; Group 2 runs each instruction against every combination of status flags, but
+; only ever with register operands; Group 3 runs every addressing mode, but
+; only for MOVE and SUB. Between them they left nine of the eighteen
+; instructions -- ADDC, SUBC, SHL, SHR, SWAP, NOT, AND, OR and XOR -- having
+; never once executed with an operand in memory. Counted over every retiring
+; instruction of the whole suite, those nine were 100% register-to-register.
+;
+; The check is differential rather than against hand-computed constants. Each
+; instruction runs twice from identical operands and identical incoming flags,
+; once as "OP Rs, Rd" and once as "OP @Rs, @Rd", and the two must agree on the
+; result AND on the whole status register. That leans on the register form,
+; which Group 2 has already verified exhaustively, and isolates what is
+; actually untested here: whether an operand fetched from memory reaches the
+; ALU as the same value, and whether the flags it produces are the same.
+;
+; "@Rs, @Rd" is the hardest of the four operand combinations on purpose. For
+; the read-modify-write instructions it is the three-micro-op sequence (read
+; source, read destination, write result); for SWAP and NOT, which do not read
+; their destination, it is the two-micro-op one. What it deliberately does NOT
+; re-check is that the pointers and the source word survive -- that belongs to
+; the addressing modes rather than to the instruction, and MOVE_AM and SUB_AM
+; already pin it down.
+;
+; The incoming flags are ST____CX in every case: C feeds the carry-in of ADDC,
+; the borrow-in of SUBC and the fill bit of SHR, and X feeds the fill bit of
+; SHL. Seeding both to 1 means a memory form that silently lost the flags
+; would differ from the register form rather than agree with it by accident.
+; (No apostrophes in this file: the assembler runs the source through the C
+; preprocessor, which reads a lone one as an unterminated character constant
+; and warns.)
+
+; ADDC @Rs, @Rd
+L_MEM_ADDC      MOVE    0x5678, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                ADDC    R0, R1                  ; Register form
+                MOVE    R14, R2                 ; ...and its flags
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x5678, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                ADDC    @R8, @R9                ; Memory form
+                MOVE    R14, R3                 ; ...and its flags
+                CMP     R1, @R9                 ; Results must agree
+                RBRA    E_MEM_ADDC_1, !Z
+                CMP     R2, R3                  ; Flags must agree
+                RBRA    E_MEM_ADDC_2, !Z
+                RBRA    L_MEM_SUBC, 1
+E_MEM_ADDC_1    HALT
+E_MEM_ADDC_2    HALT
+
+; SUBC @Rs, @Rd
+L_MEM_SUBC      MOVE    0x5678, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                SUBC    R0, R1
+                MOVE    R14, R2
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x5678, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                SUBC    @R8, @R9
+                MOVE    R14, R3
+                CMP     R1, @R9
+                RBRA    E_MEM_SUBC_1, !Z
+                CMP     R2, R3
+                RBRA    E_MEM_SUBC_2, !Z
+                RBRA    L_MEM_SHL, 1
+E_MEM_SUBC_1    HALT
+E_MEM_SUBC_2    HALT
+
+; SHL @Rs, @Rd -- the source is the shift amount, so it is small
+L_MEM_SHL       MOVE    0x0004, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                SHL     R0, R1
+                MOVE    R14, R2
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x0004, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                SHL     @R8, @R9
+                MOVE    R14, R3
+                CMP     R1, @R9
+                RBRA    E_MEM_SHL_1, !Z
+                CMP     R2, R3
+                RBRA    E_MEM_SHL_2, !Z
+                RBRA    L_MEM_SHR, 1
+E_MEM_SHL_1     HALT
+E_MEM_SHL_2     HALT
+
+; SHR @Rs, @Rd
+L_MEM_SHR       MOVE    0x0004, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                SHR     R0, R1
+                MOVE    R14, R2
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x0004, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                SHR     @R8, @R9
+                MOVE    R14, R3
+                CMP     R1, @R9
+                RBRA    E_MEM_SHR_1, !Z
+                CMP     R2, R3
+                RBRA    E_MEM_SHR_2, !Z
+                RBRA    L_MEM_SWAP, 1
+E_MEM_SHR_1     HALT
+E_MEM_SHR_2     HALT
+
+; SWAP @Rs, @Rd -- does not read its destination, so a two-micro-op sequence
+L_MEM_SWAP      MOVE    0x5678, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                SWAP    R0, R1
+                MOVE    R14, R2
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x5678, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                SWAP    @R8, @R9
+                MOVE    R14, R3
+                CMP     R1, @R9
+                RBRA    E_MEM_SWAP_1, !Z
+                CMP     R2, R3
+                RBRA    E_MEM_SWAP_2, !Z
+                RBRA    L_MEM_NOT, 1
+E_MEM_SWAP_1    HALT
+E_MEM_SWAP_2    HALT
+
+; NOT @Rs, @Rd -- likewise
+L_MEM_NOT       MOVE    0x5678, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                NOT     R0, R1
+                MOVE    R14, R2
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x5678, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                NOT     @R8, @R9
+                MOVE    R14, R3
+                CMP     R1, @R9
+                RBRA    E_MEM_NOT_1, !Z
+                CMP     R2, R3
+                RBRA    E_MEM_NOT_2, !Z
+                RBRA    L_MEM_AND, 1
+E_MEM_NOT_1     HALT
+E_MEM_NOT_2     HALT
+
+; AND @Rs, @Rd
+L_MEM_AND       MOVE    0x5678, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                AND     R0, R1
+                MOVE    R14, R2
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x5678, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                AND     @R8, @R9
+                MOVE    R14, R3
+                CMP     R1, @R9
+                RBRA    E_MEM_AND_1, !Z
+                CMP     R2, R3
+                RBRA    E_MEM_AND_2, !Z
+                RBRA    L_MEM_OR, 1
+E_MEM_AND_1     HALT
+E_MEM_AND_2     HALT
+
+; OR @Rs, @Rd
+L_MEM_OR        MOVE    0x5678, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                OR      R0, R1
+                MOVE    R14, R2
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x5678, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                OR      @R8, @R9
+                MOVE    R14, R3
+                CMP     R1, @R9
+                RBRA    E_MEM_OR_1, !Z
+                CMP     R2, R3
+                RBRA    E_MEM_OR_2, !Z
+                RBRA    L_MEM_XOR, 1
+E_MEM_OR_1      HALT
+E_MEM_OR_2      HALT
+
+; XOR @Rs, @Rd
+L_MEM_XOR       MOVE    0x5678, R0
+                MOVE    0x1234, R1
+                MOVE    ST____CX, R14
+                XOR     R0, R1
+                MOVE    R14, R2
+                MOVE    D_MEM_SRC, R8
+                MOVE    0x5678, @R8
+                MOVE    D_MEM_DST, R9
+                MOVE    0x1234, @R9
+                MOVE    ST____CX, R14
+                XOR     @R8, @R9
+                MOVE    R14, R3
+                CMP     R1, @R9
+                RBRA    E_MEM_XOR_1, !Z
+                CMP     R2, R3
+                RBRA    E_MEM_XOR_2, !Z
+                RBRA    L_CRSUB_00, 1
+E_MEM_XOR_1     HALT
+E_MEM_XOR_2     HALT
+
+D_MEM_SRC       .DW     0x0000
+D_MEM_DST       .DW     0x0000
+
+
+; COND_RSUB: RSUB with a condition, not taken and taken.
+;
+; Every RSUB in the suite before this one was "RSUB <label>, 1". The
+; conditional form is worth its own test for the same reason the sentinel in
+; L_COND_ASUB_00 is: a call that is NOT taken must push nothing at all, and
+; the Stack Pointer staying put does not show that on its own -- the return
+; address used to be written to SP-1 regardless, leaving R13 correct and the
+; word below it destroyed. Being conditional also keeps it off the early
+; redirect, which only resolves the unconditional form, so this is the
+; non-early path through WRITE.
+;
+; D_CRSUB_SENT sits immediately below D_CRSUB_STACK, so it is exactly where
+; "@--R13" would land.
+
+L_CRSUB_00      MOVE    D_CRSUB_STACK, R13      ; Stack pointer
+                MOVE    D_CRSUB_SENT, R12       ; The word just below it
+                MOVE    0xBEEF, @R12            ; Sentinel: nothing may write it
+                MOVE    0x0000, R11             ; The subroutine sets this
+                MOVE    0x0001, R0
+                CMP     R0, R0                  ; Z = 1
+                RSUB    E_CRSUB_01, !Z          ; Should not jump
+                CMP     0xBEEF, @R12            ; Verify nothing was pushed
+                RBRA    E_CRSUB_02, !Z
+                CMP     D_CRSUB_STACK, R13      ; Verify R13 unchanged
+                RBRA    E_CRSUB_03, !Z
+                CMP     0x0000, R11             ; Verify the subroutine did not run
+                RBRA    E_CRSUB_04, !Z
+
+                MOVE    0x0001, R0
+                CMP     R0, R0                  ; Z = 1 again
+                RSUB    L_CRSUB_SUB, Z          ; Should jump
+                CMP     D_CRSUB_STACK, R13      ; Verify R13 restored by the return
+                RBRA    E_CRSUB_05, !Z
+                CMP     0x5A5A, R11             ; Verify the subroutine did run
+                RBRA    E_CRSUB_06, !Z
+                RBRA    L_CRSUB_10, 1
+
+E_CRSUB_01      HALT
+E_CRSUB_02      HALT
+E_CRSUB_03      HALT
+E_CRSUB_04      HALT
+E_CRSUB_05      HALT
+E_CRSUB_06      HALT
+
+L_CRSUB_SUB     MOVE    0x5A5A, R11
+                RET
+
+D_CRSUB_SENT    .DW     0x0000
+D_CRSUB_STACK   .DW     0x0000
+
+L_CRSUB_10
+
 
 ; Everything worked as expected! We are done now.
 EXIT            MOVE    OK, R8

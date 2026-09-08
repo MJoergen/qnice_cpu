@@ -348,14 +348,14 @@ serialise. For `test/prog.asm`, the longest of the test programs:
 
 | | |
 | --- | --- |
-| cycles | 14892 |
-| instruction requests | 13305 (89% of cycles) |
-| data requests | 1846 |
-| ...of which simultaneous | 1820 (**98.6%** of data requests) |
+| cycles | 15337 |
+| instruction requests | 13715 (89% of cycles) |
+| data requests | 1902 |
+| ...of which simultaneous | 1861 (**97.8%** of data requests) |
 
 Almost every data access collides with an instruction fetch — which follows from
 the instruction bus being busy 89% of the time. Serialising them onto one port
-would cost at least 1820 cycles, i.e. **+12.2%**, and more in practice, since
+would cost at least 1861 cycles, i.e. **+12.1%**, and more in practice, since
 each inserted stall also delays whatever was behind it in the pipeline. It is a
 lower bound in a second sense as well: it counts only the collisions that
 actually occurred in a machine built not to have to avoid them.
