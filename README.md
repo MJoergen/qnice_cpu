@@ -116,16 +116,23 @@ closes that gap. It runs every program a second time on the **reference
 emulator** from the QNICE-FPGA project, built from the commit pinned above, and
 diffs the final contents of RAM against what this CPU left behind.
 
-**All fourteen programs leave memory bit-identical** — every one of the 32768
-words of `0x0000`-`0x7FFF`, from the instruction suite to a 170000-cycle
-Mandelbrot sweep.
+**Twelve of the fourteen programs leave memory bit-identical** — every one of
+the 32768 words of `0x0000`-`0x7FFF`, from the instruction suite to a
+170000-cycle Mandelbrot sweep. Four words in `prog.asm` are excused for a reason
+the program documented before this check existed: its `PTR_SR` group uses `R14`
+— the Status Register itself — as an auto-modifying memory pointer, so the
+address a store lands on depends on flag details the two implementations are not
+obliged to share. That group checks completion, not values, and the harness
+found exactly those four words and nothing else.
 
-The sole exception is four words in `prog.asm`, and they are excused for a
-reason the program already documented before this check existed: its `PTR_SR`
-group uses `R14` — the Status Register itself — as an auto-modifying memory
-pointer, so the address a store lands on depends on flag details the two
-implementations are not obliged to share. That group checks completion, not
-values. The harness found exactly those four words and nothing else.
+The other two programs are the EAE tests, and there the **reference emulator is
+the one that is out of step with its own project's hardware**. Signed division's
+remainder is the clearest case: `eae.vhd` uses `numeric_std`'s `mod`, whose sign
+follows the divisor, exactly as upstream's own `vhdl/EAE.vhd` does — while
+upstream's *emulator* uses C's `%`, whose sign follows the dividend. The two
+differ on every case where the operands have different signs and the remainder
+is non-zero. Both divergences are recorded with their reason and **asserted**,
+so that if one ever disappears the harness says so instead of quietly passing.
 
 Two caveats worth stating plainly. This compares **final architectural state,
 not an execution trace**, so a value that is briefly wrong and then overwritten

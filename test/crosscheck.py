@@ -29,6 +29,20 @@ write from the run's .writes log replayed over it in order.  The alternative --
 dumping the array from tb_cpu.vhd at HALT -- would have been a testbench change
 and would still have needed this script to compare the result.
 
+THE EMULATOR MUST ALSO REPORT A PASS
+
+Diffing memory alone is not enough, and assuming it was is a mistake this
+script shipped with.  A program that fails on the emulator halts early without
+ever writing its status word, and 0x7FFF then still holds the 0x0000 that
+untouched memory reads as -- the same value a passing run writes.  prog_eae.asm
+was in exactly that state: it halted on the emulator at its "RESULT_HI differs"
+HALT, and the comparison reported "identical" because every other word matched.
+
+So the status word is seeded with STATUS_SENTINEL after the program is loaded
+and before it runs.  A pass overwrites it with 0x0000; anything else means the
+program either reported a failure code or never got there, and the sentinel
+survives to say which.
+
 WHAT THIS DOES NOT CATCH
 
 Final architectural state, not an execution trace.  A value that is briefly
@@ -68,6 +82,37 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Only RAM is common ground.  0x8000 and up is the EAE in test/system.vhd and
 # memory-mapped I/O in the emulator.
 RAM_LO, RAM_HI = 0x0000, 0x7FFF
+
+# The reserved status word every program writes just before its final HALT
+# (0 = pass), and the value it is seeded with so that "never written" is
+# distinguishable from "written as pass".  See test/README.md.
+STATUS_ADDR = 0x7FFF
+STATUS_SENTINEL = 0xDEAD
+
+# Programs where this CPU and the reference emulator are KNOWN to disagree, with
+# the reason.  These are not skipped: the divergence is asserted, so that if it
+# ever goes away -- upstream fixes its emulator, or someone "fixes" our RTL to
+# match it -- the entry becomes stale and this says so instead of quietly
+# passing.
+KNOWN_DIVERGENCE = {
+    "prog_eae":
+        "upstream's emulator computes the DIVS remainder with C's '%' (sign of "
+        "the dividend) while both this repo's eae.vhd and upstream's OWN "
+        "vhdl/EAE.vhd use numeric_std 'mod' (sign of the divisor); they differ "
+        "on 8 of its 21 DIVS rows -- those where the operand signs differ and "
+        "the remainder is non-zero. The hardware is the reference, so the "
+        "emulator is the odd one out -- see the header of test/prog_eae.asm.",
+    "prog_eae_stall":
+        "the two EAEs differ in WHEN they compute. emulator/qnice.c recomputes "
+        "only when the CSR is written (the arithmetic sits inside "
+        "'case IO_EAE_CSR'), while eae.vhd's arithmetic is combinational and "
+        "re-evaluates whenever an operand changes -- which is the settling time "
+        "its read stall exists to cover. This program's S3 deliberately writes "
+        "both operands and reads the result back WITHOUT writing the CSR, so on "
+        "the emulator the result register still holds S2's value and it halts "
+        "at E_S3. That is the RTL behaviour the test is pinning, so there is "
+        "nothing here to reconcile.",
+}
 
 # Programs that cannot be compared this way, and why.  Everything not named
 # here is expected to agree word for word; a program is added to this list only
@@ -119,10 +164,17 @@ def apply_writes(mem, path):
     return count
 
 
-def run_emulator(emulator, out_file, dump_file, timeout):
-    """LOAD the program, RUN it to HALT, SAVE the RAM.  Returns the halt address."""
-    script = "LOAD %s\nRUN\nSAVE %s 0x%04X 0x%04X\nQUIT\n" % (
-        out_file, dump_file, RAM_LO, RAM_HI)
+def run_emulator(emulator, out_file, dump_file, seed_file, timeout):
+    """LOAD the program, seed the status word, RUN to HALT, SAVE the RAM.
+
+    The seed is a second LOAD rather than part of the program image, so that
+    nothing about the program under test has to change: LOAD merges the
+    addresses it names over whatever is already there.
+    """
+    with open(seed_file, "w") as f:
+        f.write("0x%04X 0x%04X\n" % (STATUS_ADDR, STATUS_SENTINEL))
+    script = "LOAD %s\nLOAD %s\nRUN\nSAVE %s 0x%04X 0x%04X\nQUIT\n" % (
+        out_file, seed_file, dump_file, RAM_LO, RAM_HI)
     try:
         proc = subprocess.run([emulator], input=script, capture_output=True,
                               text=True, timeout=timeout)
@@ -185,7 +237,7 @@ def main():
                     help="seconds to let the emulator run (default 600)")
     args = ap.parse_args()
 
-    failures, skipped, passed = [], [], []
+    failures, skipped, passed, diverged = [], [], [], []
 
     for test in args.tests:
         if test in SKIP:
@@ -203,9 +255,38 @@ def main():
             continue
 
         os.makedirs(os.path.dirname(dump_file), exist_ok=True)
-        halt_addr, err = run_emulator(args.emulator, out_file, dump_file, args.timeout)
+        seed_file = os.path.join(HERE, "crosscheck", test + ".seed")
+        halt_addr, err = run_emulator(args.emulator, out_file, dump_file,
+                                      seed_file, args.timeout)
         if err:
             failures.append((test, err))
+            continue
+
+        # Did the program report a pass on the emulator? The memory diff cannot
+        # answer this on its own -- see the docstring.
+        status = read_image(dump_file).get(STATUS_ADDR, 0)
+        if status == STATUS_SENTINEL:
+            verdict = "never wrote its status word (halted at 0x%s)" % halt_addr
+        elif status != 0:
+            verdict = "reported failure status 0x%04X (halted at 0x%s)" % (
+                status, halt_addr)
+        else:
+            verdict = None
+
+        if test in KNOWN_DIVERGENCE:
+            # Asserted, not skipped: the divergence has to still be there.
+            if verdict:
+                print("%-22s diverges as expected: %s" % (test, verdict))
+                diverged.append(test)
+            else:
+                failures.append((test, "expected divergence is GONE (the program "
+                                       "now passes on the emulator) -- re-check "
+                                       "and update KNOWN_DIVERGENCE"))
+            continue
+
+        if verdict:
+            failures.append((test, "did not pass on the emulator: " + verdict))
+            print("%-22s FAILED on the emulator: %s" % (test, verdict))
             continue
 
         ok, message = compare(test, out_file, writes_file, dump_file)
@@ -220,8 +301,11 @@ def main():
         print("%-22s skipped: %s" % (test, reason))
 
     print()
-    print("%d compared, %d identical, %d differing, %d skipped"
-          % (len(passed) + len(failures), len(passed), len(failures), len(skipped)))
+    print("%d compared, %d identical, %d differing, %d known-divergent, %d skipped"
+          % (len(passed) + len(failures) + len(diverged), len(passed),
+             len(failures), len(diverged), len(skipped)))
+    for test in diverged:
+        print("  %s: %s" % (test, KNOWN_DIVERGENCE[test]))
 
     if failures:
         print()

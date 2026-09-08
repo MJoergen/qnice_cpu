@@ -425,9 +425,20 @@ reach the instrumented build. `prog_mandel_stats.asm` is deliberately not in
 
 Two programs cover the device itself:
 
-* `prog_eae.asm` is table-driven over all four operations. Its DIVS
-  expectations follow `numeric_std`'s `mod` semantics, where the remainder
-  takes the sign of the divisor, not of the dividend.
+* `prog_eae.asm` is table-driven over all four operations, 43 rows. It covers
+  both multiplies across the full 32-bit product range, unsigned division at
+  its boundaries, and signed division in all four sign combinations — three
+  times over: with a remainder, with `|dividend| < |divisor|` so the quotient
+  is zero, and dividing exactly so the remainder is zero and the sign question
+  disappears. Division by ±1 and the `-32768 / -1` overflow that wraps back to
+  `-32768` are pinned too. Its DIVS expectations follow `numeric_std`'s `mod`
+  semantics, where the remainder takes the sign of the divisor, not of the
+  dividend — and because `eae.vhd` pairs that with a *truncating* `/`, the
+  identity `op0 = op1*quotient + remainder` does not hold for a negative result
+  with a non-zero remainder. That is inherited from upstream's `vhdl/EAE.vhd`
+  rather than invented here; the program's header works it through. On failure
+  the status word is the 1-based row number, with bit 15 set if it was
+  `RESULT_HI` that differed, so one bad row among 43 names itself.
 * `prog_eae_stall.asm` is a regression test for the stall bug fixed in
   `bd0b7da`. The EAE stalls the shared data bus for a few cycles after any
   write to it, and that stall used to reach requests aimed at the RAM, which
@@ -651,9 +662,11 @@ make crosscheck                # every comparable program
 make crosscheck TESTS=prog     # just one, the ordinary make way
 ```
 
-**Current status: all 14 programs in `TESTS` leave RAM bit-identical**, over
-all 32768 words of `0x0000`-`0x7FFF`, with four excused words in `prog.asm`
-(below).
+**Current status: 12 of the 14 programs in `TESTS` leave RAM bit-identical**,
+over all 32768 words of `0x0000`-`0x7FFF`, with four excused words in
+`prog.asm`. The other two are the EAE programs, where the reference emulator
+disagrees with upstream's own hardware; both are recorded and asserted rather
+than skipped (below).
 
 ### What is compared, and what is not
 
@@ -697,14 +710,42 @@ scratch area differ, and `ALLOWED_DIFFS` in
 Two programs are skipped, both because they never halt by design:
 `prog_poll.asm` and `prog_poll_reg.asm`.
 
-### One thing this established
+### The emulator must also report a pass
 
-`test/eae.vhd` is adapted from upstream rather than shared with it, and
-`prog_eae.asm`'s `DIVS` expectations follow `numeric_std`'s `mod` semantics,
-where the remainder takes the sign of the divisor. Its one signed-division
-vector divides a negative dividend (`0xD431` = −11215 by `0x3039` = 12345) and
-expects `RESULT_HI` = `0x046A` = 1130 with `RESULT_LO` = 0 — that is VHDL's
-`mod` for the remainder paired with its truncating `/` for the quotient, and a
-C-style `%` would have given −11215 instead. The emulator agrees, so the two
-devices match on that case. Note it is one vector: a negative *divisor* is not covered
-by the program, and so is not covered by this either.
+Diffing memory is not enough on its own, and the first version of this harness
+assumed it was. A program that fails on the emulator halts early without ever
+writing its status word, and `0x7FFF` then still reads as the `0x0000` that
+untouched memory holds — the very value a passing run writes. So a failing run
+compared **identical**.
+
+That was not hypothetical. `prog_eae.asm` was in exactly that state, and so was
+`prog_eae_stall.asm`: both halt on the emulator at a failure `HALT`, and both
+were reported as matching. The fix is to seed `0x7FFF` with `0xDEAD` — a second
+`LOAD`, so nothing about the program under test changes — and then require the
+emulator's final status word to be `0x0000`. A sentinel that survives means the
+program never got there; any other value is the failure code the program itself
+reported.
+
+### Two programs are known to disagree, and that is asserted
+
+Both are about the EAE, and in both the reference emulator is the one out of
+step. `KNOWN_DIVERGENCE` in [`crosscheck.py`](crosscheck.py) records them and
+**requires the divergence to still be there** — if upstream ever fixes its
+emulator, or someone changes our RTL to match it, the entry goes stale and the
+harness says so rather than quietly passing.
+
+`prog_eae.asm` — **signed division's remainder**. `eae.vhd` computes it with
+`numeric_std`'s `mod`, whose sign follows the **divisor**; upstream's
+`emulator/qnice.c` uses C's `%`, whose sign follows the **dividend**. The two
+agree only when the operands share a sign or the remainder is zero, so they
+differ on 8 of the program's 21 `DIVS` rows. The hardware is the reference
+here, and upstream's own `vhdl/EAE.vhd` has the identical `op0_s mod op1_s`, so
+this repo matches upstream's hardware and upstream's emulator contradicts it.
+
+`prog_eae_stall.asm` — **when the EAE computes**. `qnice.c` recomputes only on
+a write to the CSR; `eae.vhd`'s arithmetic is combinational and re-evaluates
+whenever an operand changes, which is exactly the settling time its read stall
+exists to cover. That program's `S3` writes both operands and reads the result
+back *without* touching the CSR, so the emulator still returns `S2`'s result and
+halts at `E_S3`. It is the RTL behaviour the test exists to pin, so there is
+nothing to reconcile.
