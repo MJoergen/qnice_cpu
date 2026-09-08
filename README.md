@@ -6,6 +6,27 @@
 The reason for this implementation is to increase the performance of the QNICE
 CPU, and to use techniques from formal verification to prove its correctness.
 
+**Contents**
+
+* [Relation to QNICE-FPGA](#relation-to-qnice-fpga) — the three architectural
+  differences, and the fork that runs the QNICE monitor on this CPU
+* [Micro-operations](#micro-operations) — the idea the whole design rests on
+* [Which upstream version](#which-upstream-version) — why `develop`, pinned to a
+  commit
+* [Documentation](#documentation) — pointers into [`doc/`](doc) and the
+  per-module write-ups
+* [Verification](#verification) — the four independent checks
+  * [A self-checking simulation suite](#a-self-checking-simulation-suite)
+  * [Differential testing against the reference emulator](#differential-testing-against-the-reference-emulator)
+  * [Formal verification](#formal-verification)
+  * [Style linting](#style-linting)
+  * [Where to read more](#where-to-read-more)
+* [Continuous integration](#continuous-integration) — what runs on every push,
+  and what does not
+* [Makefile](#makefile) — every target
+
+## Relation to QNICE-FPGA
+
 This version of the QNICE CPU (from the [QNICE-FPGA
 project](https://github.com/sy2002/QNICE-FPGA)) is not a drop-in replacement,
 for the following three reasons:
@@ -35,6 +56,8 @@ drops from 3497 to 938 slice LUTs (at 396 → 586 registers, and 2 BRAMs for the
 register banks); the system closes timing at 72.73 MHz where the old one was
 already marginal at 50 MHz; and `mandel_perf_test.asm` falls from 3.29 to 1.98
 cycles per instruction, for a **2.4x speedup in wall time**.
+
+## Micro-operations
 
 The overall idea of this implementation is to convert each
 [instruction](https://github.com/sy2002/QNICE-FPGA/blob/b1fb36c56508d1237f662f6234b3bfa4142b3432/doc/intro/qnice_intro.pdf)
