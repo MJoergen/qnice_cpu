@@ -18,10 +18,21 @@ jobs:
 
       # The test programs are assembled by the assembler from the upstream
       # QNICE-FPGA project, which is not vendored here.
+      #
+      # "ref: develop" is deliberate. This repo follows that branch, not the
+      # default one -- develop is where the ISA this CPU implements is defined
+      # (its alu.vhd is the reference the flag behaviour in
+      # src/cpu_main/sub/alu_flags.vhd was checked against, and its emulator is
+      # what test/*.asm were cross-checked on). Without the ref, actions/checkout
+      # takes the repository default, which is master: 567 commits behind, with
+      # a qasm.c differing by some 300 lines. Every test/*.rom happens to come
+      # out byte-identical from either assembler today, so this pin fixes no
+      # live bug -- it stops CI and a local checkout silently drifting apart.
       - name: Check out QNICE-FPGA (for the assembler)
         uses: actions/checkout@v4
         with:
           repository: sy2002/QNICE-FPGA
+          ref: develop
           path: QNICE-FPGA
 
       # tools/make-toolchain.sh builds the *whole* QNICE toolchain -- vasm,

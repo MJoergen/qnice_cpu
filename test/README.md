@@ -26,8 +26,10 @@ unattended.
 
 The `.asm` files are assembled by the external QNICE assembler at
 `$HOME/git/sy2002/QNICE-FPGA/assembler/asm`, which must be checked out
-separately. It emits a `.rom` (loaded by the testbench), a `.out`, and a `.lis`
-listing that maps every instruction to its address.
+separately, on the **`develop`** branch — that is the branch this repo follows,
+and it is not that repository's default. It emits a `.rom` (loaded by the
+testbench), a `.out`, and a `.lis` listing that maps every instruction to its
+address.
 
 ## Pass criterion: the program reports its own verdict
 

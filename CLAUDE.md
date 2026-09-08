@@ -45,9 +45,12 @@ make clean                            # remove all generated files, including fo
 ```
 
 Test programs live in `test/*.asm` and are assembled with the external QNICE assembler at
-`$HOME/git/sy2002/QNICE-FPGA/assembler/asm` (must be checked out separately). That default lives in
-the top-level `Makefile` as `ASSEMBLER ?=`, so it can be overridden — `make test ASSEMBLER=<path>`
-is what [.github/workflows/test.yml](.github/workflows/test.yml) does. That workflow runs
+`$HOME/git/sy2002/QNICE-FPGA/assembler/asm`, which must be checked out separately — **on the
+`develop` branch**. That is the branch this repo follows, for the ISA as well as the tools, and it
+is not that repository's default; the CI workflow pins it with a `ref:` for the same reason. The
+path above is the top-level `Makefile`'s `ASSEMBLER ?=`, so it can be overridden —
+`make test ASSEMBLER=<path>` is what
+[.github/workflows/test.yml](.github/workflows/test.yml) does. That workflow runs
 `make test` on every push to `main` and every pull request (formal verification and linting run in
 their own workflows, see below); it builds only `qasm`/`qasm2rom` from
 the upstream project rather than the whole QNICE toolchain, and asserts up front that the

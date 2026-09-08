@@ -33,7 +33,7 @@ jobs:
           pip install vsg==3.35.0
           vsg --version
 
-      # Checks all 26 VHDL source files against CODING_STYLE.md, as encoded in
+      # Checks all 28 VHDL source files against CODING_STYLE.md, as encoded in
       # vsg.yml -- see that file's header for what it does and does not cover,
       # and CODING_STYLE.md section 8 for the vsg_off/vsg_on markers that carry
       # the deliberate local exceptions. The tree is clean as of the commit

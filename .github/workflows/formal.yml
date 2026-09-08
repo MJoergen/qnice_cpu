@@ -38,7 +38,7 @@ jobs:
           sby --version
 
       # -k rather than the "make formal" wrapper: without it make stops at the
-      # first failing DUT and hides the state of the remaining eleven. make
+      # first failing DUT and hides the state of the remaining twelve. make
       # still exits non-zero if any of them failed.
       - name: Run formal verification
         run: make -C formal -k

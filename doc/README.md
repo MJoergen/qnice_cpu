@@ -950,10 +950,12 @@ Remaining ideas:
 
 
 ## TODO
-* Formal verification: the suite in `formal/` currently passes in full (twelve
-  modules, thirty-five tasks). What is still missing is a `prove` (k-induction)
-  task for `cpu_main`, and closing the last open property of `memory`'s
-  inductive proof.
+* Formal verification: the suite in `formal/` currently passes in full
+  (thirteen modules, thirty-nine tasks). Four of those modules have no `prove`
+  (k-induction) task at all — `cpu_main`, `memory`, `registers` and `wb_mux` —
+  and `memory`'s inductive proof has one property still open. `wb_mux.psl`
+  records that every assertion but `f_response_order` closes inductively, but
+  since that job has no `prove` task either, nothing re-checks it.
 * Add interrupts. `RTI`, `INT`, and `EXC` are not decoded anywhere today, and
   without help they retire as silent no-ops; `p_unimplemented` in
   [write.vhd](../src/cpu_main/write.vhd) fails the simulation on them instead,
