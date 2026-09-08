@@ -21,12 +21,22 @@ used the latter.
 Run it after the proofs, from this directory -- "make -C formal" does. Every job
 here has a cover task, and a cover task always writes traces, so a successful
 run leaves something to check against for all of them.
+
+The task directories to look in come from each job's own [tasks] section, not
+from globbing <dut>_*. That is not tidiness. A task renamed or dropped from a
+.sby leaves its old directory behind -- "make clean" removes them, an ordinary
+run does not -- and globbing picks up those stale traces, so names that no
+current task produces appear to resolve. This script was written that way at
+first and passed locally while CI, on a fresh checkout, correctly failed on
+three names in wb_mux.gtkw.
 """
 
 import glob
 import os
 import re
 import sys
+
+_TASK_LINE = re.compile(r"^(\S+)")
 
 # A .gtkw line is a signal reference unless it opens with one of these:
 #   [   directive, e.g. [dumpfile] or [color]
@@ -62,6 +72,29 @@ def vcd_signals(path):
     return names
 
 
+def sby_workdirs(dut):
+    """The directories a job writes, from the [tasks] section of its .sby.
+
+    One per task, named "<dut>_<task>"; a job with no [tasks] section writes a
+    single directory called "<dut>".
+    """
+    sbyfile = dut + ".sby"
+    if not os.path.exists(sbyfile):
+        return []
+
+    tasks = []
+    in_tasks = False
+    with open(sbyfile, errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if line.startswith("["):
+                in_tasks = line == "[tasks]"
+                continue
+            if in_tasks and line and not line.startswith("#"):
+                tasks.append(_TASK_LINE.match(line).group(1))
+    return ["%s_%s" % (dut, t) for t in tasks] if tasks else [dut]
+
+
 def gtkw_references(path):
     """Every signal reference in a save file, in file order."""
     refs = []
@@ -93,15 +126,26 @@ def main():
 
     checked = 0
     skipped = []
+    stale = set()
     failures = []
     total_refs = 0
 
     for savefile in savefiles:
         dut = savefile[: -len(".gtkw")]
-        traces = sorted(glob.glob(os.path.join(dut + "_*", "engine_0", "*.vcd")))
+        workdirs = sby_workdirs(dut)
+        traces = []
+        for workdir in workdirs:
+            traces += sorted(glob.glob(os.path.join(workdir, "engine_*", "*.vcd")))
         if not traces:
             skipped.append(dut)
             continue
+
+        # Directories from tasks this job no longer declares. Harmless, but
+        # they hold traces of an older design, so say so rather than let
+        # someone wonder why a local run and CI disagree.
+        for leftover in sorted(glob.glob(dut + "_*")):
+            if os.path.isdir(leftover) and leftover not in workdirs:
+                stale.add(leftover)
 
         declared = set()
         for trace in traces:
@@ -118,6 +162,13 @@ def main():
                 print("    %s" % name)
         else:
             print("%-22s %3d references, all resolve" % (savefile, len(refs)))
+
+    if stale:
+        print()
+        print("check_gtkw: ignoring stale task directories, not declared by any")
+        print("check_gtkw: .sby any more -- \"make -C formal clean\" removes them:")
+        for name in sorted(stale):
+            print("    %s" % name)
 
     if skipped:
         print()

@@ -135,15 +135,9 @@ wb_mux.i_wb_mux.f_out0[1:0]
 @22
 wb_mux.i_wb_mux.f_out1[1:0]
 @28
-wb_mux.i_wb_mux.f_req_tgl0
-@28
-wb_mux.i_wb_mux.f_req_tgl1
-@28
 wb_mux.i_wb_mux.f_rsp_tgl0
 @28
 wb_mux.i_wb_mux.f_rsp_tgl1
-@22
-wb_mux.i_wb_mux.f_shadow[3:0]
 @1000200
 -formal
 [pattern_trace] 1
