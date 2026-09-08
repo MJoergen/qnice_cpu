@@ -188,16 +188,58 @@ is clean.
 comparisons, and what each program covers, in full. [`formal/`](formal) holds
 one `.psl`/`.sby`/`.gtkw` triplet per verified module.
 
-CI runs `make test`, `make test_slow` and `make crosscheck`, plus `make formal`
-and `make lint`, on every push to `main` and every pull request:
-[`test.yml`](.github/workflows/test.yml) builds the QNICE assembler from the
-upstream project (only `qasm` and `qasm2rom` are needed, not the whole
-toolchain) and points the Makefile at it with `ASSEMBLER=<path>`;
-[`formal.yml`](.github/workflows/formal.yml) takes SymbiYosys, Yosys with the
-GHDL plugin, GHDL, and the SMT solvers from a pinned
-[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release; and
-[`lint.yml`](.github/workflows/lint.yml) runs VSG. The two badges above are
+## Continuous integration
+
+Everything above runs on every push to `main`, every pull request, and on
+demand, split across three workflows so that a style violation and a failed
+proof do not hide each other. The two badges at the top of this file are
 `test.yml` and `formal.yml`.
+
+| Workflow | Runs | Covers |
+|---|---|---|
+| [`test.yml`](.github/workflows/test.yml) | `make test`, `make test_slow`, `make crosscheck` | all fourteen programs, three times: against a zero-latency memory with both golden files diffed, against a slow one, and against the reference emulator |
+| [`formal.yml`](.github/workflows/formal.yml) | `make -C formal -k`, then `formal/check_gtkw.py` | all 39 formal jobs over the thirteen verified modules, plus the GTKWave save files |
+| [`lint.yml`](.github/workflows/lint.yml) | `make lint` | all 28 VHDL files against [`CODING_STYLE.md`](CODING_STYLE.md) |
+
+A few details are load-bearing rather than incidental:
+
+* **The test job builds its own assembler.** `test/*.asm` is assembled by the
+  upstream QNICE assembler, which is not vendored here, so the workflow checks
+  out the QNICE-FPGA repository at the commit pinned in
+  [Which upstream version](#which-upstream-version) and compiles just `qasm` and
+  `qasm2rom` from it — not the whole QNICE toolchain — then points the Makefile
+  at it with `ASSEMBLER=<path>`. `make crosscheck` then builds the reference
+  emulator out of that same checkout at that same commit, so the assembler and
+  the reference cannot drift apart — and since `actions/checkout` leaves a
+  shallow clone holding only that one commit, a drift would fail loudly rather
+  than quietly cross-check against something else.
+* **It checks the tool before trusting the verdict.** The entire pass/fail
+  signal rests on GHDL mapping `std.env.finish(0)` and `stop(1)` onto process
+  exit codes. The workflow asserts that up front on a three-line entity, so an
+  unexpected GHDL build fails loudly there rather than silently reporting all
+  fourteen programs as green.
+* **`-k` on the formal run** is what makes the job report the state of all
+  thirteen DUTs instead of stopping at the first failure; `make` still exits
+  non-zero if any of them failed. `check_gtkw.py` is then a step of its own with
+  `if: always()`, because the make target hangs off the pass-stamps and would be
+  skipped on exactly the red build where someone wants to open a trace.
+* **Three things are pinned**, and each for the same reason: the upstream
+  commit, the [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build)
+  release that supplies SymbiYosys, Yosys with the GHDL plugin, GHDL and the SMT
+  solvers, and the VSG release. Any of them tracking "latest" could turn a job
+  red without a line of VHDL changing. Bump them deliberately.
+* **A failing run leaves the evidence behind.** `test.yml` uploads every
+  `test/*.writes` log, and `formal.yml` uploads the `sby` logs and the
+  counterexample VCDs, so a golden mismatch or a failed property can be read off
+  the artifacts rather than reproduced first.
+
+**What CI does not cover is the Vivado flow.** `make system.bit` and
+`make utilization` need a 38 GB licensed install that GitHub-hosted runners
+cannot host, so synthesis results, the utilization tables in
+[`doc/README.md`](doc/README.md) and every timing number quoted in this
+repository are refreshed by hand on a machine that has Vivado. The Yosys
+`make synth` target — a second opinion on synthesisability, not a build — is not
+in CI either.
 
 ## Makefile
 The current makefile supports the following targets:
