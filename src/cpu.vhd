@@ -9,7 +9,10 @@ entity cpu is
       G_REGISTER_BANK_WIDTH : integer;
       -- Simulation only: file to log every register and memory write to.
       -- An empty string (the default) disables the logging entirely.
-      G_WRITES_FILE         : string := ""
+      G_WRITES_FILE         : string := "";
+      -- Simulation only: disassemble each retiring instruction to the console.
+      -- Passed straight through to WRITE, see cpu_main/write.vhd.
+      G_DEBUG               : boolean := false
    );
    port (
       clk_i       : in  std_logic;
@@ -240,6 +243,9 @@ begin
    ------------------------------------------------------------
 
    i_cpu_main : entity work.cpu_main
+      generic map (
+         G_DEBUG => G_DEBUG
+      )
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i,

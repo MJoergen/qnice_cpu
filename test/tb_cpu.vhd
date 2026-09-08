@@ -34,7 +34,13 @@ entity tb_cpu is
       G_A_STALL_DELAY       : natural  := 0;
       G_B_STALL_DELAY       : natural  := 0;
       G_A_ACK_DELAY         : positive := 1;
-      G_B_ACK_DELAY         : positive := 1
+      G_B_ACK_DELAY         : positive := 1;
+      -- Disassemble each retiring instruction to the console. Off by default:
+      -- a full run is thousands of lines, and the verdict comes from the
+      -- status word and the writes log rather than from reading them. Turn it
+      -- on with "make run TEST=... DEBUG=true" when a run needs following
+      -- instruction by instruction. See src/cpu_main/write.vhd.
+      G_DEBUG               : boolean := false
    );
 end entity tb_cpu;
 
@@ -86,6 +92,7 @@ begin
          G_B_STALL_DELAY       => G_B_STALL_DELAY,
          G_A_ACK_DELAY         => G_A_ACK_DELAY,
          G_B_ACK_DELAY         => G_B_ACK_DELAY,
+         G_DEBUG               => G_DEBUG,
          G_SIMULATION          => true
       )
       port map (

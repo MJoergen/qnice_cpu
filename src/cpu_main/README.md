@@ -467,7 +467,9 @@ This output is asserted for one clock cycle whenever WRITE accepts the
 micro-operation marked `LAST`, i.e. once per completed instruction. It is not
 used by the CPU itself; it drives the instruction counter in the testbench and
 gates the call to the `disassemble` procedure inside a `pragma synthesis_off`
-block in [write.vhd](write.vhd).
+block in [write.vhd](write.vhd). That call is in turn guarded by the generic
+`G_DEBUG`, which defaults to false and is plumbed down from the top level, so
+the disassembly is off unless a run asks for it with `make run TEST=… DEBUG=true`.
 
 ## Internal interfaces
 This section describes the interfaces between the three stages DECODE, PREPARE,

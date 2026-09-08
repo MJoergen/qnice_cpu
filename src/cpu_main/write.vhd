@@ -5,6 +5,13 @@ library ieee;
    use work.cpu_constants.all;
 
 entity write is
+   generic (
+      -- Simulation only: disassemble each retiring instruction to the console.
+      -- Off by default, since a full run is thousands of lines and the verdict
+      -- comes from the status word and the writes log rather than from reading
+      -- them. Enabled with "make run TEST=... DEBUG=true".
+      G_DEBUG : boolean := false
+   );
    port (
       clk_i           : in  std_logic;
       rst_i           : in  std_logic;
@@ -101,7 +108,7 @@ begin
    p_debug : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if inst_done_o = '1' then
+         if G_DEBUG and inst_done_o = '1' then
             disassemble(prep_stage_i.addr, prep_stage_i.inst, prep_stage_i.immediate);
          end if;
       end if;

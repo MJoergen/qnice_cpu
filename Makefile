@@ -54,6 +54,13 @@ B_STALL_DELAY ?= 0
 A_ACK_DELAY   ?= 1
 B_ACK_DELAY   ?= 1
 
+# Disassemble each retiring instruction to the console. Off by default: a full
+# run is thousands of lines, and the verdict comes from the status word and the
+# writes log, not from reading them. "make run TEST=prog DEBUG=true" turns it
+# on for following a run instruction by instruction; the disassembly goes to
+# stdout, so it does not disturb any of the files that are diffed.
+DEBUG ?= false
+
 # The configuration "make test_slow" uses: slow in both ways, on both ports.
 SLOW = A_STALL_DELAY=2 B_STALL_DELAY=2 A_ACK_DELAY=3 B_ACK_DELAY=3
 
@@ -138,6 +145,7 @@ help:
 	@echo "  REGISTER_BANK_WIDTH=<val> : Number of bits in register bank number. Defaults to 8."
 	@echo "  A_STALL_DELAY / B_STALL_DELAY=<val> : Memory stall cycles per port. Default 0."
 	@echo "  A_ACK_DELAY / B_ACK_DELAY=<val>     : Memory ACK latency per port. Default 1."
+	@echo "  DEBUG=true                : Disassemble each instruction to stdout. Default false."
 	@echo
 
 
@@ -156,7 +164,8 @@ GHDL_RUN = ghdl -r --std=08 $(TB) \
 	   -gG_A_STALL_DELAY=$(A_STALL_DELAY) \
 	   -gG_B_STALL_DELAY=$(B_STALL_DELAY) \
 	   -gG_A_ACK_DELAY=$(A_ACK_DELAY) \
-	   -gG_B_ACK_DELAY=$(B_ACK_DELAY)
+	   -gG_B_ACK_DELAY=$(B_ACK_DELAY) \
+	   -gG_DEBUG=$(DEBUG)
 
 .PHONY: build
 build: $(SOURCES) $(TEST_SOURCES)

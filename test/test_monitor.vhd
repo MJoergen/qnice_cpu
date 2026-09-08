@@ -250,7 +250,8 @@ begin
       if not status_valid then
          report "TEST FAILED: HALT reached without a test status write to 0x" &
                 to_hstring(G_STATUS_ADDR) & ". " &
-                "Look at the address of the last disassembled HALT to see where.";
+                "Re-run with DEBUG=true and look at the address of the last " &
+                "disassembled HALT to see where.";
          stop(1);
       elsif status = X"0000" then
          report "TEST PASSED";

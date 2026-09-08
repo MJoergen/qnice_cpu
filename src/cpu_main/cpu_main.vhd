@@ -14,6 +14,11 @@ library ieee;
    use work.cpu_constants.t_prep2wr;
 
 entity cpu_main is
+   generic (
+      -- Simulation only: disassemble each retiring instruction to the console.
+      -- Passed straight through to WRITE, see write.vhd.
+      G_DEBUG : boolean := false
+   );
    port (
       clk_i           : in  std_logic;
       rst_i           : in  std_logic;
@@ -190,6 +195,9 @@ begin
    ------------------------------------------------------------
 
    i_write : entity work.write
+      generic map (
+         G_DEBUG => G_DEBUG
+      )
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i,

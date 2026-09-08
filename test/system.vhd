@@ -27,6 +27,9 @@ entity system is
       G_B_STALL_DELAY       : natural  := 0;
       G_A_ACK_DELAY         : positive := 1;
       G_B_ACK_DELAY         : positive := 1;
+      -- Simulation only: disassemble each retiring instruction to the console.
+      -- Passed straight through to WRITE, see src/cpu_main/write.vhd.
+      G_DEBUG               : boolean  := false;
       -- True in the testbench, false in synthesis, and it is not merely a
       -- switch for simulation-only conveniences: see the generate below.
       G_SIMULATION          : boolean  := false
@@ -83,7 +86,8 @@ begin
    i_cpu : entity work.cpu
       generic map (
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
-         G_WRITES_FILE         => G_WRITES_FILE
+         G_WRITES_FILE         => G_WRITES_FILE,
+         G_DEBUG               => G_DEBUG
       )
       port map (
          clk_i       => clk_i,

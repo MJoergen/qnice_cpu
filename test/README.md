@@ -64,17 +64,25 @@ is treated as failing until it reaches them. Giving individual failure paths
 their own status codes (`MOVE 0x0007, @R0` before the `HALT`) is optional, and
 only sharpens the diagnostic.
 
-When a test does fail, the address of the last disassembled `HALT` still tells
-you *which* one was reached:
+When a test does fail, re-running it with `DEBUG=true` disassembles every
+retiring instruction, and the address of the last `HALT` then tells you *which*
+one was reached:
 
 ```
-src/cpu_constants.vhd:331:13:@143550ns:(report note): 1696 (E000) HALT
+$ make run TEST=prog DEBUG=true
+...
+src/cpu_constants.vhd:343:10:@143550ns:(report note): 1696 (E000) HALT
                                                       ^^^^
 ```
 
 Look that address up in the program's generated `.lis` file. Because the
 addresses shift whenever a program is edited, they are deliberately no longer
 recorded here.
+
+The disassembly is off by default — a full run is thousands of lines, and the
+verdict comes from the status word and the writes log rather than from reading
+them — and is gated by the top-level generic `G_DEBUG`, which `DEBUG=` sets;
+see `src/cpu_main/write.vhd`.
 
 Two details of the mechanism are worth knowing:
 
