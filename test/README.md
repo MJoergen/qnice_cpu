@@ -131,7 +131,17 @@ a failing run still reports the value it computed.
 ## What each program covers
 
 `prog.asm` is the broad self-checking instruction suite; the other thirteen in
-`TESTS` are narrow. Three further programs are deliberately outside `TESTS`:
+`TESTS` are narrow. Its five groups divide the work: flags against branching,
+instructions against every flag combination, every addressing mode for `MOVE`
+and `SUB`, conditional branching against every addressing mode, and — group 5 —
+every remaining instruction once with both operands in memory. That last group
+is checked differentially, each instruction against its own register form, and
+what it guards is narrower than it looks: not the operand routing, which is
+opcode-blind and already covered by group 3, but the per-opcode
+`C_READS_FROM_DST` / `C_WRITES_TO_DST` tables in `decode.vhd` that choose the
+microcode entry. A wrong bit there is invisible with register operands and
+fatal with memory ones; the header of `prog.asm` records the fault injection
+that establishes it. Three further programs are deliberately outside `TESTS`:
 `prog_poll.asm` and `prog_poll_reg.asm` at the end of this section, and
 `prog_mandel_stats.asm` in the one after it. `prog_simple.asm` walks the addressing modes of
 `MOVE`/`ADD`/`CMP` and the branch instructions. `prog_pipeline.asm` and

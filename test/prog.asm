@@ -4353,6 +4353,32 @@ L_COND_ASUB_40
 ; actually untested here: whether an operand fetched from memory reaches the
 ; ALU as the same value, and whether the flags it produces are the same.
 ;
+; WHAT THIS ACTUALLY CATCHES, since it is not obvious and was first got wrong.
+; The logic that routes an operand out of memory is opcode-blind: the microcode
+; ROM is indexed by a four-bit classification rather than by opcode, PREPARE
+; selects mem_src_data_i / mem_dst_data_i on micro-op bits, and WRITE builds the
+; store address from micro-op bits and the mode fields. So a fault in any of
+; that fails SUB_AM in Group 3 whether or not these nine instructions are ever
+; run against memory, and this group adds nothing there. Nor can it catch a
+; wrong arm in alu_data or alu_flags: Group 2 covers those, and a differential
+; check is blind to them by construction, since a broken arm breaks both forms
+; equally and they still agree.
+;
+; What it does catch is the layer above the routing -- C_READS_FROM_DST and
+; C_WRITES_TO_DST in decode.vhd, which are hand-maintained per-opcode tables
+; that select the microcode entry. A wrong bit there is both opcode-dependent
+; and memory-dependent, which is exactly the gap this group fills, and seven of
+; these nine instructions sit in the "others => 1" fall-through of both tables,
+; so adding an opcode to the wrong list is a one-character slip.
+;
+; Measured, by classifying XOR as not reading its destination: the whole suite
+; as it stood before this group passed -- prog.asm included, and all thirteen
+; other programs -- and only E_MEM_XOR_1 below caught it. The reason it hides
+; with register operands is that alu_dst_val then falls through to dst_val_pc,
+; which for "XOR R0, R1" IS the value of R1: the right answer for the wrong
+; reason. With "XOR @R8, @R9" the same fall-through hands the ALU the pointer
+; instead of the word it points at.
+;
 ; "@Rs, @Rd" is the hardest of the four operand combinations on purpose. For
 ; the read-modify-write instructions it is the three-micro-op sequence (read
 ; source, read destination, write result); for SWAP and NOT, which do not read
