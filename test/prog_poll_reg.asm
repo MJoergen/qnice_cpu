@@ -26,10 +26,12 @@
 ;
 ;    make build
 ;    ghdl -r --std=08 tb_cpu -gG_ROM=test/prog_poll_reg.rom \
-;         -gG_REGISTER_BANK_WIDTH=8 --stop-time=500ns
+;         -gG_REGISTER_BANK_WIDTH=8 -gG_DEBUG=true --stop-time=500ns
 ;
-; The disassembly that src/debug.vhd reports is enough to read the period off:
-; the loop settles by 300 ns and retires its MOVE every 90 ns thereafter.
+; The disassembly p_debug in src/cpu_main/write.vhd reports is enough to read
+; the period off: the loop settles by 300 ns and retires its MOVE every 90 ns
+; thereafter. G_DEBUG is what turns that disassembly on and it defaults to
+; false, so without it the run above prints nothing at all.
 
       .ORG 0x0000
 

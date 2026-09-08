@@ -967,8 +967,9 @@ Remaining ideas:
   history is documented under "Register bank switch" in the same file.
   [interrupts.md](interrupts.md) works this up in full: what the ISA requires,
   the one behavioural question to settle first, the test cases, and the order
-  the work should happen in. `EXC` turns out to be out of scope — it has never
-  been implemented in QNICE hardware, only in the assembler.
+  the work should happen in. `EXC` is out of scope, but not because it is
+  unspecified: it exchanges a register with one of the eight shadow registers an
+  interrupt fills, so it only means anything once those exist.
 
 
 ## Utilization

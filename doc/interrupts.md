@@ -21,10 +21,20 @@ implementation, and not before.
 ## Requirements
 
 Sources, in the upstream [QNICE-FPGA](https://github.com/sy2002/QNICE-FPGA)
-repository, on branch **`dev-V1.61`, at commit `aede0ce`**. That branch is the
-one to track. An earlier reading of this note was taken from `dev-cpu-pipeline`,
-an experimental branch, and two of the three disagreements it recorded turned
-out to exist only there.
+repository, on branch **`develop`**. That is the branch this repo tracks, for the
+ISA as well as the tools; it is not that repository's default, which is why the
+CI workflow pins it with a `ref:`.
+
+Getting this branch wrong is the single most expensive mistake available in this
+note, and it has now been made twice. An early reading came from
+`dev-cpu-pipeline`, an experimental branch; the reading that replaced it came
+from `dev-V1.61`, which is real but predates upstream's interrupt work. Between
+`dev-V1.61` and `develop` the reference grew a shadow register file, the emulator
+grew shadow registers and an `EXC` implementation, and both the ISA document and
+the programming card gained `EXC` — so two of the four disagreements recorded
+under [Where the sources disagree](#where-the-sources-disagree) reverse outright.
+Check `git branch --show-current` in the QNICE-FPGA checkout before trusting
+anything below.
 
 * `doc/intro/qnice_intro.tex` — the Interrupts slides; the programmer's model.
 * `doc/int-device.md` — the daisy-chain bus protocol.
@@ -64,31 +74,40 @@ position is only true if the toolchain agrees.
 ### Where the sources disagree
 
 Applying rule 4 above. What follows is the full list, re-derived against
-`dev-V1.61`. Two of the three items this note carried before the move rested on
-text and code that exist only on `dev-cpu-pipeline`: the `EXC` contradiction is
-gone entirely, and the saved-state disagreement is real but far narrower than it
-looked. A bit-numbering error in the ISA document takes their place as the item
-that most needs writing down.
+**`develop`**, which is the branch this repo follows.
 
-**`EXC` is not a contradiction. It is assembler-only.** Nothing in the ISA
-document mentions `EXC` — not the instruction table, not the control-command bit
-table. Neither does the programming card, nor the emulator, whose
-`control_mnemonics` array stops at `DECRB`. Nor does the reference CPU:
-`vhdl/cpu_constants.vhd` defines `ctrlHALT`, `ctrlRTI`, `ctrlINT`, `ctrlINCRB`,
-and `ctrlDECRB` and stops there, so the encoding falls into the `Ctrl_Cmd` case's
-`when others` arm, commented "illegal command: HALT". `EXC` exists in exactly one
-place in the whole upstream project: the assembler, which knows the mnemonic and
-emits `5` for it.
+An earlier pass derived it against `dev-V1.61` and got two of the four items
+backwards, because upstream did substantial interrupt work between the two. Both
+are corrected below and both reverse: `EXC` is no longer assembler-only, and the
+saved-state disagreement is wider than it looked, not narrower. The other two
+items — `INT`'s operand field and the bit-numbering error behind it — were
+re-checked against `develop` and are unchanged.
 
-An earlier draft of this note reported the ISA document as contradicting itself
-here, listing `EXC const, dst — Exchange shadow register` in the instruction
-table while giving it no encoding. That line is real, but it is not in
-`dev-V1.61`; it was added on `dev-cpu-pipeline` by commit `19a1657`, "Added EXC
-instruction to qnice_intro". **Implemented choice: unchanged — `EXC` is out of
-scope, and its arm of `p_unimplemented` stays armed permanently.** The reasoning
-is now shorter and stronger. It no longer leans on the saved-state decision
-below: there is simply no source above the assembler that has ever said what
-`EXC` does.
+**`EXC` — the ISA document contradicts itself, and only the reference CPU is
+silent.** The instruction table lists `EXC const, dst — Exchange shadow
+register`; the control-command bit table three slides later stops at
+`000100 DECRB` and gives `EXC` no encoding at all. So the document names an
+instruction it never encodes.
+
+Everything else except the hardware knows it. The programming card names it and
+says what it is for: on an interrupt "the CPU saves the contents of `R8` to `R15`
+in eight shadow registers which can be accessed with the `EXC` instruction". The
+assembler emits control command `5` and takes a constant of 0..31. The emulator
+implements it — `EXC const, dst` exchanges shadow register `const` with the
+destination operand, and halts on a shadow register number above 7. The one
+source that does not is the reference CPU: `vhdl/cpu_constants.vhd` still defines
+`ctrlHALT`, `ctrlRTI`, `ctrlINT`, `ctrlINCRB` and `ctrlDECRB` and stops there, so
+the encoding falls into the `Ctrl_Cmd` case's `when others` arm, commented
+"illegal command: HALT".
+
+This reverses what this note said when it was derived against `dev-V1.61`, where
+`EXC` really was assembler-only: the instruction-table line came in with commit
+`19a1657`, "Added EXC instruction to qnice_intro", which is an ancestor of
+`develop` but not of `dev-V1.61`, and the emulator's implementation and the
+programming card's wording arrived over the same period. **Implemented choice:
+unchanged — `EXC` is out of scope and its arm of `p_unimplemented` stays armed —
+but the reasoning is now the opposite of "nobody has specified it".** See
+[below](#exc-is-out-of-scope-and-that-is-not-a-shortcut).
 
 **`INT`'s operand field — the ISA document contradicts itself twice, and the
 destination field wins.** The instruction table says `INT dst`. The
@@ -129,38 +148,37 @@ Worth knowing alongside all this: `INT <constant>` assembles to **two words**, s
 `INT` can itself be a two-word instruction. That interacts with `next_pc` and
 gets its own test case.
 
-**Saved state — all four sources disagree, and the ISA document has the
-narrowest set.** This is the disagreement that changed most under `dev-V1.61`.
+**Saved state — three sources say `R8`-`R15` and only the slides say two.**
+This is the item that moved most between the branches, and it moved against the
+decision recorded below.
 
 | Source | Saved and restored |
 |---|---|
-| `qnice_intro.tex`, the Interrupts slide (rule 1) | `R14`, `R15` |
-| `programming_card.tex`, `Interrupts` section | `PC` and `SP` — `R15`, `R13`, **not** `R14` |
-| `vhdl/qnice_cpu.vhd` (rule 3) | `R13`, `R14`, `R15` |
-| `emulator/qnice.c` | `R14`, `R15` |
+| `qnice_intro.tex`, the Interrupts slide (rule 1) | `R14`, `R15` — "two invisible latches" |
+| `programming_card.tex`, `Interrupts` section | `R8` to `R15`, "in eight shadow registers" |
+| `vhdl/register_file.vhd` (rule 3) | `R8` to `R15` |
+| `emulator/qnice.c` | `R8` to `R15` |
 
-The reference keeps `SP_org`, `SR_org`, and `PC_org` in the CPU itself — the
-declarations are commented `(R13)`, `(R14)`, `(R15)` — mirrors all three
-continuously while `Int_Active = '0'`, and reverts all three in the `ctrlRTI`
-arm. So it saves one register more than the slides do, and the programming card
-saves a different set again, omitting the status register that both other
-implementations save.
+The reference register file is 231 lines with a shadow array, `shadow_en`,
+`shadow_spr_en` and `revert_en` ports, and two revert loops — `for regnr in 8 to
+12` and `for regnr in 13 to 15`. The emulator matches it exactly:
+`NUMBER_OF_SHADOW_REGISTERS` is 8, an interrupt copies `read_register(16 - 8 + i)`
+into the shadow array, and `RTI` copies it back.
 
-Rule 1 makes the slides ground truth, the emulator independently agrees with
-them, and the programming card is a summary that loses to the slides.
-**Implemented choice: `R14` and `R15` only** — see
-[what state is saved](#the-decision-to-make-first-what-state-is-saved) for what
-that costs here, which is far less than it once looked.
+**This reverses the previous reading of this item, and with it the argument for
+the decision below.** Against `dev-V1.61` the table read: slides `R14`/`R15`,
+programming card `PC`/`SP`, reference CPU `R13`/`R14`/`R15` (as `SP_org`,
+`SR_org`, `PC_org` inside the CPU rather than in the register file), emulator
+`R14`/`R15`. On that evidence the slides and the emulator agreed and the note
+chose `R14`/`R15`. On `develop` the emulator no longer agrees with the slides:
+three of the four sources say `R8`-`R15`, and rule 1 is the only thing still
+pointing the other way.
 
-An earlier draft of this note recorded this disagreement as slides-say-two versus
-`register_file.vhd`-reverts-`R8`-`R15`, describing a register file that
-continuously mirrors the upper registers into shadow copies. **No such code
-exists in `dev-V1.61`.** `vhdl/register_file.vhd` is 102 lines with no shadow
-array, no `revert_en`, and no `Int_Active` port at all; `R8`-`R12` are ordinary
-registers, and `R13`/`R14`/`R15` are not in the file — they are driven in from
-the CPU. The shadow file is `dev-cpu-pipeline`-only, from commit `87f9d4b` "WIP
-CPU and Register File: Refactoring R13..R15", and even there the loop body reads
-`for regnr in 8 to 12` — five registers, not eight.
+The earlier draft's description of a register file that continuously mirrors the
+upper registers into shadow copies was therefore right about `develop` and wrong
+only about `dev-V1.61`. **The decision below has not been re-derived on this
+evidence** — it is left as it stands, marked, for whoever starts the interrupt
+work.
 
 ### Bus protocol
 
@@ -303,14 +321,35 @@ now, since it was drawn ahead of the implementation rather than off a simulation
 ### `EXC` is out of scope, and that is not a shortcut
 
 The evidence is under
-[Where the sources disagree](#where-the-sources-disagree): `EXC` appears nowhere
-in the ISA document, the programming card, the reference CPU, or the emulator —
-only in the assembler, which is the one place in the project that knows the
-mnemonic. So `EXC` has never been implemented in QNICE hardware, and no document
-has ever specified what it should do. Keep its arm of `p_unimplemented` armed,
-along with reserved opcode `0xD`, and drop only the `RTI` and `INT` arms.
+[Where the sources disagree](#where-the-sources-disagree), and it is not the
+evidence this section used to give. `EXC` is specified: the programming card says
+what it does, the assembler emits it, and the emulator implements it. What it
+still lacks is an encoding in the ISA document's control-command table and any
+implementation in the reference CPU, whose `cpu_constants.vhd` stops at
+`ctrlDECRB`.
+
+It is out of scope here for a simpler reason than "nobody specified it". `EXC`
+exchanges a register with one of the eight shadow registers an interrupt fills,
+so it is meaningless until those shadow registers exist — it is part of the
+saved-state design, not an instruction that can be added beside it. Keep its arm
+of `p_unimplemented` armed, along with reserved opcode `0xD`, and drop only the
+`RTI` and `INT` arms. If the saved-state decision is ever revisited towards
+`R8`-`R15`, `EXC` comes back into scope with it.
 
 ## The decision to make first: what state is saved
+
+> **REOPENED — read
+> [Where the sources disagree](#where-the-sources-disagree) first.** Everything
+> below was decided against `dev-V1.61`, where the reference CPU saved
+> `R13`/`R14`/`R15` and the emulator saved `R14`/`R15`. On `develop`, the branch
+> this repo follows, the reference register file and the emulator both save
+> `R8`-`R15` and the programming card says so too, so the gap is eight registers
+> rather than one and the emulator no longer corroborates the slides. The
+> argument below is preserved as written because its *cost* reasoning still
+> holds — a third restore still needs a second write port and therefore a
+> micro-op, and the `R8`-`R15` model still cannot be built as a continuous
+> mirror on `dp_ram.vhd`. What no longer holds is the appeal to agreement
+> between sources. Re-derive before starting.
 
 Settled, and cheaper than it first looked. The slides say two latches, for `R14`
 and `R15`. The reference CPU saves `R13` as well — `SP_org` alongside `SR_org`
@@ -340,11 +379,14 @@ shadow copies and reverts them on `RTI`, giving an ISR a private `R8`-`R12` for
 free. It concluded that such a model could not be built here — one write port on
 `dp_ram.vhd`, and a continuous mirror needs a second writer into the same array,
 which that module's header explains cannot be inferred. Both statements remain
-true *about this design*. They are just not statements about the reference, which
-has no shadow register file at all; that code lives only on the experimental
-`dev-cpu-pipeline` branch. Nothing in the plan below turned on the difference,
-but the argument for the decision did, so it is restated above on grounds that
-survive.
+true *about this design*: one write port on `dp_ram.vhd`, and a continuous
+mirror needs a second writer into the same array. What was wrong was the claim
+that the reference has no such register file — it has one on `develop`
+(`vhdl/register_file.vhd`, with `shadow_en`/`revert_en` and revert loops over
+`R8`-`R12` and `R13`-`R15`), and only `dev-V1.61` lacks it. So the earlier draft
+described the reference correctly and this paragraph did not. Nothing in the plan
+below turns on the difference, but the argument for the decision does, which is
+what the note at the top of this section is about.
 
 ## How it fits this pipeline
 
