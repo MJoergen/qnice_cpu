@@ -19,20 +19,34 @@ jobs:
       # The test programs are assembled by the assembler from the upstream
       # QNICE-FPGA project, which is not vendored here.
       #
-      # "ref: develop" is deliberate. This repo follows that branch, not the
-      # default one -- develop is where the ISA this CPU implements is defined
-      # (its alu.vhd is the reference the flag behaviour in
-      # src/cpu_main/sub/alu_flags.vhd was checked against, and its emulator is
-      # what test/*.asm were cross-checked on). Without the ref, actions/checkout
-      # takes the repository default, which is master: 567 commits behind, with
-      # a qasm.c differing by some 300 lines. Every test/*.rom happens to come
-      # out byte-identical from either assembler today, so this pin fixes no
+      # The ref is deliberate, and it is a commit rather than a branch name.
+      #
+      # This repo follows upstream's "develop", not the default branch --
+      # develop is where the ISA this CPU implements is defined (its
+      # vhdl/alu.vhd is the reference the flag behaviour in
+      # src/cpu_main/sub/alu_flags.vhd was checked against, and its emulator/ is
+      # what test/*.asm were cross-checked on). Without any ref,
+      # actions/checkout takes the repository default, which is master: 567
+      # commits behind develop, with a qasm.c differing by some 300 lines.
+      #
+      # The two branches have diverged in BOTH directions -- master also carries
+      # 22 commits that are not on develop, and its head is the more recent of
+      # the two by date -- so "whichever looks newest" picks the wrong one. See
+      # the "Which upstream version" section of the top-level README.md.
+      #
+      # The SHA below is what develop pointed at when this was pinned
+      # (2024-04-10, the branch's head since then). Naming the branch instead
+      # left CI free to move under us the moment upstream pushed to it, which is
+      # exactly the ambiguity the README section exists to remove; the cost is
+      # that an upstream assembler fix now needs this line bumped by hand, which
+      # is the intended trade. Every test/*.rom happens to come out
+      # byte-identical from either branch's assembler today, so this fixes no
       # live bug -- it stops CI and a local checkout silently drifting apart.
       - name: Check out QNICE-FPGA (for the assembler)
         uses: actions/checkout@v4
         with:
           repository: sy2002/QNICE-FPGA
-          ref: develop
+          ref: b1fb36c56508d1237f662f6234b3bfa4142b3432
           path: QNICE-FPGA
 
       # tools/make-toolchain.sh builds the *whole* QNICE toolchain -- vasm,

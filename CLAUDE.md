@@ -57,7 +57,7 @@ Makefile, and would move every number in doc/README.md.)
 Test programs live in `test/*.asm` and are assembled with the external QNICE assembler at
 `$HOME/git/sy2002/QNICE-FPGA/assembler/asm`, which must be checked out separately — **on the
 `develop` branch**. That is the branch this repo follows, for the ISA as well as the tools, and it
-is not that repository's default; the CI workflow pins it with a `ref:` for the same reason. The
+is not that repository's default; the CI workflow pins that branch's commit for the same reason. The
 path above is the top-level `Makefile`'s `ASSEMBLER ?=`, so it can be overridden —
 `make test ASSEMBLER=<path>` is what
 [.github/workflows/test.yml](.github/workflows/test.yml) does. That workflow runs

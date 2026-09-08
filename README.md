@@ -19,7 +19,7 @@ However, it should be a simple operation to modify the QNICE-FPGA project to
 support this implementation.
 
 The overall idea of this implementation is to convert each
-[instruction](https://github.com/sy2002/QNICE-FPGA/blob/master/doc/intro/qnice_intro.pdf)
+[instruction](https://github.com/sy2002/QNICE-FPGA/blob/b1fb36c56508d1237f662f6234b3bfa4142b3432/doc/intro/qnice_intro.pdf)
 into a sequence of micro-operations, such as:
 * Read from memory to source operand buffer
 * Read from memory to destination operand buffer
@@ -30,6 +30,36 @@ The reason is that e.g. the instruction `ADD @R0, @R1` performs two memory
 reads (from `@R0` and `@R1`) and one memory write (to `@R1`). Since only one
 memory operation is possible in each clock cycle, such an instruction will
 need to be serialized and will take a total of three clock cycles.
+
+## Which upstream version
+
+The [QNICE-FPGA project](https://github.com/sy2002/QNICE-FPGA) has two
+long-lived branches that have genuinely diverged, so "the QNICE ISA" is not on
+its own a precise statement. **This repo follows `develop`, pinned to commit
+[`b1fb36c`](https://github.com/sy2002/QNICE-FPGA/tree/b1fb36c56508d1237f662f6234b3bfa4142b3432)**
+(2024-04-10, and the head of that branch ever since) — *not* the repository
+default, which is `master`.
+
+The two are not merely an older and a newer version of the same thing. `develop`
+is 567 commits ahead of `master`, while `master` carries 22 commits that are not
+on `develop` and has the later head date of the two, so choosing whichever looks
+newest gives the wrong answer. They differ where it matters here:
+`assembler/qasm.c` differs by some 300 lines, and even the instruction-set
+document is not the same file on the two branches — the link above is pinned to
+the `develop` copy.
+
+`develop` is where the ISA this CPU implements is defined: its `vhdl/alu.vhd`
+is the reference that the flag behaviour in `src/cpu_main/sub/alu_flags.vhd`
+was checked against, and its `emulator/` is what the programs in
+[`test/`](test) were cross-checked on. The assembler that builds those
+programs has to come from there too, which is why
+[`test.yml`](.github/workflows/test.yml) checks the upstream repository out at
+that exact commit rather than at a branch name — a branch would be free to move
+under CI the moment upstream pushed to it, which is the ambiguity this section
+exists to remove. Every `test/*.rom` happens to assemble byte-identical from
+either branch's `qasm` today, so this is not a live bug — it stops a local
+checkout and CI from silently drifting apart. The trade is that an upstream
+assembler fix now has to be picked up by bumping that pin by hand.
 
 ## Documentation
 Please go to the [doc](doc) directory for more in-depth description of the
