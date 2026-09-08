@@ -35,9 +35,92 @@ need to be serialized and will take a total of three clock cycles.
 Please go to the [doc](doc) directory for more in-depth description of the
 architecture and the design.
 
+## Verification
+
+A pipelined CPU is easy to get almost right, so this design is checked in three
+independent ways, each catching what the others cannot, and each running in CI
+as its own workflow so that it can go red on its own.
+
+### A self-checking simulation suite
+
+Fourteen QNICE assembly programs in [`test/`](test) run against the CPU on every
+push. The broad one, `prog.asm`, is a self-checking instruction suite in five
+groups: flags against branching, instructions against every flag combination,
+every addressing mode of `MOVE` and `SUB`, conditional branching against every
+addressing mode, and every remaining instruction with both operands in memory —
+that last group checked differentially, each instruction against its own
+register form, which is what pins down the per-opcode decode tables.
+
+The other thirteen are narrow, each cornering one mechanism: read-after-write
+and register-bank hazards (`prog_hazard.asm`), `R15` used as an ordinary ALU
+operand (`prog_r15.asm`), self-modifying code (`prog_self_modifying.asm`), the
+early branch redirect (`prog_subroutine.asm`), flag timing (`prog_flags.asm`),
+bus response ordering (`prog_wb_mux.asm`), and so on.
+`prog_mandel_perf.asm` is a real program doing real work — a Mandelbrot sweep
+that checksums its own arithmetic — so the suite's instruction and memory-access
+mix is not purely hand-written corner cases.
+
+Three things make the suite hard to fool:
+
+* **No test infers its verdict from where the program stopped.** Each writes a
+  status word that `test/test_monitor.vhd` snoops off the data bus, so reaching
+  a `HALT` is never mistaken for passing — and every failure path is a failure
+  automatically, at no cost to the failure paths.
+* **Every run is diffed against two committed reference files**: the complete
+  log of register and memory writes, so a value that is right but lands in the
+  wrong order is caught; and a statistics file counting cycles and bus traffic,
+  so a change that keeps the CPU correct while making it slower cannot pass
+  unnoticed.
+* **`make test_slow` runs the whole suite again against a deliberately slow
+  memory model**, with stall and ACK delays on both ports. That exercises the
+  outstanding-request accounting and response-ordering paths that a
+  zero-latency memory leaves dormant — several of them are unreachable
+  otherwise.
+
+### Formal verification
+
+Thirteen modules are formally verified with SymbiYosys and the GHDL plugin:
+twelve CPU modules under [`src/`](src), plus the testbench bus multiplexer that
+the CPU's in-order response assumption rests on. That is 39 jobs — 14 bounded
+model checking, 10 k-induction, 15 cover — over 217 assertions and 109 cover
+points in [`formal/`](formal).
+
+Every elastic-pipeline building block the design is assembled from is proven
+individually, as are FETCH, ICACHE, REGISTERS, MEMORY, SEQUENCER and the
+combined DECODE/PREPARE/WRITE core. The properties are not decoration: several
+of the design's subtler invariants — pipeline flushes on a register-bank change,
+the deferred flush on a subroutine push, Wishbone request accounting across a
+redirect — are stated there, and are the tripwires that catch a narrowing or a
+silent revert which the simulation suite would let through green.
+
+### Style linting
+
+`make lint` checks all 28 VHDL files against
+[`CODING_STYLE.md`](CODING_STYLE.md) using
+[VSG](https://vhdl-style-guide.readthedocs.io/) from a pinned release. The tree
+is clean.
+
+### Where to read more
+
+[`test/README.md`](test/README.md) gives the pass criterion, both golden
+comparisons, and what each program covers, in full. [`formal/`](formal) holds
+one `.psl`/`.sby`/`.gtkw` triplet per verified module.
+
+CI runs `make test` followed by `make test_slow`, plus `make formal` and
+`make lint`, on every push to `main` and every pull request:
+[`test.yml`](.github/workflows/test.yml) builds the QNICE assembler from the
+upstream project (only `qasm` and `qasm2rom` are needed, not the whole
+toolchain) and points the Makefile at it with `ASSEMBLER=<path>`;
+[`formal.yml`](.github/workflows/formal.yml) takes SymbiYosys, Yosys with the
+GHDL plugin, GHDL, and the SMT solvers from a pinned
+[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release; and
+[`lint.yml`](.github/workflows/lint.yml) runs VSG. The two badges above are
+`test.yml` and `formal.yml`.
+
 ## Makefile
 The current makefile supports the following targets:
 * `make test`       : Run all test programs headless; this is the CI entry point
+* `make test_slow`  : Run them all against a deliberately slow memory model
 * `make check`      : Run a single test program headless
 * `make run`        : Run a single test program without the golden comparisons
 * `make sim`        : Run simulation, then open the waveform in gtkwave
@@ -51,34 +134,5 @@ The current makefile supports the following targets:
 * `make clean`      : Remove all generated files
 
 By default these assemble and run [`test/prog.asm`](test/prog.asm); pass
-`TEST=<name>` to pick one of the other programs in [`test/`](test).
-
-### Reading a simulation result
-
-`make test` exits 0 if and only if every test passed, so it can be run
-unattended. The thing that could otherwise mislead you is that **reaching
-`HALT` does not mean the test passed** — most of the test programs contain many
-`HALT` instructions, and the self-checking `prog.asm` branches to one on every
-failed sub-test.
-
-So the verdict is not inferred from where the program stopped. Each program
-states it, by writing a status word to the reserved address `0x7FFF` just before
-its final `HALT`; `test/test_monitor.vhd` reads that off the bus and ends the
-simulation with the matching exit code. A `HALT` reached without such a write —
-which is every failure `HALT` — fails the run, as does never reaching a `HALT`
-at all. On top of that, `make test` compares the log of every register and
-memory write against a committed reference copy.
-
-[`test/README.md`](test/README.md) describes both checks in full.
-
-CI runs `make test`, `make formal`, and `make lint` on every push to `main` and
-every pull request, as three independent workflows so that each can go red on
-its own: [`test.yml`](.github/workflows/test.yml) builds the QNICE assembler
-from the upstream project (only `qasm` and `qasm2rom` are needed, not the whole
-toolchain) and points the Makefile at it with `ASSEMBLER=<path>`;
-[`formal.yml`](.github/workflows/formal.yml) takes SymbiYosys, Yosys with the
-GHDL plugin, GHDL, and the SMT solvers from a pinned
-[OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) release; and
-[`lint.yml`](.github/workflows/lint.yml) runs VSG from a pinned release. The two
-badges above are `test.yml` and `formal.yml`.
-
+`TEST=<name>` to pick one of the other programs in [`test/`](test). Every one of
+them exits 0 if and only if the test passed, so they can be run unattended.
