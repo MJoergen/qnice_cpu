@@ -123,6 +123,26 @@ jobs:
       - name: Run the test suite against a slow memory
         run: make test_slow ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
 
+      # Both runs above compare this CPU against itself: every test/*.golden
+      # file was recorded from a passing run of this implementation, so an
+      # answer that has been wrong since the goldens were written passes them
+      # green forever. This step is the differential half -- it builds the
+      # reference emulator from the SAME pinned commit checked out above and
+      # diffs the final contents of RAM, 0x0000-0x7FFF, against what this CPU
+      # left behind. See test/README.md.
+      #
+      # It is predictable here for three reasons. The emulator is built without
+      # USE_TIMER/USE_SD, so it spawns no threads and nothing depends on host
+      # timing (see the Makefile's $(EMULATOR) rule). It re-runs the
+      # simulations itself rather than reusing artifacts from the steps above,
+      # so it cannot compare a stale .writes log. And the Makefile's QNICE_REF
+      # must name the same commit as the "ref:" above: actions/checkout leaves
+      # a shallow clone containing only that commit, so a drift between the two
+      # fails loudly with "fatal: not a tree object" rather than quietly
+      # cross-checking against the wrong reference.
+      - name: Cross-check every program against the reference emulator
+        run: make crosscheck ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
+
       # On a golden-file mismatch the diff is already in the job log, but the
       # full logs make it much easier to see what moved.
       - name: Upload the write logs

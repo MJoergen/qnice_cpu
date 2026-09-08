@@ -15,6 +15,7 @@ still be VHDL-2008 that Vivado will infer a RAM from.
 ```
 make test                      # run every test program headless; this is the CI entry point
 make test_slow                 # the same programs against a deliberately slow memory
+make crosscheck                # diff every program against the reference emulator
 make check TEST=prog_r15       # run just one of them, same checks
 make run   TEST=prog_r15       # run it without the writes-log comparison
 make sim                       # assemble test/prog.asm, simulate, open gtkwave
@@ -630,3 +631,80 @@ One caveat on the instruction count: fetches are speculative, so a flush
 discards work that has already been requested. The instruction-request count
 therefore includes fetches that were never executed, and it rises when flushes
 become more frequent — which is exactly what makes it worth watching.
+
+## Cross-checking against the reference emulator
+
+Everything above compares this CPU against **itself**. The `.writes` and
+`.stats` golden files were recorded from a passing run of this implementation,
+so they catch a regression but cannot say whether the CPU agrees with upstream
+QNICE — a wrong answer that has been wrong since the golden files were written
+passes them green forever.
+
+`make crosscheck` closes that gap. It runs each program a second time on the
+reference **emulator** from the QNICE-FPGA project — built from the commit
+pinned in [`test.yml`](../.github/workflows/test.yml), see the "Which upstream
+version" section of the [top-level README](../README.md) — and diffs the final
+contents of RAM against what this CPU left behind.
+
+```
+make crosscheck                # every comparable program
+make crosscheck TESTS=prog     # just one, the ordinary make way
+```
+
+**Current status: all 14 programs in `TESTS` leave RAM bit-identical**, over
+all 32768 words of `0x0000`-`0x7FFF`, with four excused words in `prog.asm`
+(below).
+
+### What is compared, and what is not
+
+Memory, not registers. `src/debug.vhd` logs a register write as
+`to register F` — the four-bit register number, with no record of which of the
+256 banks was selected at the time — so after the first `INCRB` the log no
+longer identifies the location that was written and a final register file
+cannot be reconstructed from it. Widening the log would move every
+`.writes.golden`, and memory already covers what matters: every program stores
+its results and its status word there.
+
+The window is `0x0000`-`0x7FFF` because that is the common ground. Above
+`0x8000` the emulator decodes memory-mapped I/O and `system.vhd` puts the EAE,
+so the two are not describing the same thing.
+
+The QNICE-side final image needs no RTL change: it is the assembler's own
+`.out` file — the initial memory image, in the same `0xADDR 0xVALUE` format the
+emulator's `LOAD` reads — with every memory write from the run's `.writes` log
+replayed over it in order.
+
+And this is **final state, not an execution trace**. A value that is briefly
+wrong and then overwritten is invisible to it. That is not a guess: corrupting
+the *first* of `prog_simple.asm`'s six memory writes changes nothing, because a
+later write to the same address wins, while corrupting the *last* one is caught
+and reported as `0x7FFF cpu=0x0001 emulator=0x0000`. Cycle counts, bus traffic
+and write *order* are likewise out of scope — that is what the golden files are
+for. The two checks are complementary and neither subsumes the other.
+
+### The one excused range
+
+`prog.asm`'s `PTR_SR` group uses `R14` — the Status Register itself — as an
+auto-modifying memory pointer. Bits 5..0 of `R14` are rewritten by the flags of
+every instruction, so the pointer moves under its own program and the address a
+store lands on depends on flag details the two implementations are not obliged
+to share. The program's own comment says as much: that group checks
+**completion, not the value**. Four words in the `D_PTR_LOW`/`D_PTR_MID`
+scratch area differ, and `ALLOWED_DIFFS` in
+[`crosscheck.py`](crosscheck.py) excuses exactly that window. Everything else in
+`prog.asm` — the other 32764 words — matches.
+
+Two programs are skipped, both because they never halt by design:
+`prog_poll.asm` and `prog_poll_reg.asm`.
+
+### One thing this established
+
+`test/eae.vhd` is adapted from upstream rather than shared with it, and
+`prog_eae.asm`'s `DIVS` expectations follow `numeric_std`'s `mod` semantics,
+where the remainder takes the sign of the divisor. Its one signed-division
+vector divides a negative dividend (`0xD431` = −11215 by `0x3039` = 12345) and
+expects `RESULT_HI` = `0x046A` = 1130 with `RESULT_LO` = 0 — that is VHDL's
+`mod` for the remainder paired with its truncating `/` for the quotient, and a
+C-style `%` would have given −11215 instead. The emulator agrees, so the two
+devices match on that case. Note it is one vector: a negative *divisor* is not covered
+by the program, and so is not covered by this either.

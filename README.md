@@ -67,9 +67,9 @@ architecture and the design.
 
 ## Verification
 
-A pipelined CPU is easy to get almost right, so this design is checked in three
-independent ways, each catching what the others cannot, and each running in CI
-as its own workflow so that it can go red on its own.
+A pipelined CPU is easy to get almost right, so this design is checked in four
+independent ways, each catching what the others cannot, and all of them running
+in CI on every push.
 
 ### A self-checking simulation suite
 
@@ -107,6 +107,33 @@ Three things make the suite hard to fool:
   zero-latency memory leaves dormant — several of them are unreachable
   otherwise.
 
+### Differential testing against the reference emulator
+
+Everything above compares this CPU against **itself**: the golden files were
+recorded from a passing run of this implementation, so an answer that has been
+wrong since they were written passes them green forever. `make crosscheck`
+closes that gap. It runs every program a second time on the **reference
+emulator** from the QNICE-FPGA project, built from the commit pinned above, and
+diffs the final contents of RAM against what this CPU left behind.
+
+**All fourteen programs leave memory bit-identical** — every one of the 32768
+words of `0x0000`-`0x7FFF`, from the instruction suite to a 170000-cycle
+Mandelbrot sweep.
+
+The sole exception is four words in `prog.asm`, and they are excused for a
+reason the program already documented before this check existed: its `PTR_SR`
+group uses `R14` — the Status Register itself — as an auto-modifying memory
+pointer, so the address a store lands on depends on flag details the two
+implementations are not obliged to share. That group checks completion, not
+values. The harness found exactly those four words and nothing else.
+
+Two caveats worth stating plainly. This compares **final architectural state,
+not an execution trace**, so a value that is briefly wrong and then overwritten
+is invisible to it — fault injection confirms the boundary in both directions.
+And it compares memory, not registers, because the write log records a register
+number without its bank. Cycle counts and write *order* stay the golden files'
+job; the two checks are complementary and neither subsumes the other.
+
 ### Formal verification
 
 Thirteen modules are formally verified with SymbiYosys and the GHDL plugin:
@@ -136,8 +163,8 @@ is clean.
 comparisons, and what each program covers, in full. [`formal/`](formal) holds
 one `.psl`/`.sby`/`.gtkw` triplet per verified module.
 
-CI runs `make test` followed by `make test_slow`, plus `make formal` and
-`make lint`, on every push to `main` and every pull request:
+CI runs `make test`, `make test_slow` and `make crosscheck`, plus `make formal`
+and `make lint`, on every push to `main` and every pull request:
 [`test.yml`](.github/workflows/test.yml) builds the QNICE assembler from the
 upstream project (only `qasm` and `qasm2rom` are needed, not the whole
 toolchain) and points the Makefile at it with `ASSEMBLER=<path>`;
@@ -151,6 +178,7 @@ GHDL plugin, GHDL, and the SMT solvers from a pinned
 The current makefile supports the following targets:
 * `make test`       : Run all test programs headless; this is the CI entry point
 * `make test_slow`  : Run them all against a deliberately slow memory model
+* `make crosscheck` : Diff every program against the reference emulator
 * `make check`      : Run a single test program headless
 * `make run`        : Run a single test program without the golden comparisons
 * `make sim`        : Run simulation, then open the waveform in gtkwave

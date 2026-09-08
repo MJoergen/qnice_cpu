@@ -9,6 +9,11 @@ test/*.out
 test/*.writes
 # Per-run statistics; the committed reference copies are test/*.stats.golden
 test/*.stats
+# "make crosscheck" work directory: the reference emulator's sources extracted
+# at the pinned upstream commit, the binary built from them, and the memory
+# dumps it produces. All generated -- the harness itself is test/crosscheck.py,
+# which IS committed.
+test/crosscheck/
 
 # LaTeX intermediates from "make diagrams" (the .tex files listed in the
 # Makefile's TIMINGS and BLOCK_DIAGRAMS). The rule removes these itself; these

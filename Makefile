@@ -130,6 +130,7 @@ help:
 	@echo "  make sim        : Run simulation and open the waveform viewer"
 	@echo "  make test       : Run all test programs headless, for CI"
 	@echo "  make test_slow  : Run all test programs against a slow memory model"
+	@echo "  make crosscheck : Diff every program against the reference emulator"
 	@echo "  make check      : Run one test program headless"
 	@echo "  make golden     : Regenerate the test/*.{writes,stats}.golden files"
 	@echo "  make system.bit : Run synthesis using Vivado"
@@ -245,6 +246,82 @@ golden:
 
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
+
+################################################
+## Differential test against the reference emulator
+################################################
+
+# Everything under "make test" compares this CPU against itself: the .writes
+# and .stats golden files were recorded from a passing run of this very
+# implementation, so they catch a regression but cannot say whether the CPU
+# agrees with upstream QNICE. This target is the other half -- it runs each
+# program on the reference emulator from the QNICE-FPGA project and diffs the
+# final contents of RAM against what this CPU left behind.
+#
+# test/crosscheck.py carries the design: what is compared, why it is memory
+# rather than registers, and the one documented range where the two are not
+# required to agree.
+
+# Where the upstream checkout lives. Derived from ASSEMBLER so that overriding
+# that one path -- as CI does -- moves both.
+QNICE_FPGA ?= $(patsubst %/assembler/asm,%,$(ASSEMBLER))
+
+# The upstream commit the emulator is built from. Keep this in step with the
+# "ref:" in .github/workflows/test.yml; the point of both is that "the QNICE
+# ISA" names two diverged branches unless a commit is given. See README.md's
+# "Which upstream version" section.
+QNICE_REF ?= b1fb36c56508d1237f662f6234b3bfa4142b3432
+
+CROSSCHECK_DIR = test/crosscheck
+EMULATOR       = $(CROSSCHECK_DIR)/emulator/qnice
+
+# Build the emulator from the pinned commit, into a work directory of our own.
+# Deliberately NOT built in place in $(QNICE_FPGA): that is somebody else's
+# checkout, it may sit on a different commit, and this must not write to it.
+#
+# Three things the upstream build script cannot do for us here.
+#
+# dist_kit/sysdef.h is generated rather than tracked (upstream removed the
+# generated files from the repository), so it has to be regenerated from
+# monitor/sysdef.asm with upstream's own perl script -- at the same pinned
+# commit, since it defines the EAE addresses the test programs use.
+#
+# -fcommon is required: the sources predate GCC 10, whose -fno-common default
+# turns their tentative definitions into "multiple definition of uart_status"
+# at link time.
+#
+# And the feature set is cut down to what a differential test needs, which is
+# narrower than what upstream's emulator/make.bash builds. USE_TIMER is the one
+# that matters: it spawns pthreads that raise interrupts asynchronously, so
+# leaving it in makes the reference side of this comparison depend on host
+# timing. No test program here writes the timer registers, so no thread is ever
+# actually created -- but "no thread is created today" is a worse guarantee
+# than "no thread can be created", especially on a CI runner. USE_SD goes with
+# it (no disk image is attached), and with both gone so does -lpthread. The
+# EAE, which prog_eae.asm and prog_mandel_perf.asm need, is unconditional in
+# qnice.c and is unaffected. Verified: the results are identical either way.
+$(EMULATOR):
+	@mkdir -p $(CROSSCHECK_DIR)
+	git -C $(QNICE_FPGA) archive $(QNICE_REF) \
+	   emulator monitor/sysdef.asm monitor/sysdef2header.pl | tar -x -C $(CROSSCHECK_DIR)
+	@mkdir -p $(CROSSCHECK_DIR)/dist_kit
+	cd $(CROSSCHECK_DIR)/monitor && perl sysdef2header.pl sysdef.asm ../dist_kit/sysdef.h
+	cd $(CROSSCHECK_DIR)/emulator && cc qnice.c uart.c linenoise.c \
+	   -O3 -fcommon -DUSE_UART -DUSE_SYSINFO \
+	   -UUSE_SD -UUSE_TIMER -UUSE_VGA -UUSE_IDE -U__EMSCRIPTEN__ \
+	   -o qnice -Wno-unused-result
+
+# Narrow the scope the ordinary make way, by overriding TESTS:
+#   make crosscheck TESTS=prog
+.PHONY: crosscheck
+crosscheck: $(EMULATOR)
+	@for t in $(TESTS); do \
+	   echo "=== $$t ==="; \
+	   $(MAKE) --no-print-directory run TEST=$$t > $(CROSSCHECK_DIR)/$$t.runlog 2>&1 \
+	      || { echo "simulation failed, see $(CROSSCHECK_DIR)/$$t.runlog"; exit 1; }; \
+	done
+	python3 test/crosscheck.py --emulator $(EMULATOR) $(TESTS)
+
 
 # test/prog_mandel_stats.asm is two preprocessor directives that #include
 # test/prog_mandel_perf.asm; the assembler resolves that, but the rule above
@@ -465,5 +542,6 @@ clean:
 	rm -rf tight_setup_hold_pins.txt
 	rm -rf system.edif cpu.edif
 	rm -rf .Xil
+	rm -rf $(CROSSCHECK_DIR)
 	make -C formal clean
 
