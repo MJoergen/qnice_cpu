@@ -1,0 +1,118 @@
+Make upstream's register file simulate under GHDL, and give it the same
+power-up state as the two implementations it is being compared against.
+
+Applied by "make crosscheck_rtl" to the copy of QNICE-FPGA's vhdl/ that it
+extracts at the pinned commit (the Makefile's QNICE_REF). Nothing here is
+committed upstream, nothing here touches anybody's checkout, and this is the
+ONLY upstream file that is modified -- qnice_cpu.vhd, alu.vhd, alu_shifter.vhd,
+cpu_constants.vhd and EAE.vhd are all analysed exactly as they ship. If the
+patch stops applying, upstream has moved and this needs re-deriving rather than
+forcing; "patch" fails the build loudly, which is the intent.
+
+Three changes, none of which alters what the register file does once the
+simulation is running.
+
+1. Zero the register arrays at elaboration.
+
+   This is the one change that is about the comparison rather than about GHDL.
+   Upstream's register file has no reset -- R0..R12 come up undefined -- while
+   this repo's CPU brings them up at zero (src/sub/dp_ram.vhd starts an
+   uninitialised array at zero) and so does the emulator (qnice.c's
+   reset_machine() zeroes gbl$registers explicitly). The QNICE ISA does not
+   define power-up register contents, so all three are within their rights;
+   but a differential test has to start the two sides in the same
+   architectural state, exactly as it loads them the same program.
+   test/prog_simple.asm is the program that notices: it opens with
+   "MOVE R2, R6 / MOVE R3, @R6" on registers it never initialises, which is a
+   store to address 0 on a machine whose registers start at zero and a store to
+   nowhere in particular on one whose registers start at 'U'.
+
+2. Give sel_rbank_i an initial value.
+
+   Every VHDL process runs once at time zero, reading the initial values of its
+   inputs. sel_rbank_i is a plain "integer", so that initial value is
+   integer'left, and the read processes below index the register array with
+   "sel_rbank_i + <register number>" -- which overflows the integer type before
+   it is ever used as an index. GHDL checks that and aborts the run at 0 ns.
+
+3. Index the read processes from read_addrN rather than from read_addrN_i.
+
+   read_addrN_i and is_upper_register_rdN are separate signals, computed from
+   read_addrN by concurrent assignments, so within a delta cycle they lag it:
+   the process can select the "special register" branch on the NEW read_addrN
+   while indexing with the OLD read_addrN_i. That is transient and harmless in
+   hardware -- the CPU samples read_dataN on a clock edge, long after the
+   network has settled -- but the stale index is out of the (13 to 15) array's
+   bounds, and GHDL aborts on it rather than letting it settle. Reading the
+   address signal directly inside the process makes the branch and the index
+   consistent by construction; the steady-state function is unchanged, and so
+   is the synthesised result. is_upper_register_rd1/rd2 become unused, and
+   upstream's bit-pattern trick for "is this 8..12" is written out as the
+   comparison it stands for.
+
+--- a/vhdl/register_file.vhd
++++ b/vhdl/register_file.vhd
+@@ -74,14 +74,14 @@
+ -- model the lower register bank (windowed)
+ type rega is array (0 to 8*SHADOW_REGFILE_SIZE-1) of std_logic_vector(15 downto 0);
+ 
+-signal LowerRegisterWindow    : rega;
+-signal UpperRegisters         : upper_register_array;
+-signal UpperRegisters_Org     : upper_register_array;
+-signal SpecialRegisters       : special_register_array;
+-signal SpecialRegisters_Org   : special_register_array;
++signal LowerRegisterWindow    : rega := (others => (others => '0'));
++signal UpperRegisters         : upper_register_array := (others => (others => '0'));
++signal UpperRegisters_Org     : upper_register_array := (others => (others => '0'));
++signal SpecialRegisters       : special_register_array := (others => (others => '0'));
++signal SpecialRegisters_Org   : special_register_array := (others => (others => '0'));
+ 
+ signal sel_rbank_mul8         : std_logic_vector(10 downto 0);
+-signal sel_rbank_i            : integer;
++signal sel_rbank_i            : integer := 0;
+ signal write_addr_i           : integer;
+ signal read_addr1_i           : integer;
+ signal read_addr2_i           : integer;
+@@ -205,25 +205,31 @@
+       end if;
+    end process;
+    
+-   read_register1 : process(sel_rbank_i, read_addr1, read_addr1_i, is_upper_register_rd1, LowerRegisterWindow, UpperRegisters, SpecialRegisters)
++   read_register1 : process(sel_rbank_i, read_addr1, LowerRegisterWindow, UpperRegisters, SpecialRegisters)
++   variable
++      read_addr1_v : integer;
+    begin
++      read_addr1_v := conv_integer(read_addr1);
+       if read_addr1(3) = '0' then
+-         read_data1 <= LowerRegisterWindow(sel_rbank_i + read_addr1_i);
+-      elsif is_upper_register_rd1 then
+-         read_data1 <= UpperRegisters(read_addr1_i);
++         read_data1 <= LowerRegisterWindow(sel_rbank_i + read_addr1_v);
++      elsif read_addr1_v < 13 then
++         read_data1 <= UpperRegisters(read_addr1_v);
+       else
+-         read_data1 <= SpecialRegisters(read_addr1_i); 
+-      end if;   
++         read_data1 <= SpecialRegisters(read_addr1_v);
++      end if;
+    end process;
+    
+-   read_register2 : process(sel_rbank_i, read_addr2, read_addr2_i, is_upper_register_rd2, LowerRegisterWindow, UpperRegisters, SpecialRegisters)
++   read_register2 : process(sel_rbank_i, read_addr2, LowerRegisterWindow, UpperRegisters, SpecialRegisters)
++   variable
++      read_addr2_v : integer;
+    begin
++      read_addr2_v := conv_integer(read_addr2);
+       if read_addr2(3) = '0' then
+-         read_data2 <= LowerRegisterWindow(sel_rbank_i + read_addr2_i);
+-      elsif is_upper_register_rd2 then
+-         read_data2 <= UpperRegisters(read_addr2_i);
++         read_data2 <= LowerRegisterWindow(sel_rbank_i + read_addr2_v);
++      elsif read_addr2_v < 13 then
++         read_data2 <= UpperRegisters(read_addr2_v);
+       else
+-         read_data2 <= SpecialRegisters(read_addr2_i);
++         read_data2 <= SpecialRegisters(read_addr2_v);
+       end if;
+    end process;   
+ 

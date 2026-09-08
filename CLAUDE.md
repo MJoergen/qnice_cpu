@@ -32,6 +32,8 @@ make test_slow                        # same, against a deliberately slow memory
 make check TEST=prog_r15              # run one test program headless (sim + golden writes diff)
 make run   TEST=prog_r15              # same, without the golden writes diff
 make golden                           # regenerate every test/*.{writes,stats}.golden file
+make crosscheck                       # diff every program against upstream's C emulator
+make crosscheck_rtl                   # diff every program against upstream's own VHDL CPU
 make sim                              # assemble test/prog.asm, run GHDL simulation, open gtkwave
 make sim TEST=prog_interleave         # run a different test program (test/<name>.asm)
 make sim REGISTER_BANK_WIDTH=8        # override register bank address width (default 8)
@@ -106,9 +108,52 @@ retire pulse from WRITE would be one or two instructions too late), and clears t
 pipeline flush, since a branch retiring can discard an already-accepted `HALT` —
 `test/prog_pipeline.asm` branches over twelve `HALT`s used as padding and depends on this.
 
+### Differential testing against upstream
+
+`make test` and `make test_slow` compare this CPU against **itself**: every `test/*.golden` file
+was recorded from a passing run of this implementation, so an answer that has been wrong since the
+goldens were written passes them green forever. Two targets close that gap by running each program
+on an upstream implementation and diffing the final contents of RAM, `0x0000`-`0x7FFF`, against
+what this CPU left behind. `make crosscheck` uses QNICE-FPGA's C emulator; `make crosscheck_rtl`
+uses **upstream's own CPU**, `vhdl/qnice_cpu.vhd`, under GHDL. Both build their reference from the
+Makefile's `QNICE_REF` — the same commit `.github/workflows/test.yml` pins for the assembler — into
+`test/crosscheck/`, which is generated and gitignored. The harness is `test/crosscheck.py`, shared
+by the two via `--reference emulator|rtl`; its header carries the design.
+
+**Running both is not redundancy, it is the point.** The three programs that fail are different in
+each direction, and every one of them is a place where the two upstream implementations disagree
+with *each other*, so a single reference would have made each look like a settled question. The
+two EAE programs fail on the emulator (DIVS remainder sign; when the EAE recomputes) and pass on
+the RTL, which turns an argument from reading upstream's source into an end-to-end result.
+`prog_r15` fails on the RTL: upstream's `cs_decode` latches both operands at once, before the
+source `@R15++` post-increment, so `ADD 0x0002, R15` reads its destination one word low; the
+emulator reads the destination after the source, and this CPU follows the emulator. Each is
+recorded in `KNOWN_DIVERGENCE` and **asserted** — if a divergence disappears the harness fails,
+rather than quietly passing.
+
+The RTL reference runs in `test/tb_upstream.vhd`, which is ours and is linted with everything else.
+It gives upstream's CPU the smallest system these programs need — one writable 32 kW RAM over
+`0x0000`-`0x7FFF` plus the EAE, with the RAM modelled on upstream's own `block_ram.vhd` — rather
+than upstream's `env1.vhd`, whose map puts ROM where every program here is linked. Three things
+are load-bearing. Upstream's sources are analysed into a **GHDL library of their own**
+(`test/crosscheck/work`), because upstream's `cpu_constants.vhd` and this repo's
+`src/cpu_constants.vhd` declare packages of the same name. **`-fsynopsys` is required** and is
+upstream's choice, not ours: `qnice_cpu.vhd` and `register_file.vhd` use `ieee.std_logic_arith`
+and `ieee.std_logic_unsigned` — it applies only to that separate analysis, and nothing under
+`src/` is touched by it. And exactly one upstream file is modified, by `test/upstream.patch`: two
+hunks make the register file simulate under GHDL at all (an `integer` signal that overflows on the
+initial process run at time 0, and a delta-cycle-stale array index that goes out of bounds), and
+one zeroes its register arrays so that the reference powers up in the same architectural state
+this CPU and the emulator do. `patch` fails the build loudly if it stops applying, which is what
+should happen when `QNICE_REF` moves.
+
+The upstream CPU's cycle count is reported per program and checked against nothing — it is a
+multi-cycle FSM, so `prog.asm` costs it 22333 cycles against this CPU's 15581 and
+`prog_mandel_perf.asm` 281583 against 170041.
+
 ### Linting
 
-`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 28
+`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 29
 VHDL files with the repo's `vsg.yml`, which maps CODING_STYLE.md onto VSG's rule set. CI runs it
 too, in its own workflow [.github/workflows/lint.yml](.github/workflows/lint.yml), from a **pinned**
 vsg release — the pin is load-bearing, because VSG adds and re-scopes rules between releases and
@@ -758,7 +803,9 @@ has Vivado.
 - `src/cpu.vhd` — top-level entity tying FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN together.
 - `test/` — testbench (`tb_cpu.vhd`), memory models, the pass/fail monitor (`test_monitor.vhd`),
   and `.asm` test programs. See [test/README.md](test/README.md) for how to tell a passing run
-  from a failing one. `test/eae.vhd` is a simulation-only arithmetic peripheral,
+  from a failing one. `test/tb_upstream.vhd`, `test/upstream.patch` and `test/crosscheck.py`
+  belong to the differential tests instead — see
+  [Differential testing against upstream](#differential-testing-against-upstream) above. `test/eae.vhd` is a simulation-only arithmetic peripheral,
   `test/wb_dp_mem.vhd` the memory model whose latency generics drive `make test_slow`, and
   `test/wb_mux.vhd` the order-restoring data bus multiplexer between them,
   and `test/prog_mandel_stats.asm` the instrumented build of

@@ -10,6 +10,18 @@
 ; file's R15 copy is only written when an instruction targets R15. Reading R15
 ; as an operand therefore has to be special-cased in PREPARE.
 ;
+; UPSTREAM'S TWO IMPLEMENTATIONS DISAGREE ABOUT T3, and this program follows
+; the emulator. "ADD 0x0002, R15" reads R15 as its DESTINATION while its source
+; is the immediate @R15++. qnice.c reads the destination after the source, so
+; R15 is already past the immediate; upstream's vhdl/qnice_cpu.vhd latches both
+; operands together in cs_decode, before that post-increment, so it reads one
+; word low and the jump lands on the padding HALT below E_T3. The ISA
+; documentation does not settle the ordering. "make crosscheck_rtl" therefore
+; expects this program to FAIL on upstream's CPU, and says so; see
+; KNOWN_DIVERGENCE in test/crosscheck.py. T3 is the only sub-test affected:
+; replacing it with an equivalent "ABRA, 1" makes the whole program pass there,
+; so T1, T2 and T4 -- including reading R15 as a SOURCE, and @R15 -- agree.
+;
 ; Every failed sub-test branches to its own HALT. Success falls through to EXIT.
 
                 .ORG 0x0000

@@ -10,7 +10,7 @@ jobs:
   test:
     name: Simulate all test programs
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Check out the CPU
@@ -142,6 +142,21 @@ jobs:
       # cross-checking against the wrong reference.
       - name: Cross-check every program against the reference emulator
         run: make crosscheck ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
+
+      # And the same again against the OTHER implementation upstream ships:
+      # its own CPU, vhdl/qnice_cpu.vhd, run under GHDL in test/tb_upstream.vhd.
+      # This is not a second opinion on the step above -- the two references
+      # disagree with each other, and every program that fails one passes the
+      # other, so running only one would leave each of those cases looking like
+      # a settled question. See test/README.md.
+      #
+      # It needs nothing this job does not already have: the same pinned
+      # checkout supplies the RTL, and GHDL is installed above. The one extra
+      # tool is "patch", which is on every GitHub-hosted runner image; the one
+      # file it applies to is upstream's register file, and test/upstream.patch
+      # carries the reasons.
+      - name: Cross-check every program against the upstream RTL CPU
+        run: make crosscheck_rtl ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
 
       # On a golden-file mismatch the diff is already in the job log, but the
       # full logs make it much easier to see what moved.

@@ -37,6 +37,13 @@ TEST_SOURCES += test/eae.vhd
 TEST_SOURCES += test/wb_mux.vhd
 TEST_SOURCES += test/system.vhd
 
+# The testbench that runs the same programs on upstream's own CPU, and the one
+# patch this repository applies to upstream source. Both belong to
+# "make crosscheck_rtl" -- see that section below -- and are named here so that
+# "make lint" holds the testbench to the same style rules as everything else.
+UPSTREAM_TB    = test/tb_upstream.vhd
+UPSTREAM_PATCH = test/upstream.patch
+
 TEST ?= prog
 REGISTER_BANK_WIDTH ?= 8
 
@@ -127,20 +134,21 @@ TOP = system
 help:
 	@echo
 	@echo "Possible targets:"
-	@echo "  make sim        : Run simulation and open the waveform viewer"
-	@echo "  make test       : Run all test programs headless, for CI"
-	@echo "  make test_slow  : Run all test programs against a slow memory model"
-	@echo "  make crosscheck : Diff every program against the reference emulator"
-	@echo "  make check      : Run one test program headless"
-	@echo "  make golden     : Regenerate the test/*.{writes,stats}.golden files"
-	@echo "  make system.bit : Run synthesis using Vivado"
-	@echo "  make utilization: Refresh the utilization numbers in doc/README.md (needs Vivado)"
-	@echo "  make synth      : Run synthesis using yosys"
-	@echo "  make diagrams   : Re-render every .tex diagram to .png (needs pdflatex)"
-	@echo "  make formal     : Run formal verification"
-	@echo "  make lint       : Run VSG style-guide linting on all source files"
-	@echo "  make clean      : Remove all generated files"
-	@echo "  make help       : This message"
+	@echo "  make sim            : Run simulation and open the waveform viewer"
+	@echo "  make test           : Run all test programs headless, for CI"
+	@echo "  make test_slow      : Run all test programs against a slow memory model"
+	@echo "  make crosscheck     : Diff every program against the reference emulator"
+	@echo "  make crosscheck_rtl : Diff every program against the upstream RTL CPU"
+	@echo "  make check          : Run one test program headless"
+	@echo "  make golden         : Regenerate the test/*.{writes,stats}.golden files"
+	@echo "  make system.bit     : Run synthesis using Vivado"
+	@echo "  make utilization    : Refresh the utilization numbers in doc/README.md (needs Vivado)"
+	@echo "  make synth          : Run synthesis using yosys"
+	@echo "  make diagrams       : Re-render every .tex diagram to .png (needs pdflatex)"
+	@echo "  make formal         : Run formal verification"
+	@echo "  make lint           : Run VSG style-guide linting on all source files"
+	@echo "  make clean          : Remove all generated files"
+	@echo "  make help           : This message"
 	@echo "Optional arguments:"
 	@echo "  TEST=<filename>           : Specify assembly source file. Defaults to prog."
 	@echo "  REGISTER_BANK_WIDTH=<val> : Number of bits in register bank number. Defaults to 8."
@@ -247,6 +255,14 @@ golden:
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
 
+# test/prog_mandel_stats.asm is two preprocessor directives that #include
+# test/prog_mandel_perf.asm; the assembler resolves that, but the rule above
+# lists only the named source, so make cannot see it. Without this an edit to
+# the benchmark silently fails to reach the instrumented build, and the numbers
+# it reports describe the previous version of the program.
+test/prog_mandel_stats.rom: test/prog_mandel_perf.asm
+
+
 ################################################
 ## Differential test against the reference emulator
 ################################################
@@ -323,12 +339,75 @@ crosscheck: $(EMULATOR)
 	python3 test/crosscheck.py --emulator $(EMULATOR) $(TESTS)
 
 
-# test/prog_mandel_stats.asm is two preprocessor directives that #include
-# test/prog_mandel_perf.asm; the assembler resolves that, but the rule above
-# lists only the named source, so make cannot see it. Without this an edit to
-# the benchmark silently fails to reach the instrumented build, and the numbers
-# it reports describe the previous version of the program.
-test/prog_mandel_stats.rom: test/prog_mandel_perf.asm
+################################################
+## Differential test against the upstream RTL
+################################################
+
+# The other half of the differential test. "make crosscheck" above compares
+# this CPU against QNICE-FPGA's C emulator; this target compares it against the
+# OTHER reference the same project ships, its own VHDL CPU -- vhdl/qnice_cpu.vhd,
+# a multi-cycle FSM -- running the same programs in a testbench of ours.
+#
+# The two references are not redundant. Where they disagree with each other,
+# and they do in three places today, it is the RTL that this CPU has to match,
+# because the RTL is what QNICE-FPGA synthesises; the emulator alone could not
+# have told us that. test/crosscheck.py's KNOWN_DIVERGENCE records each case
+# against the reference it applies to, and test/tb_upstream.vhd's header
+# describes the system built around upstream's CPU.
+
+UPSTREAM_DIR   = $(CROSSCHECK_DIR)/vhdl
+UPSTREAM_WORK  = $(CROSSCHECK_DIR)/work
+UPSTREAM_STAMP = $(CROSSCHECK_DIR)/upstream.stamp
+
+# Upstream's CPU and everything below it, in analysis order. sim/dev_int_globals.vhd
+# is upstream's own simulation copy of the env1_globals package; register_file.vhd
+# needs exactly one constant from it (SHADOW_REGFILE_SIZE), and taking that copy
+# rather than one of the two board-specific ones avoids dragging in qnice_tools
+# and a board's memory map for it.
+UPSTREAM_SOURCES  = $(UPSTREAM_DIR)/sim/dev_int_globals.vhd
+UPSTREAM_SOURCES += $(UPSTREAM_DIR)/cpu_constants.vhd
+UPSTREAM_SOURCES += $(UPSTREAM_DIR)/alu_shifter.vhd
+UPSTREAM_SOURCES += $(UPSTREAM_DIR)/alu.vhd
+UPSTREAM_SOURCES += $(UPSTREAM_DIR)/register_file.vhd
+UPSTREAM_SOURCES += $(UPSTREAM_DIR)/qnice_cpu.vhd
+UPSTREAM_SOURCES += $(UPSTREAM_DIR)/EAE.vhd
+
+# Extract upstream's vhdl/ at the pinned commit, patch it, and analyse it into
+# a GHDL library of its own.
+#
+# The separate --workdir is not tidiness: upstream's cpu_constants.vhd and this
+# repo's src/cpu_constants.vhd declare packages of the same name, so the two
+# designs cannot share one work library. Analysing them apart also means the
+# ordinary "make build" never sees a line of upstream code.
+#
+# -fsynopsys is required and is upstream's choice, not ours: qnice_cpu.vhd and
+# register_file.vhd use ieee.std_logic_arith and ieee.std_logic_unsigned, which
+# GHDL refuses to elaborate without it. It is passed to "ghdl -r" as well, by
+# test/crosscheck.py, since that re-elaborates.
+#
+# The patch is the one modification made to upstream source anywhere in this
+# repository, it touches one file, and every reason for it is written in the
+# patch's own header. "patch" fails the build if it no longer applies, which is
+# what should happen when the pinned commit moves.
+$(UPSTREAM_STAMP): $(UPSTREAM_TB) $(UPSTREAM_PATCH) Makefile
+	@mkdir -p $(CROSSCHECK_DIR)
+	rm -rf $(UPSTREAM_DIR) $(UPSTREAM_WORK)
+	git -C $(QNICE_FPGA) archive $(QNICE_REF) vhdl | tar -x -C $(CROSSCHECK_DIR)
+	patch -p1 -d $(CROSSCHECK_DIR) < $(UPSTREAM_PATCH)
+	@mkdir -p $(UPSTREAM_WORK)
+	ghdl -a --std=08 -fsynopsys --workdir=$(UPSTREAM_WORK) $(UPSTREAM_SOURCES) $(UPSTREAM_TB)
+	touch $@
+
+# Narrow the scope the ordinary make way, by overriding TESTS:
+#   make crosscheck_rtl TESTS=prog
+.PHONY: crosscheck_rtl
+crosscheck_rtl: $(UPSTREAM_STAMP)
+	@for t in $(TESTS); do \
+	   echo "=== $$t ==="; \
+	   $(MAKE) --no-print-directory run TEST=$$t > $(CROSSCHECK_DIR)/$$t.runlog 2>&1 \
+	      || { echo "simulation failed, see $(CROSSCHECK_DIR)/$$t.runlog"; exit 1; }; \
+	done
+	python3 test/crosscheck.py --reference rtl --workdir $(UPSTREAM_WORK) $(TESTS)
 
 
 ################################################
@@ -511,8 +590,8 @@ formal:
 # picture. Exits non-zero if any violation is found, same as "make check"/
 # "make test".
 .PHONY: lint
-lint: $(SOURCES) $(TEST_SOURCES)
-	vsg -c vsg.yml -ap -f $(SOURCES) $(TEST_SOURCES)
+lint: $(SOURCES) $(TEST_SOURCES) $(UPSTREAM_TB)
+	vsg -c vsg.yml -ap -f $(SOURCES) $(TEST_SOURCES) $(UPSTREAM_TB)
 
 
 ################################################

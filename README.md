@@ -17,7 +17,7 @@ CPU, and to use techniques from formal verification to prove its correctness.
   per-module write-ups
 * [Verification](#verification) — the four independent checks
   * [A self-checking simulation suite](#a-self-checking-simulation-suite)
-  * [Differential testing against the reference emulator](#differential-testing-against-the-reference-emulator)
+  * [Differential testing against the upstream references](#differential-testing-against-the-upstream-references)
   * [Formal verification](#formal-verification)
   * [Style linting](#style-linting)
   * [Where to read more](#where-to-read-more)
@@ -148,39 +148,67 @@ Three things make the suite hard to fool:
   zero-latency memory leaves dormant — several of them are unreachable
   otherwise.
 
-### Differential testing against the reference emulator
+### Differential testing against the upstream references
 
 Everything above compares this CPU against **itself**: the golden files were
 recorded from a passing run of this implementation, so an answer that has been
-wrong since they were written passes them green forever. `make crosscheck`
-closes that gap. It runs every program a second time on the **reference
-emulator** from the QNICE-FPGA project, built from the commit pinned above, and
-diffs the final contents of RAM against what this CPU left behind.
+wrong since they were written passes them green forever. Two targets close that
+gap, by running every program a second time on an upstream implementation and
+diffing the final contents of RAM against what this CPU left behind:
 
-**Twelve of the fourteen programs leave memory bit-identical** — every one of
-the 32768 words of `0x0000`-`0x7FFF`, from the instruction suite to a
-170000-cycle Mandelbrot sweep. Four words in `prog.asm` are excused for a reason
-the program documented before this check existed: its `PTR_SR` group uses `R14`
-— the Status Register itself — as an auto-modifying memory pointer, so the
-address a store lands on depends on flag details the two implementations are not
-obliged to share. That group checks completion, not values, and the harness
-found exactly those four words and nothing else.
+* `make crosscheck` — against the **reference emulator**, `emulator/qnice.c`.
+* `make crosscheck_rtl` — against **upstream's own CPU**, `vhdl/qnice_cpu.vhd`,
+  a multi-cycle FSM where this one is a four-stage pipeline. It is run under
+  GHDL in a testbench of ours, [`test/tb_upstream.vhd`](test/tb_upstream.vhd),
+  which gives it the smallest system these programs need: one writable 32 kW
+  RAM and the EAE. Upstream's CPU, ALU and EAE are analysed exactly as they
+  ship; one file, the register file, carries a patch whose every reason is
+  written in [`test/upstream.patch`](test/upstream.patch).
 
-The other two programs are the EAE tests, and there the **reference emulator is
-the one that is out of step with its own project's hardware**. Signed division's
-remainder is the clearest case: `eae.vhd` uses `numeric_std`'s `mod`, whose sign
-follows the divisor, exactly as upstream's own `vhdl/EAE.vhd` does — while
-upstream's *emulator* uses C's `%`, whose sign follows the dividend. The two
-differ on every case where the operands have different signs and the remainder
-is non-zero. Both divergences are recorded with their reason and **asserted**,
-so that if one ever disappears the harness says so instead of quietly passing.
+Both are built from the commit pinned above, so the assembler, the emulator and
+the reference CPU are all the same upstream revision.
+
+**Against the emulator twelve of the fourteen programs leave memory
+bit-identical; against the RTL, thirteen do** — every one of the 32768 words of
+`0x0000`-`0x7FFF`, from the instruction suite to a 170000-cycle Mandelbrot
+sweep. A handful of words in `prog.asm` are excused for a reason the program
+documented before this check existed: its `PTR_SR` group uses `R14` — the
+Status Register itself — as an auto-modifying memory pointer, so the address a
+store lands on depends on flag details the two implementations are not obliged
+to share. That group checks completion, not values.
+
+The programs that do not match are **different ones in each case, and that is
+the whole reason for running both**. Each is a place where the two upstream
+implementations disagree with *each other*, and this CPU had to follow one of
+them:
+
+* The two EAE tests fail on the emulator, and there the **emulator is out of
+  step with its own project's hardware**. Signed division's remainder is the
+  clearest case: `eae.vhd` uses `numeric_std`'s `mod`, whose sign follows the
+  divisor, exactly as upstream's own `vhdl/EAE.vhd` does — while upstream's
+  *emulator* uses C's `%`, whose sign follows the dividend. `make
+  crosscheck_rtl` passes both programs, which confirms end to end what was
+  previously an argument from reading upstream's source.
+* `prog_r15.asm` fails on the RTL, on a question the ISA documentation does not
+  settle: what `R15` reads as when it is an instruction's *destination* and its
+  source was the immediate `@R15++`. Upstream's CPU latches both operands in
+  `cs_decode`, before that post-increment, so it reads one word low; the
+  emulator reads the destination after the source, and this CPU follows the
+  emulator. That one sub-test is the whole of it: replacing it with an
+  equivalent unconditional branch makes the program pass on upstream's CPU too.
+
+Every divergence is recorded with its reason and **asserted**, so that if one
+ever disappears the harness says so instead of quietly passing.
 
 Two caveats worth stating plainly. This compares **final architectural state,
 not an execution trace**, so a value that is briefly wrong and then overwritten
 is invisible to it — fault injection confirms the boundary in both directions.
 And it compares memory, not registers, because the write log records a register
 number without its bank. Cycle counts and write *order* stay the golden files'
-job; the two checks are complementary and neither subsumes the other.
+job; the two checks are complementary and neither subsumes the other. (The
+upstream CPU's cycle count is reported and checked against nothing: `prog.asm`
+costs it 22333 cycles against this CPU's 15581, and the Mandelbrot sweep 281583
+against 170041.)
 
 ### Formal verification
 
@@ -200,7 +228,7 @@ silent revert which the simulation suite would let through green.
 
 ### Style linting
 
-`make lint` checks all 28 VHDL files against
+`make lint` checks all 29 VHDL files against
 [`CODING_STYLE.md`](CODING_STYLE.md) using
 [VSG](https://vhdl-style-guide.readthedocs.io/) from a pinned release. The tree
 is clean.
@@ -220,9 +248,9 @@ proof do not hide each other. The two badges at the top of this file are
 
 | Workflow | Runs | Covers |
 |---|---|---|
-| [`test.yml`](.github/workflows/test.yml) | `make test`, `make test_slow`, `make crosscheck` | all fourteen programs, three times: against a zero-latency memory with both golden files diffed, against a slow one, and against the reference emulator |
+| [`test.yml`](.github/workflows/test.yml) | `make test`, `make test_slow`, `make crosscheck`, `make crosscheck_rtl` | all fourteen programs, four times: against a zero-latency memory with both golden files diffed, against a slow one, against the reference emulator, and against upstream's own CPU |
 | [`formal.yml`](.github/workflows/formal.yml) | `make -C formal -k`, then `formal/check_gtkw.py` | all 39 formal jobs over the thirteen verified modules, plus the GTKWave save files |
-| [`lint.yml`](.github/workflows/lint.yml) | `make lint` | all 28 VHDL files against [`CODING_STYLE.md`](CODING_STYLE.md) |
+| [`lint.yml`](.github/workflows/lint.yml) | `make lint` | all 29 VHDL files against [`CODING_STYLE.md`](CODING_STYLE.md) |
 
 A few details are load-bearing rather than incidental:
 
@@ -231,8 +259,9 @@ A few details are load-bearing rather than incidental:
   out the QNICE-FPGA repository at the commit pinned in
   [Which upstream version](#which-upstream-version) and compiles just `qasm` and
   `qasm2rom` from it — not the whole QNICE toolchain — then points the Makefile
-  at it with `ASSEMBLER=<path>`. `make crosscheck` then builds the reference
-  emulator out of that same checkout at that same commit, so the assembler and
+  at it with `ASSEMBLER=<path>`. `make crosscheck` and `make crosscheck_rtl`
+  then take the reference emulator and the reference CPU out of that same
+  checkout at that same commit, so the assembler and
   the reference cannot drift apart — and since `actions/checkout` leaves a
   shallow clone holding only that one commit, a drift would fail loudly rather
   than quietly cross-check against something else.
@@ -269,6 +298,7 @@ The current makefile supports the following targets:
 * `make test`       : Run all test programs headless; this is the CI entry point
 * `make test_slow`  : Run them all against a deliberately slow memory model
 * `make crosscheck` : Diff every program against the reference emulator
+* `make crosscheck_rtl` : Diff every program against upstream's own CPU
 * `make check`      : Run a single test program headless
 * `make run`        : Run a single test program without the golden comparisons
 * `make sim`        : Run simulation, then open the waveform in gtkwave

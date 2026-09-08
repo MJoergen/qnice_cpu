@@ -2,8 +2,9 @@
 
 This directory holds the testbench (`tb_cpu.vhd`), the memory models it needs
 (`wb_dp_mem.vhd`, `wb_mux.vhd`, `system.vhd`), a simulation-only arithmetic
-peripheral (`eae.vhd`), the test-result monitor (`test_monitor.vhd`), and the
-QNICE assembly programs run against the CPU.
+peripheral (`eae.vhd`), the test-result monitor (`test_monitor.vhd`), the QNICE assembly
+programs run against the CPU, and a second testbench (`tb_upstream.vhd`) that
+runs those same programs on upstream's own CPU.
 
 The memory model has two read ports and one write port: the instruction bus
 (port A) reads, the data bus (port B) reads and writes. The program is loaded
@@ -16,6 +17,7 @@ still be VHDL-2008 that Vivado will infer a RAM from.
 make test                      # run every test program headless; this is the CI entry point
 make test_slow                 # the same programs against a deliberately slow memory
 make crosscheck                # diff every program against the reference emulator
+make crosscheck_rtl            # diff every program against upstream's own CPU
 make check TEST=prog_r15       # run just one of them, same checks
 make run   TEST=prog_r15       # run it without the writes-log comparison
 make sim                       # assemble test/prog.asm, simulate, open gtkwave
@@ -643,7 +645,7 @@ discards work that has already been requested. The instruction-request count
 therefore includes fetches that were never executed, and it rises when flushes
 become more frequent — which is exactly what makes it worth watching.
 
-## Cross-checking against the reference emulator
+## Cross-checking against the upstream references
 
 Everything above compares this CPU against **itself**. The `.writes` and
 `.stats` golden files were recorded from a passing run of this implementation,
@@ -651,22 +653,56 @@ so they catch a regression but cannot say whether the CPU agrees with upstream
 QNICE — a wrong answer that has been wrong since the golden files were written
 passes them green forever.
 
-`make crosscheck` closes that gap. It runs each program a second time on the
-reference **emulator** from the QNICE-FPGA project — built from the commit
-pinned in [`test.yml`](../.github/workflows/test.yml), see the "Which upstream
-version" section of the [top-level README](../README.md) — and diffs the final
-contents of RAM against what this CPU left behind.
+Two targets close that gap, because the QNICE-FPGA project ships **two**
+implementations of the ISA and they do not agree with each other:
 
 ```
-make crosscheck                # every comparable program
+make crosscheck                # every program, against emulator/qnice.c
+make crosscheck_rtl            # every program, against vhdl/qnice_cpu.vhd
 make crosscheck TESTS=prog     # just one, the ordinary make way
 ```
 
-**Current status: 12 of the 14 programs in `TESTS` leave RAM bit-identical**,
-over all 32768 words of `0x0000`-`0x7FFF`, with four excused words in
-`prog.asm`. The other two are the EAE programs, where the reference emulator
-disagrees with upstream's own hardware; both are recorded and asserted rather
-than skipped (below).
+Each runs every program a second time on its reference and diffs the final
+contents of RAM against what this CPU left behind. Both references are built
+from the commit pinned in the Makefile's `QNICE_REF` — see the "Which upstream
+version" section of the [top-level README](../README.md) — into
+`test/crosscheck/`, which is generated and gitignored; the harness itself is
+[`crosscheck.py`](crosscheck.py), shared by the two.
+
+**Current status: against the emulator, 12 of the 14 programs in `TESTS` leave
+RAM bit-identical; against the RTL, 13 do.** In both cases that is all 32768
+words of `0x0000`-`0x7FFF`, with a handful of excused words in `prog.asm` (four
+against the emulator, two against the RTL). The programs that differ are
+different ones in each case, which is the point of running both — see "Where
+the references disagree with each other" below.
+
+### The RTL reference
+
+`make crosscheck_rtl` runs upstream's `vhdl/qnice_cpu.vhd` — a multi-cycle FSM,
+where this repo's CPU is a four-stage pipeline — inside
+[`tb_upstream.vhd`](tb_upstream.vhd), which is ours. That file's header
+describes the system built around it: the smallest one these programs need,
+which is one writable 32 kW RAM over `0x0000`-`0x7FFF` and the EAE, and
+deliberately *not* upstream's `env1.vhd`, whose memory map puts ROM where every
+program here is linked. The RAM model is upstream's own `block_ram.vhd`
+(falling-edge access, chip enable, zero output while writing), because it is
+upstream's CPU that has to be satisfied by it.
+
+The CPU, its ALU, its EAE and its constants are analysed exactly as they ship.
+One file is patched, [`upstream.patch`](upstream.patch), and every reason is in
+that patch's header: two changes make the register file simulate under GHDL at
+all (an integer that overflows at time 0, and a delta-cycle-stale array index),
+and one gives it the same power-up register contents this CPU and the emulator
+have, so that the two sides start in the same architectural state.
+
+The upstream sources are analysed into a GHDL library of their own. That is not
+tidiness: upstream's `cpu_constants.vhd` and this repo's `src/cpu_constants.vhd`
+declare packages of the same name, so they cannot share one work library.
+
+Cycle counts are reported alongside each result and checked against nothing.
+They are the same programs on a machine that spends four to eleven cycles per
+instruction: `prog.asm` takes 22333 cycles there against this CPU's 15581, and
+`prog_mandel_perf.asm` 281583 against 170041 — 1.43x and 1.66x.
 
 ### What is compared, and what is not
 
@@ -679,13 +715,16 @@ cannot be reconstructed from it. Widening the log would move every
 its results and its status word there.
 
 The window is `0x0000`-`0x7FFF` because that is the common ground. Above
-`0x8000` the emulator decodes memory-mapped I/O and `system.vhd` puts the EAE,
-so the two are not describing the same thing.
+`0x8000` the emulator decodes memory-mapped I/O and both `system.vhd` and
+`tb_upstream.vhd` put the EAE, so the two sides are not describing the same
+thing.
 
-The QNICE-side final image needs no RTL change: it is the assembler's own
+The QNICE-side final image needs no RTL change here: it is the assembler's own
 `.out` file — the initial memory image, in the same `0xADDR 0xVALUE` format the
 emulator's `LOAD` reads — with every memory write from the run's `.writes` log
-replayed over it in order.
+replayed over it in order. The reference side is whatever that reference can
+produce: the emulator's `SAVE`, or `tb_upstream.vhd` dumping its array at
+`HALT` in the same format.
 
 And this is **final state, not an execution trace**. A value that is briefly
 wrong and then overwritten is invisible to it. That is not a guess: corrupting
@@ -703,49 +742,72 @@ every instruction, so the pointer moves under its own program and the address a
 store lands on depends on flag details the two implementations are not obliged
 to share. The program's own comment says as much: that group checks
 **completion, not the value**. Four words in the `D_PTR_LOW`/`D_PTR_MID`
-scratch area differ, and `ALLOWED_DIFFS` in
-[`crosscheck.py`](crosscheck.py) excuses exactly that window. Everything else in
-`prog.asm` — the other 32764 words — matches.
+scratch area differ against the emulator and two against the RTL — a different
+two, which is itself a demonstration that the value is not a shared quantity —
+and `ALLOWED_DIFFS` in [`crosscheck.py`](crosscheck.py) excuses exactly that
+window for both. Everything else in `prog.asm` matches.
 
-Two programs are skipped, both because they never halt by design:
-`prog_poll.asm` and `prog_poll_reg.asm`.
-
-### The emulator must also report a pass
+### The reference must also report a pass
 
 Diffing memory is not enough on its own, and the first version of this harness
-assumed it was. A program that fails on the emulator halts early without ever
+assumed it was. A program that fails on the reference halts early without ever
 writing its status word, and `0x7FFF` then still reads as the `0x0000` that
 untouched memory holds — the very value a passing run writes. So a failing run
 compared **identical**.
 
 That was not hypothetical. `prog_eae.asm` was in exactly that state, and so was
 `prog_eae_stall.asm`: both halt on the emulator at a failure `HALT`, and both
-were reported as matching. The fix is to seed `0x7FFF` with `0xDEAD` — a second
-`LOAD`, so nothing about the program under test changes — and then require the
-emulator's final status word to be `0x0000`. A sentinel that survives means the
-program never got there; any other value is the failure code the program itself
-reported.
+were reported as matching. The fix is to seed `0x7FFF` with `0xDEAD` and then
+require the reference's final status word to be `0x0000`. A sentinel that
+survives means the program never got there; any other value is the failure code
+the program itself reported. Both references are seeded the same way and from
+the same constant in `crosscheck.py`: the emulator with a second `LOAD`, so
+nothing about the program under test changes, and the RTL with a pair of
+generics that `tb_upstream.vhd` applies as it loads the program.
 
-### Two programs are known to disagree, and that is asserted
+### Where the references disagree with each other, and that is asserted
 
-Both are about the EAE, and in both the reference emulator is the one out of
-step. `KNOWN_DIVERGENCE` in [`crosscheck.py`](crosscheck.py) records them and
-**requires the divergence to still be there** — if upstream ever fixes its
-emulator, or someone changes our RTL to match it, the entry goes stale and the
+Three programs are known to fail on one reference, and every one of them is a
+place where the two upstream implementations disagree with **each other** —
+this CPU had to follow one of them. `KNOWN_DIVERGENCE` in
+[`crosscheck.py`](crosscheck.py) records each against the reference it applies
+to and **requires the divergence to still be there**: if upstream ever changes
+its mind, or someone changes our RTL to match, the entry goes stale and the
 harness says so rather than quietly passing.
 
-`prog_eae.asm` — **signed division's remainder**. `eae.vhd` computes it with
-`numeric_std`'s `mod`, whose sign follows the **divisor**; upstream's
-`emulator/qnice.c` uses C's `%`, whose sign follows the **dividend**. The two
-agree only when the operands share a sign or the remainder is zero, so they
-differ on 8 of the program's 21 `DIVS` rows. The hardware is the reference
-here, and upstream's own `vhdl/EAE.vhd` has the identical `op0_s mod op1_s`, so
-this repo matches upstream's hardware and upstream's emulator contradicts it.
+Note how little the two lists have in common. Running only one reference would
+have left each of these looking like a settled question.
 
-`prog_eae_stall.asm` — **when the EAE computes**. `qnice.c` recomputes only on
-a write to the CSR; `eae.vhd`'s arithmetic is combinational and re-evaluates
-whenever an operand changes, which is exactly the settling time its read stall
-exists to cover. That program's `S3` writes both operands and reads the result
-back *without* touching the CSR, so the emulator still returns `S2`'s result and
-halts at `E_S3`. It is the RTL behaviour the test exists to pin, so there is
-nothing to reconcile.
+`prog_eae.asm` — **signed division's remainder**, on the emulator. `eae.vhd`
+computes it with `numeric_std`'s `mod`, whose sign follows the **divisor**;
+upstream's `emulator/qnice.c` uses C's `%`, whose sign follows the
+**dividend**. The two agree only when the operands share a sign or the
+remainder is zero, so they differ on 8 of the program's 21 `DIVS` rows. The
+hardware is the reference here, and upstream's own `vhdl/EAE.vhd` has the
+identical `op0_s mod op1_s` — which `make crosscheck_rtl` now confirms
+end-to-end rather than by reading the source: the program passes there.
+
+`prog_eae_stall.asm` — **when the EAE computes**, on the emulator. `qnice.c`
+recomputes only on a write to the CSR; `eae.vhd`'s arithmetic is combinational
+and re-evaluates whenever an operand changes, which is exactly the settling
+time its read stall exists to cover. That program's `S3` writes both operands
+and reads the result back *without* touching the CSR, so the emulator still
+returns `S2`'s result and halts at `E_S3`. Upstream's `EAE.vhd` is
+combinational too, and passes.
+
+`prog_r15.asm` — **when `R15` is read as the destination operand**, on the RTL.
+Upstream's `cs_decode` latches both operands from the register file in one go
+(`fsmDst_Value <= reg_read_data2`), *before* the source's `@R15++`
+post-increment — the one that fetches an immediate — has been applied. So in
+`T3`'s `ADD 0x0002, R15` at `0x0010` the destination reads `0x0011`, the
+address of the immediate, rather than `0x0012`, the address of the next
+instruction; the jump lands one word short, on the padding `HALT` at `0x0013`.
+`T3` is the only sub-test affected: replacing it with an equivalent
+`ABRA, 1` makes the whole program pass there, so reading `R15` as a *source*
+and through `@R15` agrees. The ISA documentation does not settle the ordering;
+`qnice.c` does settle it the other way, by reading the destination after the
+source, and this CPU follows the emulator, which is what `prog_r15.asm` was
+written against.
+
+Two programs are compared against neither reference, both because they never
+halt by design: `prog_poll.asm` and `prog_poll_reg.asm`.
