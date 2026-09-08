@@ -43,6 +43,22 @@ jobs:
       - name: Run formal verification
         run: make -C formal -k
 
+      # The save files are checked separately, and by calling the script rather
+      # than the "gtkw" make target, for two reasons. The target hangs off the
+      # stamps, so with -k a single failing DUT makes make refuse to run it and
+      # the save files go unreported on exactly the build where someone is most
+      # likely to open a trace. And "if: always()" then gives that verdict even
+      # when a property failed. The step usually repeats a check the run above
+      # already did, which costs about a second.
+      #
+      # A .gtkw naming a signal that no longer exists is invisible otherwise:
+      # nothing compiles or lints it, GTKWave drops the row in silence, and the
+      # counterexample opens looking like a broken tool. Six of the nine save
+      # files that predate the check had rotted this way.
+      - name: Check the GTKWave save files
+        if: always()
+        run: python3 formal/check_gtkw.py
+
       # A failed property leaves a counterexample trace behind; without it the
       # only thing in the log is which property failed at which depth.
       - name: Upload counterexample traces

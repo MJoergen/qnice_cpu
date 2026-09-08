@@ -24,7 +24,21 @@ DUTS += wb_mux
 # re-ran at all, even after their sources changed.
 STAMPS = $(addsuffix .stamp,$(DUTS))
 
-all: $(STAMPS)
+all: $(STAMPS) gtkw
+
+# The .gtkw save files are the one artifact in this tree that nothing else
+# reads -- not compiled, not linted, not an input to any sby job -- so drift in
+# them is invisible until someone opens a counterexample and finds half the rows
+# missing, which looks like a broken tool rather than a stale file. Six of the
+# nine that existed before this target had rotted against RTL renames.
+#
+# It hangs off the stamps because it needs the traces a run leaves behind: the
+# names are checked against what GTKWave will actually be handed, not against
+# the source. Every job here has a cover task and a cover task always writes
+# traces, so a successful run leaves something to check for all of them.
+.PHONY: gtkw
+gtkw: $(STAMPS)
+	python3 check_gtkw.py
 
 # Every file a job reads, taken from that job's own [files] section, so the
 # prerequisites cannot drift out of step with the job description.

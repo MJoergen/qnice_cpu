@@ -146,6 +146,17 @@ tasks, file list, top-level generics), and a `<name>.gtkw` (GTKWave save file fo
 counterexamples). When adding formal properties to a new module, follow this same
 `.psl` + `.sby` + `.gtkw` triplet pattern next to the existing ones in `formal/`.
 
+`make -C formal` finishes by running `formal/check_gtkw.py`, which verifies that every signal
+named in a `.gtkw` still exists — against the **traces** a run leaves behind, not against the
+source, since the VCD is what GTKWave is actually handed and it spells a record element
+`stage<field>` where the VHDL says `stage.field`. This exists because a save file is the one
+artifact here that nothing else reads: it is not compiled, not linted, and not an input to any
+`sby` job, and GTKWave drops an unresolvable row without saying so, which reads as a broken tool
+rather than a stale file. Six of the nine save files predating the check had rotted against RTL
+renames, 161 dead names between them. CI runs the script as a step of its own (`if: always()`),
+because the make target hangs off the stamps and `-k` would skip it on exactly the red build where
+someone wants a trace.
+
 ### Yosys synthesis
 
 `make synth` runs `ghdl -a` over every source file and then `yosys -m ghdl` with `synth_xilinx`. It
