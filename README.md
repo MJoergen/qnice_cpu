@@ -15,9 +15,10 @@ CPU, and to use techniques from formal verification to prove its correctness.
   commit
 * [Documentation](#documentation) — pointers into [`doc/`](doc) and the
   per-module write-ups
-* [Verification](#verification) — the four independent checks
+* [Verification](#verification) — the five independent checks
   * [A self-checking simulation suite](#a-self-checking-simulation-suite)
-  * [Differential testing against the upstream references](#differential-testing-against-the-upstream-references)
+  * [Differential testing against the reference emulator](#differential-testing-against-the-reference-emulator)
+  * [Differential testing against the upstream CPU](#differential-testing-against-the-upstream-cpu)
   * [Formal verification](#formal-verification)
   * [Style linting](#style-linting)
   * [Where to read more](#where-to-read-more)
@@ -108,7 +109,7 @@ architecture and the design.
 
 ## Verification
 
-A pipelined CPU is easy to get almost right, so this design is checked in four
+A pipelined CPU is easy to get almost right, so this design is checked in five
 independent ways, each catching what the others cannot, and all of them running
 in CI on every push.
 
@@ -148,67 +149,94 @@ Three things make the suite hard to fool:
   zero-latency memory leaves dormant — several of them are unreachable
   otherwise.
 
-### Differential testing against the upstream references
+### Differential testing against the reference emulator
 
 Everything above compares this CPU against **itself**: the golden files were
 recorded from a passing run of this implementation, so an answer that has been
-wrong since they were written passes them green forever. Two targets close that
-gap, by running every program a second time on an upstream implementation and
-diffing the final contents of RAM against what this CPU left behind:
+wrong since they were written passes them green forever. `make crosscheck`
+closes that gap. It runs every program a second time on the **reference
+emulator** from the QNICE-FPGA project, `emulator/qnice.c`, built from the
+commit pinned above, and diffs the final contents of RAM against what this CPU
+left behind.
 
-* `make crosscheck` — against the **reference emulator**, `emulator/qnice.c`.
-* `make crosscheck_rtl` — against **upstream's own CPU**, `vhdl/qnice_cpu.vhd`,
-  a multi-cycle FSM where this one is a four-stage pipeline. It is run under
-  GHDL in a testbench of ours, [`test/tb_upstream.vhd`](test/tb_upstream.vhd),
-  which gives it the smallest system these programs need: one writable 32 kW
-  RAM and the EAE. Upstream's CPU, ALU and EAE are analysed exactly as they
-  ship; one file, the register file, carries a patch whose every reason is
-  written in [`test/upstream.patch`](test/upstream.patch).
+**Twelve of the fourteen programs leave memory bit-identical** — every one of
+the 32768 words of `0x0000`-`0x7FFF`, from the instruction suite to a
+170000-cycle Mandelbrot sweep. Four words in `prog.asm` are excused for a reason
+the program documented before this check existed: its `PTR_SR` group uses `R14`
+— the Status Register itself — as an auto-modifying memory pointer, so the
+address a store lands on depends on flag details the two implementations are not
+obliged to share. That group checks completion, not values, and the harness
+found exactly those four words and nothing else.
 
-Both are built from the commit pinned above, so the assembler, the emulator and
-the reference CPU are all the same upstream revision.
-
-**Against the emulator twelve of the fourteen programs leave memory
-bit-identical; against the RTL, thirteen do** — every one of the 32768 words of
-`0x0000`-`0x7FFF`, from the instruction suite to a 170000-cycle Mandelbrot
-sweep. A handful of words in `prog.asm` are excused for a reason the program
-documented before this check existed: its `PTR_SR` group uses `R14` — the
-Status Register itself — as an auto-modifying memory pointer, so the address a
-store lands on depends on flag details the two implementations are not obliged
-to share. That group checks completion, not values.
-
-The programs that do not match are **different ones in each case, and that is
-the whole reason for running both**. Each is a place where the two upstream
-implementations disagree with *each other*, and this CPU had to follow one of
-them:
-
-* The two EAE tests fail on the emulator, and there the **emulator is out of
-  step with its own project's hardware**. Signed division's remainder is the
-  clearest case: `eae.vhd` uses `numeric_std`'s `mod`, whose sign follows the
-  divisor, exactly as upstream's own `vhdl/EAE.vhd` does — while upstream's
-  *emulator* uses C's `%`, whose sign follows the dividend. `make
-  crosscheck_rtl` passes both programs, which confirms end to end what was
-  previously an argument from reading upstream's source.
-* `prog_r15.asm` fails on the RTL, on a question the ISA documentation does not
-  settle: what `R15` reads as when it is an instruction's *destination* and its
-  source was the immediate `@R15++`. Upstream's CPU latches both operands in
-  `cs_decode`, before that post-increment, so it reads one word low; the
-  emulator reads the destination after the source, and this CPU follows the
-  emulator. That one sub-test is the whole of it: replacing it with an
-  equivalent unconditional branch makes the program pass on upstream's CPU too.
-
-Every divergence is recorded with its reason and **asserted**, so that if one
-ever disappears the harness says so instead of quietly passing.
+The other two programs are the EAE tests, and there the **reference emulator is
+the one that is out of step with its own project's hardware**. Signed division's
+remainder is the clearest case: `eae.vhd` uses `numeric_std`'s `mod`, whose sign
+follows the divisor, exactly as upstream's own `vhdl/EAE.vhd` does — while
+upstream's *emulator* uses C's `%`, whose sign follows the dividend. The two
+differ on every case where the operands have different signs and the remainder
+is non-zero. Both divergences are recorded with their reason and **asserted**,
+so that if one ever disappears the harness says so instead of quietly passing.
 
 Two caveats worth stating plainly. This compares **final architectural state,
 not an execution trace**, so a value that is briefly wrong and then overwritten
 is invisible to it — fault injection confirms the boundary in both directions.
 And it compares memory, not registers, because the write log records a register
 number without its bank. Cycle counts and write *order* stay the golden files'
-job; the two checks are complementary and neither subsumes the other. (The
-upstream CPU's cycle count is reported and checked against nothing: `prog.asm`
-costs it 22333 cycles against this CPU's 15581, and the Mandelbrot sweep 281583
-against 170041.)
+job. The checks are complementary; none of them subsumes another.
+
+### Differential testing against the upstream CPU
+
+The emulator is only one of the two implementations the QNICE-FPGA project
+ships, and it is the *less* authoritative one: the other is `vhdl/qnice_cpu.vhd`
+— upstream's own CPU, a multi-cycle FSM where this one is a four-stage pipeline
+— and that is what QNICE-FPGA actually synthesises. `make crosscheck_rtl` runs
+every program on it under GHDL and makes the same comparison, through the same
+harness. **Thirteen of the fourteen leave memory bit-identical**, again across
+all 32768 words, with two of `prog.asm`'s `PTR_SR` words excused by the range
+above — a different two from the ones the emulator differs on, which is itself a
+small demonstration that an `R14`-as-pointer address is not a shared quantity.
+
+Upstream's CPU needs a system around it, and that part is ours:
+[`test/tb_upstream.vhd`](test/tb_upstream.vhd) gives it the smallest one these
+programs need — one writable 32 kW RAM over `0x0000`-`0x7FFF` and the EAE —
+rather than upstream's `env1.vhd`, whose memory map puts ROM where every program
+in [`test/`](test) is linked. The RAM is modelled on upstream's own
+`block_ram.vhd`, not on this repo's `dp_ram.vhd`, because it is upstream's CPU
+that has to be satisfied by it. Its CPU, ALU and EAE are analysed exactly as
+they ship, into a GHDL library of their own; one file, the register file,
+carries [`test/upstream.patch`](test/upstream.patch), two hunks of which make it
+simulate under GHDL at all and one of which zeroes its register arrays, so that
+the reference powers up in the same architectural state this CPU and the
+emulator do. Every reason is in that patch's header, and it is applied to an
+extracted copy — nobody's checkout is written to.
+
+**Running both references is not redundancy — it is the point.** The programs
+that fail are different ones in each direction, and every one of them is a place
+where the two upstream implementations disagree with *each other*, so a single
+reference makes each look like a settled question:
+
+* The **two EAE tests pass here** and fail on the emulator. That turns the
+  paragraph above — that upstream's own `EAE.vhd` computes the `DIVS` remainder
+  as we do — from an argument about reading upstream's source into an end-to-end
+  result.
+* **`prog_r15.asm` fails here** and passes on the emulator, on a question the
+  ISA documentation does not settle: what `R15` reads as when it is an
+  instruction's *destination* and its source was the immediate `@R15++`.
+  Upstream's `cs_decode` latches both operands at once, before that
+  post-increment, so `ADD 0x0002, R15` reads its destination one word low and
+  the jump lands one word short. The emulator reads the destination after the
+  source, and this CPU follows the emulator, which is what the program was
+  written against. That one sub-test is the whole of it: replacing it with an
+  equivalent unconditional branch makes the program pass on upstream's CPU too.
+
+Each is recorded against the reference it applies to and **asserted**, the same
+way the emulator's two are: a divergence that disappears fails the harness
+rather than quietly passing.
+
+One free byproduct: the upstream CPU's cycle count, reported per program and
+checked against nothing. `prog.asm` costs it 22333 cycles against this CPU's
+15581, and the Mandelbrot sweep 281583 against 170041 — 1.43x and 1.66x, on the
+same programs and the same memory latency.
 
 ### Formal verification
 
@@ -295,21 +323,21 @@ in CI either.
 
 ## Makefile
 The current makefile supports the following targets:
-* `make test`       : Run all test programs headless; this is the CI entry point
-* `make test_slow`  : Run them all against a deliberately slow memory model
-* `make crosscheck` : Diff every program against the reference emulator
+* `make test`           : Run all test programs headless; this is the CI entry point
+* `make test_slow`      : Run them all against a deliberately slow memory model
+* `make crosscheck`     : Diff every program against the reference emulator
 * `make crosscheck_rtl` : Diff every program against upstream's own CPU
-* `make check`      : Run a single test program headless
-* `make run`        : Run a single test program without the golden comparisons
-* `make sim`        : Run simulation, then open the waveform in gtkwave
-* `make golden`     : Regenerate the `test/*.{writes,stats}.golden` files
-* `make system.bit` : Run synthesis using Vivado
-* `make utilization`: Refresh `doc/README.md`'s numbers (needs Vivado)
-* `make synth`      : Run synthesis using yosys
-* `make diagrams`   : Re-render every `.tex` diagram to `.png` (needs pdflatex)
-* `make formal`     : Run formal verification
-* `make lint`       : Check every VHDL file against `CODING_STYLE.md` (needs vsg)
-* `make clean`      : Remove all generated files
+* `make check`          : Run a single test program headless
+* `make run`            : Run a single test program without the golden comparisons
+* `make sim`            : Run simulation, then open the waveform in gtkwave
+* `make golden`         : Regenerate the `test/*.{writes,stats}.golden` files
+* `make system.bit`     : Run synthesis using Vivado
+* `make utilization`    : Refresh `doc/README.md`'s numbers (needs Vivado)
+* `make synth`          : Run synthesis using yosys
+* `make diagrams`       : Re-render every `.tex` diagram to `.png` (needs pdflatex)
+* `make formal`         : Run formal verification
+* `make lint`           : Check every VHDL file against `CODING_STYLE.md` (needs vsg)
+* `make clean`          : Remove all generated files
 
 By default these assemble and run [`test/prog.asm`](test/prog.asm); pass
 `TEST=<name>` to pick one of the other programs in [`test/`](test). Every one of
