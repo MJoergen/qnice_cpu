@@ -10,11 +10,8 @@ CPU, and to use techniques from formal verification to prove its correctness.
 
 * [Relation to QNICE-FPGA](#relation-to-qnice-fpga) — the three architectural
   differences, and the fork that runs the QNICE monitor on this CPU
-* [Micro-operations](#micro-operations) — the idea the whole design rests on
 * [Which upstream version](#which-upstream-version) — why `develop`, pinned to a
   commit
-* [Documentation](#documentation) — pointers into [`doc/`](doc) and the
-  per-module write-ups
 * [Verification](#verification) — the five independent checks
   * [A self-checking simulation suite](#a-self-checking-simulation-suite)
   * [Differential testing against the reference emulator](#differential-testing-against-the-reference-emulator)
@@ -24,6 +21,8 @@ CPU, and to use techniques from formal verification to prove its correctness.
   * [Where to read more](#where-to-read-more)
 * [Continuous integration](#continuous-integration) — what runs on every push,
   and what does not
+* [Documentation](#documentation) — pointers into [`doc/`](doc) and the
+  per-module write-ups
 * [Makefile](#makefile) — every target
 
 ## Relation to QNICE-FPGA
@@ -58,21 +57,6 @@ register banks); the system closes timing at 72.73 MHz where the old one was
 already marginal at 50 MHz; and `mandel_perf_test.asm` falls from 3.29 to 1.98
 cycles per instruction, for a **2.4x speedup in wall time**.
 
-## Micro-operations
-
-The overall idea of this implementation is to convert each
-[instruction](https://github.com/sy2002/QNICE-FPGA/blob/b1fb36c56508d1237f662f6234b3bfa4142b3432/doc/intro/qnice_intro.pdf)
-into a sequence of micro-operations, such as:
-* Read from memory to source operand buffer
-* Read from memory to destination operand buffer
-* Write to memory
-* Write to register
-
-The reason is that e.g. the instruction `ADD @R0, @R1` performs two memory
-reads (from `@R0` and `@R1`) and one memory write (to `@R1`). Since only one
-memory operation is possible in each clock cycle, such an instruction will
-need to be serialized and will take a total of three clock cycles.
-
 ## Which upstream version
 
 The [QNICE-FPGA project](https://github.com/sy2002/QNICE-FPGA) has two
@@ -102,10 +86,6 @@ exists to remove. Every `test/*.rom` happens to assemble byte-identical from
 either branch's `qasm` today, so this is not a live bug — it stops a local
 checkout and CI from silently drifting apart. The trade is that an upstream
 assembler fix now has to be picked up by bumping that pin by hand.
-
-## Documentation
-Please go to the [doc](doc) directory for more in-depth description of the
-architecture and the design.
 
 ## Verification
 
@@ -320,6 +300,24 @@ cannot host, so synthesis results, the utilization tables in
 repository are refreshed by hand on a machine that has Vivado. The Yosys
 `make synth` target — a second opinion on synthesisability, not a build — is not
 in CI either.
+
+## Documentation
+
+The overall idea of this implementation is to convert each
+[instruction](https://github.com/sy2002/QNICE-FPGA/blob/b1fb36c56508d1237f662f6234b3bfa4142b3432/doc/intro/qnice_intro.pdf)
+into a sequence of micro-operations, such as:
+* Read from memory to source operand buffer
+* Read from memory to destination operand buffer
+* Write to memory
+* Write to register
+
+The reason is that e.g. the instruction `ADD @R0, @R1` performs two memory
+reads (from `@R0` and `@R1`) and one memory write (to `@R1`). Since only one
+memory operation is possible in each clock cycle, such an instruction will
+need to be serialized and will take a total of three clock cycles.
+
+Please go to the [doc](doc) directory for more in-depth description of the
+architecture and the design.
 
 ## Makefile
 The current makefile supports the following targets:
