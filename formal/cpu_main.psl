@@ -680,6 +680,70 @@ vunit i_cpu_main(cpu_main(synthesis))
        mem_req_addr_o - prep2wr_stage.addr < 11}
       |-> {fetch_valid_o = '1'};
 
+   -- (4b) THE ONE STORE (4) CANNOT SEE. ASUB/RSUB's return address is pushed
+   -- on the instruction's FIRST micro-op -- decode.vhd builds that micro-op by
+   -- hand -- so inst_done_o is '0' when it goes out and the property above,
+   -- which is qualified by inst_done_o exactly as the RTL is, steps straight
+   -- over it. That is where the bug was, not a gap in how (4) is written: no
+   -- amount of tightening the window there would have found it.
+   --
+   -- Two things make this property differently shaped. The obligation is
+   -- DEFERRED: fetch_valid_o resets DECODE, SEQUENCER and PREPARE, so a flush
+   -- on the push's own cycle would discard the rest of the branch and fall
+   -- through, and the only sound place to raise it is the last micro-op. And
+   -- the danger zone is measured from the branch TARGET rather than from addr,
+   -- because the early redirect has already sent FETCH there. The zone is
+   -- target..target+1 -- at the push, DECODE has accepted nothing from the
+   -- target yet, since SEQUENCER holds its ready low until the last micro-op,
+   -- so only ICACHE's two words can be stale -- and 4 leaves room while staying
+   -- well inside the implementation's 8.
+   --
+   -- prep2wr_stage.immediate is the target. Taking it from the record rather
+   -- than recomputing it here is not a hole: f_early_addr_abs and
+   -- f_early_addr_rel below pin that same arithmetic against ic_data_i.
+   signal f_push_pending : std_logic;
+
+   p_push_pending : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if prep2wr_valid = '1' and prep2wr_ready = '1' and inst_done_o = '0' and
+            mem_req_valid_o = '1' and
+            mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '1' and
+            mem_req_addr_o - prep2wr_stage.immediate < 4
+         then
+            f_push_pending <= '1';
+         end if;
+
+         -- Any flush discharges the obligation, not only the one this term
+         -- exists to produce: fetch_valid_o empties ICACHE, DECODE and PREPARE
+         -- whatever raised it, so the stale words are gone either way. A
+         -- conditional call through R14 gets one for free, from the
+         -- pointer write-back on its own middle micro-op.
+         if inst_done_o = '1' or fetch_valid_o = '1' or rst_i = '1' then
+            f_push_pending <= '0';
+         end if;
+      end if;
+   end process p_push_pending;
+
+   f_flush_on_smc_push : assert always
+      {rst_i = '0' and inst_done_o = '1' and f_push_pending = '1'}
+      |-> {fetch_valid_o = '1'};
+
+   -- (4c) A CONDITIONAL CALL THAT IS NOT TAKEN MUST PUSH NOTHING. p_reg has
+   -- always refused the Stack Pointer write-back for one, but the store went
+   -- out regardless and wrote the return address below the stack.
+   --
+   -- Stated on the one condition encoding that is false whatever the flags --
+   -- "!1", i.e. SR bit 0 negated, and f_r14_bit0 above pins that bit at '1' --
+   -- so that "not taken" is named from the instruction word rather than by
+   -- re-implementing update_reg's mux over prep2wr_stage.r14 here.
+   f_no_push_when_not_taken : assert always
+      {rst_i = '0' and prep2wr_valid = '1' and
+       prep2wr_stage.r14(0) = '1' and
+       prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_JMP and
+       prep2wr_stage.inst(3 downto 0) = "1000"}
+      |-> {mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '0'};
+
 
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
@@ -727,6 +791,21 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- register port to R14 overrides the dedicated SR port.
    assume always {reg_r14_we_o = '1' and not (reg_we_o = '1' and reg_addr_o = 14)} |->
                  {reg_r14_i = (reg_r14_o or X"0001")};
+
+   -- ...and it KEEPS that value until the next write. The assumption above pins
+   -- reg_r14_i only on the cycle of the write itself, and the stability one
+   -- above it only applies while reg_r14_we_o is low, so between them
+   -- reg_r14_i was left free to move on the cycle after every write. That is
+   -- not something registers.vhd can do -- sr_val_o moves only when someone
+   -- writes R14 -- and it had a specific consequence: PREPARE latches r14 once
+   -- per micro-op, so a free hop let ONE INSTRUCTION see different flags on two
+   -- of its own micro-ops. A conditional ASUB could then take the branch on the
+   -- micro-op that pushes the return address and not take it on the one that
+   -- retires, which is a state the machine cannot reach (once PREPARE has
+   -- latched an instruction's first micro-op, the only remaining writer of R14
+   -- is that instruction's own last one) but which f_flush_on_smc_push below
+   -- has no way to rule out by itself.
+   assume always {reg_r14_we_o = '1'} |=> {reg_r14_we_o = '1' or stable(reg_r14_i)};
 
    signal f_mem_src_request    : std_logic;
    signal f_mem_src_response   : std_logic;
@@ -885,6 +964,15 @@ vunit i_cpu_main(cpu_main(synthesis))
                          prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_DECRB) and
                         fetch_valid_o = '0' and ic_valid_i = '1' and dec2seq_valid = '1' and
                         ic_ready_o = '1'};
+   -- Non-vacuity of (4c): a subroutine call whose micro-op really does carry
+   -- the store must be reachable with the branch not taken, or the property
+   -- above is only ever checked on instructions that never push anything.
+   c_asub_not_taken    : cover {rst_i = '0' and prep2wr_valid = '1' and
+                                prep2wr_stage.r14(0) = '1' and
+                                prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_JMP and
+                                prep2wr_stage.inst(3 downto 0) = "1000" and
+                                prep2wr_stage.microcode(work.cpu_constants.C_MEM_WRITE) = '1'};
+
    c_flush_smc         : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
                                 mem_req_valid_o = '1' and
                                 mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '1' and

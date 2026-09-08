@@ -42,6 +42,7 @@ vunit i_sequencer(sequencer(synthesis))
        stable(m_stage_o.dst_imm) and
        stable(m_stage_o.res_reg) and
        stable(m_stage_o.is_crb) and
+       stable(m_stage_o.is_sub) and
        stable(m_stage_o.early_jmp)};
 
    -- The register file's read data is joined on live, with nothing latching it

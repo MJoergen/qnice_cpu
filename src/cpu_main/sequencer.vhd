@@ -117,7 +117,7 @@ begin
    -- the upper bits still held the raw list, with a comment obliging every
    -- reader downstream to slice before use.
    --
-   -- The twelve elements after it are DECODE's, forwarded unchanged. They are
+   -- The thirteen elements after it are DECODE's, forwarded unchanged. They are
    -- copied one by one rather than by a whole-record assignment, which the two
    -- types no longer allow -- the price of the split.
    --
@@ -142,6 +142,7 @@ begin
       m_stage_o.dst_imm   <= s_stage_i.dst_imm;
       m_stage_o.res_reg   <= s_stage_i.res_reg;
       m_stage_o.is_crb    <= s_stage_i.is_crb;
+      m_stage_o.is_sub    <= s_stage_i.is_sub;
       m_stage_o.early_jmp <= s_stage_i.early_jmp;
 
       m_stage_o.src_reg_val <= reg_src_val_i;

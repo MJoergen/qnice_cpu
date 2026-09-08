@@ -90,6 +90,7 @@ architecture synthesis of decode is
    signal uses_bank   : std_logic; -- The instruction at this stage's input
    signal uses_bank_d : std_logic; -- The instruction in the output register
    signal is_crb      : std_logic; -- Is the instruction at the input INCRB/DECRB?
+   signal is_sub      : std_logic; -- Is the instruction at the input ASUB/RSUB?
 
    -- Is the instruction at the input an unconditional branch with an immediate
    -- target, i.e. one whose redirect this stage can issue itself?
@@ -194,6 +195,29 @@ begin
    -- retiring in WRITE could reach the register file. If it uses a banked
    -- value, that value is from the outgoing bank and only a flush can undo it.
    bank_stale_o <= seq_valid_o and uses_bank_d;
+
+
+   ------------------------------------------------------------
+   -- Subroutine call
+   ------------------------------------------------------------
+
+   -- Is this a subroutine call, ASUB or RSUB? Both push a return address, and
+   -- p_output below builds that push by hand as a MOVE R15, @--R13 -- the one
+   -- store in the whole machine that does NOT sit on the micro-op carrying
+   -- C_LAST. WRITE's self-modifying-code flush keys off inst_done_o, so it
+   -- cannot see that store on the cycle it goes out and has to defer to the
+   -- last micro-op; this bit is what tells it there was one. See
+   -- "Self-modifying code" in write.vhd.
+   --
+   -- Decoded here and carried in the stage record for the same reason as
+   -- is_crb above: it lands on fetch_valid_o, which is the reset pin of every
+   -- flip-flop in this stage and PREPARE, and that net cannot afford to
+   -- re-derive a five-bit compare from prep_stage_i.inst (ASUB and RSUB share
+   -- bit 0 of R_JMP_MODE, so the two arms below collapse to one).
+   is_sub <= '1' when ic_data_i(R_OPCODE) = C_OPCODE_JMP and
+                      (ic_data_i(R_JMP_MODE) = C_JMP_ASUB or
+                       ic_data_i(R_JMP_MODE) = C_JMP_RSUB) else
+             '0';
 
 
    ------------------------------------------------------------
@@ -310,6 +334,7 @@ begin
             seq_stage_o.dst_imm    <= immediate_dst;
             seq_stage_o.res_reg    <= reg_dst_addr_o;
             seq_stage_o.is_crb     <= is_crb;
+            seq_stage_o.is_sub     <= is_sub;
             seq_stage_o.early_jmp  <= early_jmp;
             uses_bank_d            <= uses_bank;
 

@@ -64,6 +64,10 @@ architecture synthesis of write is
    signal smc_delta : std_logic_vector(15 downto 0);
    signal smc_hit   : std_logic;
 
+   signal smc_push       : std_logic;
+   signal smc_push_delta : std_logic_vector(15 downto 0);
+   signal smc_push_hit   : std_logic;
+
 
 begin
 
@@ -455,6 +459,94 @@ begin
                          prep_stage_i.dst_addr = to_stdlogicvector(C_REG_PC, 4) else
                 '0';
 
+   -- The one store the test above cannot see: ASUB/RSUB's return address.
+   --
+   -- Every store in the microcode ROM sits on the micro-op that also carries
+   -- C_LAST, so for all of them the C_MEM_WRITE bit visible at retirement IS
+   -- the store. The subroutine push is the exception -- p_output in decode.vhd
+   -- builds it by hand onto the instruction's FIRST micro-op -- so inst_done_o
+   -- is '0' on the cycle it goes out and the term above could never fire for
+   -- it. A "RSUB label, 1" whose Stack Pointer happened to aim into the code
+   -- the early redirect had just gone to fetch executed the stale copy,
+   -- silently, exactly as an unguarded ordinary store used to.
+   --
+   -- ONLY THE EARLY-REDIRECTED CASE NEEDS ANYTHING. If DECODE did not resolve
+   -- the branch itself, wr_early is '0', the R15 write above flushes, and FETCH
+   -- refills from the target after the push has landed -- nothing has been read
+   -- that the push could have invalidated. It is precisely when wr_early
+   -- SUPPRESSES that flush that FETCH has been filling from the target for two
+   -- cycles already, and the push can land behind it.
+   --
+   -- SO THE WINDOW IS AROUND THE TARGET, not around addr. That distinction is
+   -- not a nicety: a stack placed just past the end of the program is the
+   -- normal arrangement -- test/prog_subroutine.asm and test/prog_simple.asm
+   -- both do it -- so testing the push against addr, as the ordinary window
+   -- does, hits on essentially every call. Measured that way,
+   -- prog_subroutine.asm went 580 -> 628 cycles, giving back half of what the
+   -- early redirect buys in the first place.
+   --
+   -- AND IT IS 8, not the 32 above. It can afford to be that tight, and it has
+   -- to be, because the distances real code produces sit just outside it: 11 in
+   -- prog_mandel_perf.asm, 18 and 24 in prog_subroutine.asm. At 16 the first of
+   -- those flushes on every call of the benchmark's inner loop, for +4.7%.
+   --
+   -- What can be stale is much less here than for an ordinary store. DECODE has
+   -- NOT accepted anything from the target yet: the push is the branch's first
+   -- micro-op, and SEQUENCER holds its ready low until the last one, so DECODE's
+   -- output register still holds the branch itself. Only ICACHE has refilled,
+   -- with at most its two words -- target and target+1. Requests FETCH merely
+   -- has in flight do not count: they are read from the array when they are
+   -- served, which is after the push has landed. Nor can the pipeline creep
+   -- further ahead while the push is stalled, because prep_ready_o freezes on
+   -- mem_req_ready_i and nothing downstream drains.
+   --
+   -- So a stale word is at target or target+1, and the dst_val_pc offset below
+   -- adds one: the bound is 2, and 8 is four times it. Measured directly as
+   -- well, by forcing the term to '0' and sweeping a program that pushes its
+   -- return address k words into the subroutine it calls: k = 1 is the only
+   -- distance that executes the stale word, and it stays the only one with the
+   -- data bus stalled and acking 16x slower than the instruction bus
+   -- (G_B_STALL_DELAY=8, G_B_ACK_DELAY=16). The rounding up to a power of two
+   -- is what makes prog_simple.asm's one call, at distance 4, pay a flush it
+   -- does not need -- three cycles, and the cheapest way to keep this a
+   -- zero-test rather than a magnitude comparison. The 32 above cannot be
+   -- narrowed the same way: it is absorbing a mux and an adder, not just
+   -- read-ahead.
+   --
+   -- DEFERRING THE FLUSH TO THE LAST MICRO-OP is what the offset above refers
+   -- to, and it is the only sound place for it: fetch_valid_o resets DECODE,
+   -- SEQUENCER and PREPARE, so raising it on the push's own cycle would discard
+   -- the rest of the branch and fall through to next_pc. dst_val_pc is the
+   -- Stack Pointer on every one of the instruction's micro-ops, so the
+   -- difference measured at retirement is the one the push itself would have
+   -- given, give or take one -- SEQUENCER joins the register file's read
+   -- port on live, so the push's own write-back may already have forwarded
+   -- SP-1 into it. One word, which the window absorbs.
+   --
+   -- AND IT IS COMPUTED HERE, out of two raw stage registers, for the reason
+   -- the comment above smc_delta gives for that subtraction. There is a real
+   -- pull the other way: WRITE reads prep_stage_i.immediate nowhere else --
+   -- next_pc is built from 'addr' -- so before this term existed
+   -- wr_stage_o.immediate was dead logic and its sixteen flip-flops were
+   -- optimised away. Reading it here brings them back, and on a
+   -- placement-sensitive design that is not free: 939 -> 970 LUTs, 603 -> 622
+   -- registers, and WNS +0.060 -> +0.005 ns, with the critical path not moving
+   -- at all (it is the usual one, inside PREPARE through the ALU operand
+   -- muxing).
+   --
+   -- Moving the subtraction into PREPARE to keep those flops dead -- computing
+   -- the whole test there and carrying one bit -- was built and measured, and
+   -- is much worse: WNS -1.159 ns with 223 failing endpoints, and 1068 LUTs. It puts a 16-bit carry chain in front of PREPARE's output register,
+   -- behind dst_val_pc, which arrives late from the register file. That
+   -- register IS the critical path. Do not try it again; the sixteen
+   -- flip-flops are the cheaper end of this trade.
+
+
+   smc_push       <= prep_stage_i.is_sub and prep_stage_i.early_jmp;
+   smc_push_delta <= prep_stage_i.dst_val_pc - prep_stage_i.immediate;
+   smc_push_hit   <= '1' when smc_push_delta(15 downto 3) = "0000000000000" else
+                     '0';
+
 
    ------------------------------------------------------------
    -- Register bank switch, continued
@@ -473,7 +565,8 @@ begin
    -- register-write terms collapse into one: reg_we_o and three address bits.
    fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1)) and not wr_early) or
                     (bank_switch_o and bank_stale_i) or
-                    (inst_done_o and prep_stage_i.microcode(C_MEM_WRITE) and smc_hit);
+                    (inst_done_o and prep_stage_i.microcode(C_MEM_WRITE) and smc_hit) or
+                    (inst_done_o and smc_push and smc_push_hit);
 
 
    ------------------------------------------------------------
@@ -502,10 +595,34 @@ begin
 
 
    mem_req_valid_o <= prep_valid_i and or(mem_req_op_o);
-   mem_req_op_o    <= prep_stage_i.microcode(2 downto 0);
-   mem_req_data_o  <= mem_data when mem_valid = '1' else
-                      alu_res_val;
-   mem_req_addr_o  <= mem_addr;
+
+   -- The three memory op bits come straight from the micro-op -- except the
+   -- store, which is gated by update_reg, exactly as p_reg gates every register
+   -- write above.
+   --
+   -- update_reg is '1' for every instruction that is not a JMP, so the gate
+   -- only ever bites on a conditional branch that is NOT taken; and the only
+   -- JMP that stores is ASUB/RSUB, whose return-address push p_output in
+   -- decode.vhd builds by hand. Without the gate that push went out anyway:
+   -- "ASUB label, Z" with Z clear left the Stack Pointer correctly untouched --
+   -- p_reg already refused the pointer write-back -- but still wrote the return
+   -- address to SP-1, silently corrupting whatever lived below the stack. The
+   -- COND_ASUB group in test/prog.asm now checks that word; before this it
+   -- checked R13 and the branch target only, and the four stray writes sat
+   -- unremarked in test/prog.writes.golden.
+   --
+   -- ONLY the store is gated. Gating the two READ bits as well would deadlock:
+   -- a not-taken "ASUB @R0, Z" still reaches its last micro-op, which carries
+   -- C_MEM_WAIT_SRC and would then wait forever for a read that was never
+   -- issued. A read costs nothing but a bus cycle, so it is simply allowed to
+   -- happen.
+   mem_req_op_o(C_MEM_READ_SRC) <= prep_stage_i.microcode(C_MEM_READ_SRC);
+   mem_req_op_o(C_MEM_READ_DST) <= prep_stage_i.microcode(C_MEM_READ_DST);
+   mem_req_op_o(C_MEM_WRITE)    <= prep_stage_i.microcode(C_MEM_WRITE) and update_reg;
+
+   mem_req_data_o <= mem_data when mem_valid = '1' else
+                     alu_res_val;
+   mem_req_addr_o <= mem_addr;
 
 
    ------------------------------------------------------------

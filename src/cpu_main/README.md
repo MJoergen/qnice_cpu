@@ -372,6 +372,15 @@ one-hot-encoded `mem_req_op_o` signal:
 
 Exactly one of these three bits must be set for any transaction.
 
+The write bit carries one qualification the two read bits do not: it is ANDed
+with `update_reg`, the same branch-taken term that gates every register write in
+`p_reg`. A conditional `ASUB`/`RSUB` that is *not* taken must push nothing, and
+without this the store went out anyway — the Stack Pointer stayed put, because
+`p_reg` refused the pointer write-back, but the return address was still written
+to `SP-1`. The reads are deliberately left ungated: a not-taken `ASUB @R0, Z`
+still reaches its last micro-operation, which carries `C_MEM_WAIT_SRC` and would
+wait forever for a read that was never issued.
+
 Since all memory transactions are controlled by the same stage (WRITE), this
 greatly simplifies MEMORY. Correspondingly, since MEMORY contains buffers for
 both Source and Destination operands, this greatly simplifies PREPARE, see
@@ -979,6 +988,38 @@ for the coverage. `f_flush_on_smc` in
 side: it measures the *real* store address (`mem_req_addr_o`, i.e. after the
 pre-decrement mux) against the retiring instruction's address, so it constrains
 how far `smc_hit`'s cheaper subtraction may be tightened.
+
+#### The return address a subroutine call pushes
+`smc_hit` is qualified by `inst_done_o`, which is right for every store in the
+microcode ROM — they all sit on the micro-operation that also carries `C_LAST`.
+The one store that does not is `ASUB`/`RSUB`'s return address, which
+[decode.vhd](decode.vhd) builds by hand as a `MOVE R15, @--R13` on the
+instruction's *first* micro-operation. It was therefore invisible to the test
+above, and a call whose Stack Pointer aimed into the subroutine it was calling
+executed the stale word.
+
+`smc_push` in [write.vhd](write.vhd) is the second term that covers it, and it
+is shaped by two things. The flush cannot go out on the push's own cycle —
+`fetch_valid_o` resets DECODE, SEQUENCER and PREPARE, so a flush mid-sequence
+would discard the rest of the branch and fall through to `next_pc` — so it is
+deferred to the last micro-operation, which is sound because the destination
+register is the Stack Pointer on all of them. And it only applies to the
+*early-redirected* call: if DECODE did not resolve the branch itself, the write
+to `R15` at retirement flushes anyway, and FETCH refills from the target after
+the push has landed. It is exactly when `wr_early` suppresses that flush that
+FETCH has been filling from the target for two cycles already.
+
+So the window is measured from the branch **target**
+(`prep_stage_i.immediate`), not from `prep_stage_i.addr`, and it is 8 rather
+than 32 — tight enough that the distances real code produces sit outside it.
+Both numbers are load-bearing and both are derived and measured in the comment
+above `smc_push`.
+
+`f_flush_on_smc_push` in [formal/cpu_main.psl](../../formal/cpu_main.psl) is the
+tripwire. It cannot be written like `f_flush_on_smc`, because the obligation is
+deferred across micro-operations: a shadow register records a push that landed
+in the danger zone, and the property demands a flush no later than the
+instruction's retirement.
 
 ## Formal verification
 `formal/cpu_main.psl` verifies the assembled DECODE + PREPARE + WRITE pipeline

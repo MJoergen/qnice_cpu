@@ -82,7 +82,7 @@ The statistics file is the performance counterpart of the writes log, and exists
 that makes the CPU flush twice as often produces an identical writes log and passes CI green.
 `test_monitor.vhd` counts cycles (reset release to the retiring `HALT`), accepted beats on each
 Wishbone bus (`cyc and stb and not stall`), and cycles in which *both* buses accepted a beat. That
-last one measures the Harvard split directly: for `prog.asm`, 1822 of 1848 data requests coincide
+last one measures the Harvard split directly: for `prog.asm`, 1820 of 1846 data requests coincide
 with an instruction fetch, so serialising them onto one port would cost at least +12.2% of the run.
 Note the instruction count includes speculative fetches that a flush later discarded, which is part
 of why it is worth watching.
@@ -299,6 +299,31 @@ flip-flop in DECODE and PREPARE, so the comparison must subtract **raw stage reg
 flush costs cycles, not correctness. `test/prog_self_modifying.asm` covers both edges;
 see [doc/README.md](doc/README.md#self-modifying-code).
 
+`smc_hit` is qualified by `inst_done_o`, which is correct for every store in the microcode
+ROM — they all sit on the micro-op carrying `C_LAST` — and misses the **one** that does
+not: the return address `ASUB`/`RSUB` pushes, which `decode.vhd` writes by hand onto the
+instruction's *first* micro-op. `smc_push` is the second term that covers it, and its
+shape is not interchangeable with the first. The flush must be **deferred to the last
+micro-op** (a flush mid-sequence resets SEQUENCER and discards the rest of the branch,
+falling through to `next_pc`); it applies **only when `early_jmp` suppressed WRITE's own
+redirect**, since otherwise the `R15` write flushes anyway and FETCH refills from the
+target after the push has landed; and its window is measured from the **target**
+(`prep_stage_i.immediate`) and is **8, not 32**. That last number is load-bearing in the
+opposite direction from the one above: a stack placed just past the end of the program is
+normal, so a loose window here is not free — 16 costs `prog_mandel_perf` 4.7% and the
+ordinary 32-word window costs `prog_subroutine` 8%, most of the early redirect's gain.
+The bound is derived and measured in the comment above `smc_push`; `T8` in
+`test/prog_self_modifying.asm` and `f_flush_on_smc_push` in `formal/cpu_main.psl` pin it.
+
+Separately, `mem_req_op_o`'s **write** bit is ANDed with `update_reg`, the branch-taken
+term that also gates `p_reg`'s register writes. Without it a conditional `ASUB`/`RSUB`
+that was *not* taken still wrote its return address to `SP-1` — `SP` itself was correctly
+untouched, so nothing in the suite noticed and the stray writes simply sat in
+`test/prog.writes.golden`. The two **read** bits must stay ungated: a not-taken
+`ASUB @R0, Z` still reaches its last micro-op, which carries `C_MEM_WAIT_SRC` and would
+wait forever for a read that was never issued. `f_no_push_when_not_taken` in
+`formal/cpu_main.psl` and the sentinel in `prog.asm`'s `L_COND_ASUB_00` are the tripwires.
+
 ### Early redirect (unconditional branches)
 
 A branch normally costs **four cycles**: one to register the new PC in FETCH, one for the
@@ -333,7 +358,7 @@ Three things are load-bearing:
   same asymmetry `two_stage_fifo` documents in its contract (b). `f_flush_offers` and
   `f_cover_flush_handshake` in `formal/icache.psl` are the tripwires.
 * **WRITE must not redirect again**, or it discards what the early redirect went to fetch.
-  `prep_stage_i.early_jmp` carries that in the stage records beside `is_crb`. Its `rst_i` companion term in
+  `prep_stage_i.early_jmp` carries that in the stage records beside `is_crb` and `is_sub`. Its `rst_i` companion term in
   `write.vhd` is not decoration: `p_reg` forces the `R15 = 0` write that gives FETCH its initial PC
   during reset, and PREPARE's output register is *not* cleared by reset, so a stale `early_jmp`
   would suppress it.
@@ -672,7 +697,14 @@ bitstream, while five `place_design` directives on one unchanged netlist spanned
 and was measured at 7.25 ns; they have deliberately been left as measured, so read them as a record
 of that experiment rather than as the current margin. Shortening the critical loop was tried before
 relaxing the constraint and does not pay — the reasoning and the measurements are in
-doc/README.md's Utilization section. Current build: **WNS +0.060 ns**, no failing endpoints.
+doc/README.md's Utilization section. Current build: **WNS +0.005 ns**, no failing endpoints —
+reproducible across three builds, but essentially nothing left. The subroutine-push flush term
+(see [Self-modifying code](#self-modifying-code)) spent 0.055 ns of the 0.060 ns that was there,
+and it did so **without touching the critical path**: it reads `prep_stage_i.immediate`, which
+WRITE had no other use for, so sixteen flip-flops that synthesis used to optimise away came back
+and the extra area moved the placement. That is the sensitivity this section is about, arriving on
+cue. If the next change needs margin, relaxing `hw/system.xdc` again is the lever that has already
+been shown to work.
 
 The script rewrites **numbers only** — the surrounding analysis is a hand-written design argument.
 Every substitution is anchored on an exact pattern and a missing anchor is a hard error, so

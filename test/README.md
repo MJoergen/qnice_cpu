@@ -236,8 +236,15 @@ instruction executes and nothing reports a problem.
   `dst_val_pc`).
 * `T7` — patch an instruction inside a loop, so the hazard is hit on every one
   of three iterations.
+* `T8` — aim a subroutine call's *pushed return address* at the immediate
+  operand of the instruction it is calling. That push is the one store in the
+  machine that does not sit on its instruction's last micro-operation, so the
+  flush above cannot see it and it needs a term of its own; and because
+  `RSUB <label>, 1` is resolved early by DECODE, FETCH has been filling from the
+  target for two cycles by the time it lands. See
+  [The return address a subroutine call pushes](../src/cpu_main/README.md#the-return-address-a-subroutine-call-pushes).
 
-Those five all fail without the RTL fix, checked by stashing it and running each
+Those six all fail without the RTL fix, checked by stashing it and running each
 sub-test on its own. The remaining two are the opposite by design, and pass
 either way:
 
@@ -563,10 +570,10 @@ the file named by `G_STATS_FILE`, which `make` points at
 `test/<program>.stats`:
 
 ```
-cycles: 14883
-instruction memory requests: 13297
-data memory requests: 1848
-simultaneous requests: 1822
+cycles: 14892
+instruction memory requests: 13305
+data memory requests: 1846
+simultaneous requests: 1820
 ```
 
 `cycles` runs from the release of reset up to and including the cycle the `HALT`
@@ -590,14 +597,14 @@ a single-ported design would have had to serialise. For `prog.asm`:
 
 | | |
 | --- | --- |
-| cycles | 14883 |
-| instruction requests | 13297 (89% of cycles) |
-| data requests | 1848 |
-| ...of which simultaneous | 1822 (**98.6%** of data requests) |
+| cycles | 14892 |
+| instruction requests | 13305 (89% of cycles) |
+| data requests | 1846 |
+| ...of which simultaneous | 1820 (**98.6%** of data requests) |
 
 Almost every data access collides with an instruction fetch, which follows from
 the instruction bus being busy 89% of the time. Serialising them would cost at
-least 1822 extra cycles, i.e. **+12.2%**, and in practice more, since each
+least 1820 extra cycles, i.e. **+12.2%**, and in practice more, since each
 inserted stall also delays whatever was behind it in the pipeline. That is a
 lower bound in a second sense too: it counts only the collisions that actually
 happened in a machine built not to have to avoid them.

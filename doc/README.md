@@ -173,6 +173,12 @@ precise version is recorded next to each in the RTL.
   than correctness. A store *through* `R15` is simply forced to hit, since the
   register file's `R15` copy is stale and the distance calculation would be
   meaningless. See [Self-modifying code](#self-modifying-code).
+* **A subroutine call whose pushed return address lands within 8 words after the
+  branch target.** The same hazard, for the one store that does not sit on its
+  instruction's last micro-operation and so is invisible to the test above. It
+  is measured from the target and only applies when DECODE resolved the branch
+  itself; see
+  [The store the window could not see](#the-store-the-window-could-not-see).
 
 Reset is the fifth case, and it goes through the first of those four rather
 than around it: while `rst_i` is asserted, `p_reg` in `write.vhd` forces a write
@@ -342,14 +348,14 @@ serialise. For `test/prog.asm`, the longest of the test programs:
 
 | | |
 | --- | --- |
-| cycles | 14883 |
-| instruction requests | 13297 (89% of cycles) |
-| data requests | 1848 |
-| ...of which simultaneous | 1822 (**98.6%** of data requests) |
+| cycles | 14892 |
+| instruction requests | 13305 (89% of cycles) |
+| data requests | 1846 |
+| ...of which simultaneous | 1820 (**98.6%** of data requests) |
 
 Almost every data access collides with an instruction fetch — which follows from
 the instruction bus being busy 89% of the time. Serialising them onto one port
-would cost at least 1822 cycles, i.e. **+12.2%**, and more in practice, since
+would cost at least 1820 cycles, i.e. **+12.2%**, and more in practice, since
 each inserted stall also delays whatever was behind it in the pipeline. It is a
 lower bound in a second sense as well: it counts only the collisions that
 actually occurred in a machine built not to have to avoid them.
@@ -544,13 +550,45 @@ Two things are worth knowing:
   `prog_interleave.asm`. With the window, `prog.asm` pays 0.07% and
   `prog_interleave.asm` pays nothing.
 
+### The store the window could not see
+
+One store in the machine does not sit on the micro-operation that carries
+`C_LAST`, and so was invisible to a test qualified by "an instruction is
+retiring": the return address `ASUB`/`RSUB` pushes, which DECODE builds by hand
+as a `MOVE R15, @--R13` on the instruction's *first* micro-operation. A call
+whose Stack Pointer aimed into the subroutine it was calling therefore executed
+the stale word — the same silent failure the flush above exists to prevent,
+surviving in the one corner that flush could not reach.
+
+It is covered by a second term, and it is shaped differently in two ways. The
+flush cannot go out on the push's own cycle, because `fetch_valid_o` resets
+DECODE, SEQUENCER and PREPARE and would discard the rest of the branch; it is
+deferred to the last micro-operation instead. And the window is measured from
+the branch **target** rather than from the current instruction, because this
+only matters for a call DECODE resolved itself — for any other call, the write
+to `R15` at retirement flushes anyway and FETCH refills from the target after
+the push has landed. It is precisely when the
+[early redirect](#what-a-flush-costs) suppresses that flush that FETCH has been
+filling from the target for two cycles already.
+
+Being measured from the target also lets the window be much tighter: 8 words
+rather than 32. At the push, DECODE has accepted nothing from the target yet —
+SEQUENCER holds its ready low until the last micro-operation — so only ICACHE's
+two words can be stale. Tightness matters here in a way it does not above,
+because a stack placed just past the end of the program is the normal
+arrangement: a 16-word window costs `prog_mandel_perf.asm` 4.7%, and the
+ordinary 32-word one costs `prog_subroutine.asm` 8%, most of what the early
+redirect buys.
+
 [`test/prog_self_modifying.asm`](../test/prog_self_modifying.asm) covers this
 from both sides. `T1` rewrites the opcode of the very next instruction, `T2` its
 immediate operand, `T4` the instruction two ahead, `T5` reaches the instruction
-through a pre-decrement pointer, and `T7` patches an instruction inside a loop
-so the hazard is hit on every iteration; each of those fails without the flush.
-`T3` stores *outside* the window and `T6` stores to data that merely sits near
-the PC — both pass either way, and are there to pin the two edges.
+through a pre-decrement pointer, `T7` patches an instruction inside a loop so
+the hazard is hit on every iteration, and `T8` aims a subroutine call's pushed
+return address at the immediate operand of the instruction it is calling; each
+of those fails without the flush. `T3` stores *outside* the window and `T6`
+stores to data that merely sits near the PC — both pass either way, and are
+there to pin the two edges.
 
 
 ## Where the pipeline registers are
@@ -933,7 +971,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `0beed98`.
+Measured with Vivado 2022.2 on commit `fcf91af-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -950,12 +988,12 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  939 |     63400 | 1.48 |
-| Slice Registers |  603 |    126800 | 0.48 |
-| Slices          |  336 |     15850 | 2.12 |
+| Slice LUTs      |  970 |     63400 | 1.53 |
+| Slice Registers |  622 |    126800 | 0.49 |
+| Slices          |  332 |     15850 | 2.09 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 7.35 ns constraint: **WNS +0.060 ns**, no failing endpoints. The
+Timing at the 7.35 ns constraint: **WNS +0.005 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
@@ -986,8 +1024,8 @@ costs 1.4% of clock rate and buys a margin the design can be edited in.
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_dst_val][0]` to
-`i_prepare/wr_stage_o_reg[alu_src_val][12]`: 9 logic levels, with 78% of the
+The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][1]` to
+`i_prepare/wr_stage_o_reg[alu_src_val][3]`: 9 logic levels, with 79% of the
 delay in routing rather than logic.
 <!-- end -->
 
@@ -1139,21 +1177,21 @@ written:
 | --------------- | ---- | --- |
 | FETCH           |   63 |  92 |
 | ICACHE          |   44 |  66 |
-| DECODE          |   79 |  77 |
-| SEQUENCER       |   11 |   2 |
-| PREPARE         |   70 | 131 |
-| WRITE           |  459 |   0 |
+| DECODE          |   74 |  78 |
+| SEQUENCER       |   10 |   2 |
+| PREPARE         |   70 | 148 |
+| WRITE           |  449 |   0 |
 | REGISTERS       |  166 | 142 |
 | MEMORY          |   59 |  74 |
 | Glue            |   17 |   1 |
-| **CPU total**   |  968 | 585 |
+| **CPU total**   |  952 | 603 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 47% of the CPU's LUTs**, and 247 of its 459 are the ALU
+* **WRITE dominates, at 47% of the CPU's LUTs**, and 247 of its 449 are the ALU
   (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
@@ -1165,7 +1203,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#why-write-needs-no-status-register-bypass).
 
-The two tables do not add up to each other (968 vs 939 LUTs). That is expected,
+The two tables do not add up to each other (952 vs 970 LUTs). That is expected,
 and note that the *sign* of the gap is not stable — it has landed both ways
 round across builds. The per-module figure comes first and stops after synthesis
 with `-flatten_hierarchy none`, which forbids optimisation across module

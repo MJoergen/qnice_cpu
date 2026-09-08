@@ -4159,14 +4159,29 @@ L_COND_ABRA_90
 ; COND_ASUB: Test the ASUB instruction with all addressing modes (different registers)
 
 ; ASUB R0, <condition>
+;
+; The sentinel below is the check the four blocks in this group used to be
+; missing. A conditional call that is NOT taken must push nothing at all: the
+; Stack Pointer stays put -- which the CMP against D_COND_STACK_3 has always
+; verified -- but so must the word BELOW it, which is where the return address
+; would land. It used to be written anyway, and because nothing here read that
+; word the four stray stores simply sat in test/prog.writes.golden. See
+; "Update memory" in src/cpu_main/write.vhd.
+;
+; The two extra MOVEs go before the one that sets up R0, so the flags the ASUB
+; branches on still come from that instruction and the block tests what it did.
 L_COND_ASUB_00
                 MOVE    D_COND_STACK_3, R13     ; Setup stack pointer
+                MOVE    D_COND_STACK_2, R9      ; The word just below the stack
+                MOVE    0xBEEF, @R9             ; Sentinel: nothing may write it
                 MOVE    E_COND_ASUB_01, R0
                 ASUB    R0, Z                   ; Should not jump
                 CMP     E_COND_ASUB_01, R0      ; Verify R0 unchanged
                 ABRA    E_COND_ASUB_02, !Z      ; Should not jump
                 CMP     D_COND_STACK_3, R13     ; Verify R13 unchanged
                 ABRA    E_COND_ASUB_03, !Z      ; Should not jump
+                CMP     0xBEEF, @R9             ; Verify nothing was pushed
+                ABRA    E_COND_ASUB_06, !Z      ; Should not jump
                 MOVE    L_COND_ASUB_01, R0
                 ASUB    R0, !Z                  ; Should jump
                 HALT
@@ -4175,6 +4190,7 @@ E_COND_ASUB_02  HALT
 E_COND_ASUB_03  HALT
 E_COND_ASUB_04  HALT
 E_COND_ASUB_05  HALT
+E_COND_ASUB_06  HALT
 L_COND_ASUB_01  CMP     L_COND_ASUB_01, R0      ; Verify R0 unchanged
                 ABRA    E_COND_ASUB_04, !Z      ; Should not jump
                 CMP     D_COND_STACK_2, R13     ; Verify R13 decremented
