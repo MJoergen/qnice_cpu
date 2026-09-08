@@ -31,14 +31,31 @@ deliberately stops there: above 0x8000 the emulator decodes memory-mapped I/O
 and both test/system.vhd and test/tb_upstream.vhd put the EAE, so the two sides
 are not describing the same thing.
 
-Registers are NOT compared, and that is a limitation rather than a choice.
-src/debug.vhd logs a register write as "to register F" -- the four-bit register
-number, with no record of which of the 256 banks R14's upper byte selected at
-the time.  After the first INCRB the log no longer identifies the location that
-was written, so a final register file cannot be reconstructed from it.  Fixing
-that means widening the log, which moves every test/*.writes.golden; it has not
-been done for a comparison that memory already covers, since every program here
-stores its results and its status word to memory.
+Registers too, R0-R13.  That used to be impossible: src/debug.vhd logged a
+register write as "to register F" -- the four-bit register number, with no
+record of which of the 256 banks R14's upper byte selected at the time -- so
+after the first INCRB the log no longer identified the location written and a
+final register file could not be reconstructed from it.  The log now carries
+the bank, taken from a port of its own on the register file rather than from
+the status register, so that it is the bank the write actually landed in.
+
+How much of the register file each reference can speak about differs, and the
+output says which:
+
+  --reference rtl        every bank either side ever wrote.  Upstream's CPU
+                         logs its writes the same way (test/tb_upstream.vhd),
+                         so the same replay reconstructs both sides in full.
+  --reference emulator   the window it halted in.  The emulator's RDUMP prints
+                         R0-R15 through read_register(), which resolves R0-R7
+                         through the current bank, and there is no way to ask
+                         it for the other 255.  The bank it names is checked
+                         against the one this CPU's log ends in before anything
+                         is compared, so a disagreement is reported as that
+                         rather than as eight spurious register diffs.
+
+R14 and R15 are excluded, and REG_HI below says why: the first is flags, which
+the implementations are not obliged to agree on and which neither side logs,
+and the second is a program counter this CPU deliberately keeps somewhere else.
 
 Nothing in this repo's RTL had to change for this.  The QNICE-side final image
 is the assembler's own .out file (the initial memory image, in the same
@@ -202,6 +219,24 @@ def read_image(path):
 
 WRITE_RE = re.compile(r"Write value 0x([0-9A-Fa-f]+) to memory 0x([0-9A-Fa-f]+)")
 
+REG_WRITE_RE = re.compile(
+    r"Write value 0x([0-9A-Fa-f]+) to register ([0-9A-Fa-f])(?: bank 0x([0-9A-Fa-f]+))?")
+
+# The registers compared, and why it stops at R13.
+#
+# R14 is the status register.  Most of it is flags, which the implementations
+# are not obliged to agree on instruction for instruction -- prog.asm's PTR_SR
+# group is the standing example -- and neither side logs the dedicated
+# flag-update port anyway, since that fires on nearly every instruction and
+# would swamp the log.
+#
+# R15 is the program counter.  This CPU keeps the working PC in FETCH and
+# writes the register file's copy only when an instruction targets R15, so at
+# HALT that copy is stale by design; upstream's R15 is the real thing.  They
+# describe different objects and comparing them would report a difference on
+# every program.
+REG_HI = 0xD
+
 
 def apply_writes(mem, path):
     """Replay the memory writes from a .writes log over an image, in order."""
@@ -215,6 +250,80 @@ def apply_writes(mem, path):
     return count
 
 
+def registers_from_log(path):
+    """Replay the register writes in a .writes log into a final register file.
+
+    Keyed by (bank, reg) for the banked R0-R7 and by (None, reg) for R8-R15,
+    which the QNICE register file does not bank.  A register nothing ever wrote
+    is absent and reads back as 0, which is what all three implementations
+    power up holding -- see test/upstream.patch for the one that had to be made
+    to.
+
+    The bank is what makes this possible at all: "to register 3" names eight
+    different registers over the life of a program, so without it the last
+    value written to any of R0-R7 cannot be identified.  src/debug.vhd takes it
+    from a port of its own on the register file rather than from the status
+    register, so it is the bank the write actually landed in.
+    """
+    regs = {}
+    with open(path) as f:
+        for line in f:
+            m = REG_WRITE_RE.match(line)
+            if m:
+                reg = int(m.group(2), 16)
+                bank = int(m.group(3), 16) if m.group(3) is not None else None
+                regs[(bank, reg)] = int(m.group(1), 16)
+    return regs
+
+
+def final_bank(path):
+    """The register bank selected when the program halted, from its log.
+
+    R14's upper byte selects the bank, and INCRB/DECRB reach it through the
+    ordinary register write port, so the logged writes to R14 are enough --
+    the dedicated flag-update port, which is not logged, only ever touches the
+    low bits.  That last part is an assumption about what WRITE puts on that
+    port rather than something stated here, so it is not relied on silently:
+    the emulator reports the bank it finished in, and compare_registers below
+    checks the two against each other.
+    """
+    bank = 0
+    with open(path) as f:
+        for line in f:
+            m = REG_WRITE_RE.match(line)
+            if m and int(m.group(2), 16) == 0xE:
+                bank = int(m.group(1), 16) >> 8
+    return bank
+
+
+RDUMP_BANK_RE = re.compile(r"Register dump: BANK = ([0-9A-Fa-f]+)")
+RDUMP_ROW_RE = re.compile(r"R(\d+)-R\d+:\s+((?:[0-9A-Fa-f]{4}\s*)+)")
+
+
+def parse_rdump(text):
+    """Read the emulator's RDUMP output into (registers, bank).
+
+    The emulator can only show the register WINDOW it finished in -- its
+    dump_registers() prints R0-R15 through read_register(), which resolves
+    R0-R7 through the current bank -- so unlike the two RTL implementations
+    there is no way to ask it for the other 255 banks.  What comes back is
+    therefore keyed like registers_from_log()'s result but covers one bank, and
+    the bank is returned alongside so that the comparison can check it against
+    ours rather than assume it.
+    """
+    m = RDUMP_BANK_RE.search(text)
+    if not m:
+        return None, None
+    bank = int(m.group(1), 16)
+    regs = {}
+    for row in RDUMP_ROW_RE.finditer(text):
+        first = int(row.group(1))
+        for i, word in enumerate(row.group(2).split()):
+            reg = first + i
+            regs[(bank if reg < 8 else None, reg)] = int(word, 16)
+    return regs, bank
+
+
 def run_emulator(emulator, out_file, dump_file, seed_file, timeout):
     """LOAD the program, seed the status word, RUN to HALT, SAVE the RAM.
 
@@ -224,25 +333,25 @@ def run_emulator(emulator, out_file, dump_file, seed_file, timeout):
     """
     with open(seed_file, "w") as f:
         f.write("0x%04X 0x%04X\n" % (STATUS_ADDR, STATUS_SENTINEL))
-    script = "LOAD %s\nLOAD %s\nRUN\nSAVE %s 0x%04X 0x%04X\nQUIT\n" % (
+    script = "LOAD %s\nLOAD %s\nRUN\nSAVE %s 0x%04X 0x%04X\nRDUMP\nQUIT\n" % (
         out_file, seed_file, dump_file, RAM_LO, RAM_HI)
     try:
         proc = subprocess.run([emulator], input=script, capture_output=True,
                               text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return None, None, "emulator did not halt within %ds" % timeout
+        return None, None, "emulator did not halt within %ds" % timeout, None
     m = re.search(r"HALT instruction executed at address ([0-9A-Fa-f]+)", proc.stdout)
     if not m:
         # The emulator prints a diagnostic and halts on a rogue RTI/INT/EXC too;
         # surface whatever it said rather than a bare "no halt".
         tail = " | ".join(proc.stdout.strip().splitlines()[-3:])
-        return None, None, "no HALT reported by the emulator (%s)" % (tail or "no output")
+        return None, None, "no HALT reported by the emulator (%s)" % (tail or "no output"), None
     if not os.path.exists(dump_file):
-        return None, None, "emulator produced no memory dump"
-    return m.group(1), None, None
+        return None, None, "emulator produced no memory dump", None
+    return m.group(1), None, None, parse_rdump(proc.stdout)
 
 
-def run_rtl(workdir, rom_file, dump_file, timeout):
+def run_rtl(workdir, rom_file, dump_file, writes_file, timeout):
     """Run the program on upstream's own CPU under GHDL, and dump its RAM.
 
     Everything the run needs is a generic: the program, where to put the dump,
@@ -260,6 +369,7 @@ def run_rtl(workdir, rom_file, dump_file, timeout):
            "tb_upstream",
            "-gG_ROM=" + rom_file,
            "-gG_DUMP_FILE=" + dump_file,
+           "-gG_WRITES_FILE=" + writes_file,
            "-gG_STATUS_ADDR=%d" % STATUS_ADDR,
            "-gG_STATUS_SEED=%d" % STATUS_SENTINEL,
            "--ieee-asserts=disable-at-0"]
@@ -287,6 +397,51 @@ def allowed(test, addr):
         if lo <= addr <= hi:
             return True
     return False
+
+
+def compare_registers(our_log, ref_regs, ref_bank, reference):
+    """Diff the final register files.  Returns (ok, message).
+
+    ref_regs is keyed the same way registers_from_log() keys its result, except
+    that the emulator can only report the window it finished in -- see
+    run_emulator -- so its R0-R7 come back under the bank it names, and
+    ref_bank is that bank.  For the RTL both sides carry every bank they ever
+    wrote and ref_bank is None.
+    """
+    ours = registers_from_log(our_log)
+
+    if ref_bank is not None:
+        # A window, not a file: keep only what the reference can speak about,
+        # and check first that the two agree on WHICH window that is. If they
+        # do not, every R0-R7 comparison below would be against the wrong
+        # register, so say that instead of reporting eight spurious diffs.
+        our_bank = final_bank(our_log)
+        if our_bank != ref_bank:
+            return False, ("final register bank differs: cpu=0x%02X %s=0x%02X"
+                           % (our_bank, reference, ref_bank))
+        ours = {k: v for k, v in ours.items()
+                if k[0] is None or k[0] == our_bank}
+
+    diffs = []
+    for key in sorted(set(ours) | set(ref_regs), key=lambda k: (k[1], k[0] or 0)):
+        bank, reg = key
+        if reg > REG_HI:
+            continue
+        if ours.get(key, 0) != ref_regs.get(key, 0):
+            diffs.append((bank, reg, ours.get(key, 0), ref_regs.get(key, 0)))
+
+    scope = ("R0-R13 in bank 0x%02X" % ref_bank) if ref_bank is not None \
+        else "R0-R13, every bank written"
+    if diffs:
+        lines = ["%d register(s) of %s DIFFER" % (len(diffs), scope)]
+        for bank, reg, q, e in diffs[:20]:
+            where = "R%-2d" % reg + ("" if bank is None else " bank 0x%02X" % bank)
+            lines.append("      %-16s cpu=0x%04X  %s=0x%04X" % (where, q, reference, e))
+        if len(diffs) > 20:
+            lines.append("      ... and %d more" % (len(diffs) - 20))
+        return False, "\n".join(lines)
+
+    return True, "%s identical" % scope
 
 
 def compare(test, out_file, writes_file, dump_file, reference):
@@ -372,11 +527,18 @@ def main():
         os.makedirs(os.path.dirname(dump_file), exist_ok=True)
         if reference == "emulator":
             seed_file = os.path.join(HERE, "crosscheck", test + ".seed")
-            halt_addr, note, err = run_emulator(args.emulator, out_file, dump_file,
-                                                seed_file, args.timeout)
+            halt_addr, note, err, rdump = run_emulator(args.emulator, out_file,
+                                                       dump_file, seed_file,
+                                                       args.timeout)
+            ref_regs, ref_bank = rdump if rdump else (None, None)
         else:
+            # The RTL reference logs its writes the way this CPU does, so the
+            # same replay reconstructs its whole register file -- every bank,
+            # not just the one it halted in.
+            ref_log = os.path.join(HERE, "crosscheck", test + ".rtlwrites")
             halt_addr, note, err = run_rtl(args.workdir, rom_file, dump_file,
-                                           args.timeout)
+                                           ref_log, args.timeout)
+            ref_regs, ref_bank = (registers_from_log(ref_log), None) if not err else (None, None)
         if err:
             failures.append((test, err))
             continue
@@ -414,11 +576,26 @@ def main():
             # differing word, and the note belongs to the run as a whole.
             head, _, rest = message.partition("\n")
             message = head + ", " + note + ("\n" + rest if rest else "")
-        print("%-22s %s" % (test, message))
-        if ok:
-            passed.append(test)
+
+        # Memory is only half the architectural state; the other half is the
+        # register file, which neither reference could speak about until both
+        # sides started recording the bank a write lands in.
+        reg_ok, reg_message = True, "registers not compared"
+        if ref_regs is None:
+            reg_message = "registers not compared (%s reported none)" % reference
         else:
+            reg_ok, reg_message = compare_registers(writes_file, ref_regs,
+                                                    ref_bank, reference)
+
+        print("%-22s %s" % (test, message))
+        print("%-22s %s" % ("", reg_message))
+        if ok and reg_ok:
+            passed.append(test)
+        elif not ok:
             failures.append((test, "final memory differs (%s halted at 0x%s)"
+                             % (reference, halt_addr)))
+        else:
+            failures.append((test, "final registers differ (%s halted at 0x%s)"
                              % (reference, halt_addr)))
 
     for test, reason in skipped:

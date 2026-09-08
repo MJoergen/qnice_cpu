@@ -113,12 +113,35 @@ pipeline flush, since a branch retiring can discard an already-accepted `HALT` �
 `make test` and `make test_slow` compare this CPU against **itself**: every `test/*.golden` file
 was recorded from a passing run of this implementation, so an answer that has been wrong since the
 goldens were written passes them green forever. Two targets close that gap by running each program
-on an upstream implementation and diffing the final contents of RAM, `0x0000`-`0x7FFF`, against
-what this CPU left behind. `make crosscheck` uses QNICE-FPGA's C emulator; `make crosscheck_rtl`
-uses **upstream's own CPU**, `vhdl/qnice_cpu.vhd`, under GHDL. Both build their reference from the
-Makefile's `QNICE_REF` — the same commit `.github/workflows/test.yml` pins for the assembler — into
+on an upstream implementation and diffing the final architectural state against what this CPU left
+behind. `make crosscheck` uses QNICE-FPGA's C emulator; `make crosscheck_rtl` uses **upstream's own
+CPU**, `vhdl/qnice_cpu.vhd`, under GHDL. Both build their reference from the Makefile's
+`QNICE_REF` — the same commit `.github/workflows/test.yml` pins for the assembler — into
 `test/crosscheck/`, which is generated and gitignored. The harness is `test/crosscheck.py`, shared
 by the two via `--reference emulator|rtl`; its header carries the design.
+
+**What is compared is memory AND registers**: all 32768 words of `0x0000`-`0x7FFF`, plus `R0`-`R13`.
+The register half rests on `src/debug.vhd` logging the **bank** a write to `R0`-`R7` lands in —
+without it "to register 3" names eight different registers over a program's life and no final
+register file can be reconstructed. The bank comes from `registers.vhd`'s `wr_bank_o`, a port that
+exists only for this, and it must be `reg_sr` rather than `sr_val_o`: the latter forwards a write in
+flight, including the dedicated SR port that fires alongside most ordinary register writes, and that
+this never disturbs the bank bits is a property of what WRITE puts on it rather than something the
+register file guarantees. `wr_bank_o`'s only consumer sits inside `pragma synthesis_off`, so it is
+unconnected in every synthesised build and optimises away. Adding the bank moved every
+`test/*.writes.golden`; the diff was purely the added suffix, with no value, order or count changing
+anywhere, and that is what to check if it ever has to be done again.
+
+`R14` and `R15` are deliberately excluded. `R14` is mostly flags, which the two implementations are
+not obliged to agree on (`prog.asm`'s `PTR_SR` group is the standing example) and which neither side
+logs, since the dedicated flag port fires on nearly every instruction. `R15` is the PC, which this
+CPU keeps in FETCH and writes to the register file only on branches, so at `HALT` the two references
+are not describing the same object. Coverage of the banks differs by reference and the output says
+which: `crosscheck_rtl` compares **every bank** either side wrote, because `tb_upstream.vhd` logs
+upstream's writes in the same format, while `crosscheck` compares only the window the emulator
+halted in — its `RDUMP` resolves `R0`-`R7` through the current bank and cannot be asked for the
+other 255. The two banks are cross-checked before any register is, so a disagreement is reported as
+itself rather than as eight spurious diffs.
 
 **Running both is not redundancy, it is the point.** The three programs that fail are different in
 each direction, and every one of them is a place where the two upstream implementations disagree
@@ -130,6 +153,14 @@ source `@R15++` post-increment, so `ADD 0x0002, R15` reads its destination one w
 emulator reads the destination after the source, and this CPU follows the emulator. Each is
 recorded in `KNOWN_DIVERGENCE` and **asserted** — if a divergence disappears the harness fails,
 rather than quietly passing.
+
+`test/tb_upstream.vhd` also writes a log of upstream's own register and memory writes, in
+`debug.vhd`'s format, reached by VHDL-2008 **external names** into the register file instance's
+ports (declared inside the process, because an alias in the architecture's declarative part
+elaborates before the instances and GHDL rejects it). That is both the input to the register
+comparison and the diagnostic that was missing when `prog_r15` diverged and had to be traced by
+hand. It is not something to `diff -u` against this repo's log — a pipeline and a multi-cycle FSM
+interleave their writes differently, and neither order is wrong.
 
 The RTL reference runs in `test/tb_upstream.vhd`, which is ours and is linted with everything else.
 It gives upstream's CPU the smallest system these programs need — one writable 32 kW RAM over
@@ -160,7 +191,7 @@ vsg release — the pin is load-bearing, because VSG adds and re-scopes rules be
 `vsg.yml` only overrides the defaults it knows about, so an unpinned bump can turn the job red
 with no VHDL change at all.
 
-**The tree is clean: zero errors.** What remains is 38 `length_001` warnings, which are the
+**The tree is clean: zero errors.** What remains is 39 `length_001` warnings, which are the
 100-column *target* of CODING_STYLE.md section 3 advising rather than failing; warnings do not fail
 the job. Every rule VSG applies here is now either stated in CODING_STYLE.md or deliberately
 disabled in `vsg.yml` with the reason written next to it, so wanting to change a `vsg.yml` rule is

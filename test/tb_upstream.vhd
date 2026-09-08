@@ -63,6 +63,40 @@
 -- apart on it.
 --
 --
+--
+-- THE WRITE LOG
+--
+-- G_WRITES_FILE, when set, gets every register and memory write this CPU
+-- retires, in src/debug.vhd's format. It has two jobs.
+--
+-- The first is diagnosis. Before it existed, a divergence gave a final-memory
+-- diff and nothing else: the R15 divergence in test/prog_r15.asm had to be
+-- traced by hand, from the halt address back into upstream's cs_decode. This
+-- is not something to "diff -u" against this repo's own log -- a four-stage
+-- pipeline and a multi-cycle FSM interleave their register and memory writes
+-- quite differently, and neither order is wrong -- it is a readable trace of
+-- what the reference did, in the same vocabulary.
+--
+-- The second is that test/crosscheck.py replays it to reconstruct the final
+-- register file, which is the half of the architectural state the memory dump
+-- cannot reach. R0-R12 come off the register file's write port, with the bank
+-- off sel_rbank; R13 is watched for change instead, because upstream drives SP
+-- from fsmSP every rising edge rather than through that port. R14 and R15 are
+-- deliberately absent: the SR is flags, which the two implementations are not
+-- required to agree on, and upstream's R15 is a real program counter where
+-- this CPU's register-file copy is written only by branches. crosscheck.py
+-- compares R0-R13 for exactly that reason.
+--
+-- The register-file signals are reached by VHDL-2008 external names, since
+-- they are internal to the CPU under test. They name PORTS of the register
+-- file instance rather than signals inside its architecture -- still
+-- upstream's identifiers, but the ones its own entity declares -- and if a
+-- later QNICE_REF renames one, elaboration fails and says which. That is the
+-- alternative to patching a diagnostic window into upstream's source, which
+-- would be the wrong trade for the same reason test/upstream.patch is kept to
+-- three hunks.
+--
+--
 -- CYCLE COUNTS
 --
 -- Reported per run and checked against nothing. This CPU takes four to eleven
@@ -85,6 +119,10 @@ entity tb_upstream is
       G_ROM         : string;
       -- Where to write the final contents of RAM, as "0xADDR 0xVALUE" lines.
       G_DUMP_FILE   : string;
+      -- Where to log every register and memory write, in src/debug.vhd's
+      -- format. An empty string (the default) disables the logging entirely.
+      -- See the header.
+      G_WRITES_FILE : string := "";
       -- The reserved status word, and the value it is seeded with so that
       -- "never written" is distinguishable from "written as pass". Both are
       -- owned by test/crosscheck.py -- see the header.
@@ -270,6 +308,82 @@ begin
          end if;
       end if;
    end process p_trace;
+
+   -- Every register and memory write, in src/debug.vhd's format. See the
+   -- header: this is both the diagnostic trace and what test/crosscheck.py
+   -- replays to reconstruct the final register file.
+   --
+   -- The edges are upstream's, not a choice: its register file writes R0-R12
+   -- on the FALLING edge, which is also when the RAM above latches a store, so
+   -- both are read there; SP moves on the rising edge. A store can hold
+   -- DATA_DIR over more than one falling edge -- the RAM simply writes the same
+   -- word again -- so a write is logged on the cycle DATA_DIR rises, giving one
+   -- line per store rather than one per cycle.
+
+   p_writes : process
+      -- The register file's write port, and the bank it lands in. External
+      -- names because these are internal to the CPU under test; see the header
+      -- for why they name ports of the instance rather than signals inside it.
+      -- They are declared HERE rather than with the architecture's signals
+      -- because an alias in that declarative part is elaborated before the
+      -- instances are, and GHDL rejects it with "component instance
+      -- i_qnice_cpu is not yet elaborated".
+      alias up_wr_en   is << signal .tb_upstream.i_qnice_cpu.registers.write_en : std_logic >>;
+      alias up_wr_addr is
+      << signal .tb_upstream.i_qnice_cpu.registers.write_addr : std_logic_vector(3 downto 0) >>;
+      alias up_wr_data is
+      << signal .tb_upstream.i_qnice_cpu.registers.write_data : std_logic_vector(15 downto 0) >>;
+      alias up_bank    is
+      << signal .tb_upstream.i_qnice_cpu.registers.sel_rbank : std_logic_vector(7 downto 0) >>;
+      alias up_sp      is
+      << signal .tb_upstream.i_qnice_cpu.registers.sp : std_logic_vector(15 downto 0) >>;
+
+      file     write_file : text;
+      variable write_line : line;
+      variable sp_v       : std_logic_vector(15 downto 0) := (others => '0');
+      variable dir_v      : std_logic                     := '0';
+   begin
+      if G_WRITES_FILE = "" then
+         wait;
+      end if;
+
+      file_open(write_file, G_WRITES_FILE, write_mode);
+      wait until rst = '0';
+      sp_v := up_sp;
+
+      main_loop : loop
+         wait on clk;
+
+         if falling_edge(clk) then
+            -- R0-R12. R13 is watched below, R14 and R15 are deliberately not
+            -- logged at all -- see the header.
+            if up_wr_en = '1' and up_wr_addr /= X"D"
+               and up_wr_addr /= X"E" and up_wr_addr /= X"F" then
+               write(write_line, "Write value 0x" & to_hstring(up_wr_data)
+                     & " to register " & to_hstring(up_wr_addr));
+               if up_wr_addr(3) = '0' then
+                  write(write_line, " bank 0x" & to_hstring(up_bank));
+               end if;
+               writeline(write_file, write_line);
+            end if;
+
+            if ram_ce = '1' and cpu_data_dir = '1' and dir_v = '0' then
+               write(write_line, "Write value 0x" & to_hstring(cpu_data_out)
+                     & " to memory 0x" & to_hstring(cpu_addr));
+               writeline(write_file, write_line);
+            end if;
+            dir_v := cpu_data_dir;
+         end if;
+
+         if rising_edge(clk) and up_sp /= sp_v then
+            write(write_line, "Write value 0x" & to_hstring(up_sp) & " to register D");
+            writeline(write_file, write_line);
+            sp_v := up_sp;
+         end if;
+      end loop main_loop;
+
+      file_close(write_file);
+   end process p_writes;
 
    -- Dump the whole of RAM at HALT and end the simulation. Unlike
    -- test/test_monitor.vhd this does not judge the run: the status word is

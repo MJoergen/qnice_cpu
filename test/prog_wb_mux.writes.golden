@@ -1,18 +1,18 @@
-Write value 0x1000 to register 7
+Write value 0x1000 to register 7 bank 0x00
 Write value 0xFF18 to register 9
 Write value 0x0005 to memory 0x1000
 Write value 0x0003 to memory 0xFF18
 Write value 0xFFFE to memory 0xFF18
-Write value 0xFFFE to register 1
+Write value 0xFFFE to register 1 bank 0x00
 Write value 0x0004 to memory 0x1000
 Write value 0x0009 to memory 0xFF18
 Write value 0xFFFB to memory 0x1000
-Write value 0xFFFB to register 1
+Write value 0xFFFB to register 1 bank 0x00
 Write value 0x0064 to memory 0x1000
 Write value 0x0007 to memory 0xFF18
 Write value 0xFFA3 to memory 0xFF18
 Write value 0x00C1 to memory 0x1000
-Write value 0xFFA3 to register 1
-Write value 0x00C1 to register 2
-Write value 0x7FFF to register 0
+Write value 0xFFA3 to register 1 bank 0x00
+Write value 0x00C1 to register 2 bank 0x00
+Write value 0x7FFF to register 0 bank 0x00
 Write value 0x0000 to memory 0x7FFF

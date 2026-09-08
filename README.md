@@ -160,9 +160,11 @@ so that if one ever disappears the harness says so instead of quietly passing.
 Two caveats worth stating plainly. This compares **final architectural state,
 not an execution trace**, so a value that is briefly wrong and then overwritten
 is invisible to it — fault injection confirms the boundary in both directions.
-And it compares memory, not registers, because the write log records a register
-number without its bank. Cycle counts and write *order* stay the golden files'
-job. The checks are complementary; none of them subsumes another.
+It compares **memory and registers** — all 32768 words of `0x0000`-`0x7FFF`,
+and `R0`-`R13`; the status register and the program counter are excluded, for
+reasons [`test/README.md`](test/README.md) gives. Cycle counts and write
+*order* stay the golden files' job. The checks are complementary; none of them
+subsumes another.
 
 ### Differential testing against the upstream CPU
 
@@ -175,6 +177,11 @@ harness. **Thirteen of the fourteen leave memory bit-identical**, again across
 all 32768 words, with two of `prog.asm`'s `PTR_SR` words excused by the range
 above — a different two from the ones the emulator differs on, which is itself a
 small demonstration that an `R14`-as-pointer address is not a shared quantity.
+
+**And every register, in every bank either side ever wrote.** That is the
+stronger half of the comparison and it is only available here: upstream's CPU
+logs its register writes the way this one does, so both sides can be replayed
+in full, where the emulator can only report the one bank it halted in.
 
 Upstream's CPU needs a system around it, and that part is ours:
 [`test/tb_upstream.vhd`](test/tb_upstream.vhd) gives it the smallest one these

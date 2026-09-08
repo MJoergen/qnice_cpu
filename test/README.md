@@ -706,13 +706,35 @@ instruction: `prog.asm` takes 22333 cycles there against this CPU's 15581, and
 
 ### What is compared, and what is not
 
-Memory, not registers. `src/debug.vhd` logs a register write as
-`to register F` — the four-bit register number, with no record of which of the
-256 banks was selected at the time — so after the first `INCRB` the log no
-longer identifies the location that was written and a final register file
-cannot be reconstructed from it. Widening the log would move every
-`.writes.golden`, and memory already covers what matters: every program stores
-its results and its status word there.
+Memory and registers, in that order of coverage.
+
+Memory is all 32768 words of `0x0000`-`0x7FFF`. Registers are **R0-R13**, and
+how much of the register file each reference can account for differs:
+`make crosscheck_rtl` compares every bank either side ever wrote, because
+upstream's CPU logs its writes the same way this one does; `make crosscheck`
+compares the window the emulator halted in, because its `RDUMP` resolves
+`R0`-`R7` through the current bank and there is no way to ask it for the other
+255. The two banks are checked against each other first, so a disagreement is
+reported as *that* rather than as eight spurious register diffs.
+
+This was not possible until recently, and the reason is worth keeping: a
+register write was logged as `to register F`, the four-bit register number,
+with no record of which of the 256 banks was selected at the time — so after
+the first `INCRB` the log no longer identified the location written. The log
+now carries the bank, and takes it from a port of its own on the register file
+(`wr_bank_o`) rather than from the status register, so it is the bank the write
+actually landed in rather than one inferred from a value that a write in flight
+may already have changed. Adding it moved every `.writes.golden`, which is why
+it waited; the diff was purely the added suffix, with no value, order or count
+changing anywhere.
+
+`R14` and `R15` are excluded. `R14` is the status register: mostly flags, which
+the implementations are not obliged to agree on instruction for instruction —
+`prog.asm`'s `PTR_SR` group is the standing example — and neither side logs the
+dedicated flag-update port, which fires on nearly every instruction and would
+swamp the log. `R15` is the program counter, and this CPU deliberately keeps
+the working copy in FETCH and writes the register file's only on branches, so
+at `HALT` the two are not describing the same object.
 
 The window is `0x0000`-`0x7FFF` because that is the common ground. Above
 `0x8000` the emulator decodes memory-mapped I/O and both `system.vhd` and

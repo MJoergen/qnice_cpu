@@ -99,6 +99,12 @@ architecture synthesis of cpu is
    signal wr2reg_addr   : std_logic_vector(3 downto 0);
    signal wr2reg_val    : std_logic_vector(15 downto 0);
 
+   -- Simulation only: the bank a write to R0-R7 lands in, for the write log.
+   -- Widened to a byte on the way to debug.vhd so that the log's format does
+   -- not move with G_REGISTER_BANK_WIDTH; the bank is R14(15 downto 8), so
+   -- eight bits is its full width and this only ever pads.
+   signal reg2dbg_bank : std_logic_vector(G_REGISTER_BANK_WIDTH-1 downto 0);
+
    -- WRITE request to memory
    signal wr2mem_req_valid : std_logic;
    signal wr2mem_req_ready : std_logic;
@@ -329,7 +335,8 @@ begin
          wr_val_i    => wr2reg_val,
          sr_val_o    => reg2seq_r14,
          wr_sr_en_i  => wr2reg_r14_we,
-         wr_sr_val_i => wr2reg_r14
+         wr_sr_val_i => wr2reg_r14,
+         wr_bank_o   => reg2dbg_bank
       ); -- i_registers
 
 
@@ -374,6 +381,7 @@ begin
          reg_we_i   => wr2reg_we,
          reg_addr_i => wr2reg_addr,
          reg_data_i => wr2reg_val,
+         reg_bank_i => resize(reg2dbg_bank, 8),
          mem_we_i   => std_logic(wbd_stb_o and wbd_we_o and not wbd_stall_i),
          mem_addr_i => wbd_addr_o,
          mem_data_i => wbd_dat_o

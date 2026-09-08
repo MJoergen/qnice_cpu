@@ -34,7 +34,22 @@ entity registers is
       -- Separate dedicated interface for the SR register (aka R14)
       sr_val_o    : out std_logic_vector(15 downto 0);
       wr_sr_en_i  : in  std_logic;
-      wr_sr_val_i : in  std_logic_vector(15 downto 0)
+      wr_sr_val_i : in  std_logic_vector(15 downto 0);
+      -- The bank a write to R0-R7 lands in this cycle. Diagnostic only: its
+      -- one consumer is src/debug.vhd, which sits inside a "pragma
+      -- synthesis_off" block, so this output is unconnected in every
+      -- synthesised build and optimises away. It exists because the write log
+      -- records a four-bit register number, which after the first INCRB no
+      -- longer says WHICH register was written -- see src/debug.vhd.
+      --
+      -- It must be reg_sr and cannot be sr_val_o, even though the two agree on
+      -- the upper byte today. sr_val_o forwards a write in flight, including
+      -- the dedicated SR port, which fires alongside most ordinary register
+      -- writes; that it never disturbs the bank bits is a property of what
+      -- WRITE puts on wr_sr_val_i, not of anything stated here. reg_sr is what
+      -- lower_wr_addr below is actually built from, so this cannot drift from
+      -- the write it describes.
+      wr_bank_o   : out std_logic_vector(G_REGISTER_BANK_WIDTH-1 downto 0)
    );
 end entity registers;
 
@@ -82,6 +97,7 @@ begin
    lower_rd_addr_src <= reg_sr(G_REGISTER_BANK_WIDTH+7 downto 8) & src_reg_i(2 downto 0);
    lower_rd_addr_dst <= reg_sr(G_REGISTER_BANK_WIDTH+7 downto 8) & dst_reg_i(2 downto 0);
    lower_wr_addr     <= reg_sr(G_REGISTER_BANK_WIDTH+7 downto 8) & wr_reg_i(2 downto 0);
+   wr_bank_o         <= reg_sr(G_REGISTER_BANK_WIDTH+7 downto 8);
    lower_wr_data     <= wr_val_i;
    lower_wr_en       <= wr_en_i and not wr_reg_i(3);
 

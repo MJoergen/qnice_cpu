@@ -1,6 +1,6 @@
 Write value 0x002D to register D
-Write value 0x0000 to register 0
-Write value 0x0010 to register 1
+Write value 0x0000 to register 0 bank 0x00
+Write value 0x0010 to register 1 bank 0x00
 Write value 0x0010 to register 8
 Write value 0x002C to register D
 Write value 0x0009 to memory 0x002C
@@ -15,8 +15,8 @@ Write value 0x0017 to register F
 Write value 0x0030 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x0030 to register 0
-Write value 0x000F to register 1
+Write value 0x0030 to register 0 bank 0x00
+Write value 0x000F to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x000F to register 8
 Write value 0x002C to register D
@@ -32,8 +32,8 @@ Write value 0x0017 to register F
 Write value 0x002D to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x005D to register 0
-Write value 0x000E to register 1
+Write value 0x005D to register 0 bank 0x00
+Write value 0x000E to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x000E to register 8
 Write value 0x002C to register D
@@ -49,8 +49,8 @@ Write value 0x0017 to register F
 Write value 0x002A to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x0087 to register 0
-Write value 0x000D to register 1
+Write value 0x0087 to register 0 bank 0x00
+Write value 0x000D to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x000D to register 8
 Write value 0x002C to register D
@@ -66,8 +66,8 @@ Write value 0x0017 to register F
 Write value 0x0027 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x00AE to register 0
-Write value 0x000C to register 1
+Write value 0x00AE to register 0 bank 0x00
+Write value 0x000C to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x000C to register 8
 Write value 0x002C to register D
@@ -83,8 +83,8 @@ Write value 0x0017 to register F
 Write value 0x0024 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x00D2 to register 0
-Write value 0x000B to register 1
+Write value 0x00D2 to register 0 bank 0x00
+Write value 0x000B to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x000B to register 8
 Write value 0x002C to register D
@@ -100,8 +100,8 @@ Write value 0x0017 to register F
 Write value 0x0021 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x00F3 to register 0
-Write value 0x000A to register 1
+Write value 0x00F3 to register 0 bank 0x00
+Write value 0x000A to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x000A to register 8
 Write value 0x002C to register D
@@ -117,8 +117,8 @@ Write value 0x0017 to register F
 Write value 0x001E to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x0111 to register 0
-Write value 0x0009 to register 1
+Write value 0x0111 to register 0 bank 0x00
+Write value 0x0009 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0009 to register 8
 Write value 0x002C to register D
@@ -134,8 +134,8 @@ Write value 0x0017 to register F
 Write value 0x001B to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x012C to register 0
-Write value 0x0008 to register 1
+Write value 0x012C to register 0 bank 0x00
+Write value 0x0008 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0008 to register 8
 Write value 0x002C to register D
@@ -151,8 +151,8 @@ Write value 0x0017 to register F
 Write value 0x0018 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x0144 to register 0
-Write value 0x0007 to register 1
+Write value 0x0144 to register 0 bank 0x00
+Write value 0x0007 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0007 to register 8
 Write value 0x002C to register D
@@ -168,8 +168,8 @@ Write value 0x0017 to register F
 Write value 0x0015 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x0159 to register 0
-Write value 0x0006 to register 1
+Write value 0x0159 to register 0 bank 0x00
+Write value 0x0006 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0006 to register 8
 Write value 0x002C to register D
@@ -185,8 +185,8 @@ Write value 0x0017 to register F
 Write value 0x0012 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x016B to register 0
-Write value 0x0005 to register 1
+Write value 0x016B to register 0 bank 0x00
+Write value 0x0005 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0005 to register 8
 Write value 0x002C to register D
@@ -202,8 +202,8 @@ Write value 0x0017 to register F
 Write value 0x000F to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x017A to register 0
-Write value 0x0004 to register 1
+Write value 0x017A to register 0 bank 0x00
+Write value 0x0004 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0004 to register 8
 Write value 0x002C to register D
@@ -219,8 +219,8 @@ Write value 0x0017 to register F
 Write value 0x000C to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x0186 to register 0
-Write value 0x0003 to register 1
+Write value 0x0186 to register 0 bank 0x00
+Write value 0x0003 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0003 to register 8
 Write value 0x002C to register D
@@ -236,8 +236,8 @@ Write value 0x0017 to register F
 Write value 0x0009 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x018F to register 0
-Write value 0x0002 to register 1
+Write value 0x018F to register 0 bank 0x00
+Write value 0x0002 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0002 to register 8
 Write value 0x002C to register D
@@ -253,8 +253,8 @@ Write value 0x0017 to register F
 Write value 0x0006 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x0195 to register 0
-Write value 0x0001 to register 1
+Write value 0x0195 to register 0 bank 0x00
+Write value 0x0001 to register 1 bank 0x00
 Write value 0x0006 to register F
 Write value 0x0001 to register 8
 Write value 0x002C to register D
@@ -270,8 +270,8 @@ Write value 0x0017 to register F
 Write value 0x0003 to register 9
 Write value 0x002D to register D
 Write value 0x0009 to register F
-Write value 0x0198 to register 0
-Write value 0x0000 to register 1
+Write value 0x0198 to register 0 bank 0x00
+Write value 0x0000 to register 1 bank 0x00
 Write value 0x0020 to register F
-Write value 0x7FFF to register 0
+Write value 0x7FFF to register 0 bank 0x00
 Write value 0x0000 to memory 0x7FFF
