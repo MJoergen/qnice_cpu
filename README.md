@@ -15,8 +15,26 @@ for the following three reasons:
 * This design expects (at least) one clock cycle delay when reading from
   instruction and/or data memory.
 
-However, it should be a simple operation to modify the QNICE-FPGA project to
-support this implementation.
+Modifying the QNICE-FPGA project to accommodate that is no longer hypothetical:
+**it has been done**. The branch
+[`mfj_update_qnice_cpu`](https://github.com/MJoergen/QNICE-FPGA/tree/mfj_update_qnice_cpu)
+of a fork of QNICE-FPGA runs the QNICE monitor and its I/O devices on this CPU on
+the Nexys4DDR, and commit
+[`cfb0893`](https://github.com/MJoergen/QNICE-FPGA/commit/cfb0893eb0a12180de822f39c30e32bf21a75c11)
+is where the old CPU is swapped out for this one. The changes are confined to the
+memory system: ROM and RAM each get a second port, so both are reachable from both
+buses; the Wishbone address is sampled and held, because the I/O devices expect it
+to stay valid outside the `STB` pulse; and `ACK` is driven from the existing
+`wait_for_data` signal. Interrupts are the one part not covered, since this CPU
+does not implement them yet.
+
+That branch's [`doc/cpu_replacement.md`](https://github.com/MJoergen/QNICE-FPGA/blob/mfj_update_qnice_cpu/doc/cpu_replacement.md)
+writes the retrofit up, and carries the like-for-like comparison it makes
+possible — same board, same monitor, same toolchain (Vivado 2023.1). The CPU
+drops from 3497 to 938 slice LUTs (at 396 → 586 registers, and 2 BRAMs for the
+register banks); the system closes timing at 72.73 MHz where the old one was
+already marginal at 50 MHz; and `mandel_perf_test.asm` falls from 3.29 to 1.98
+cycles per instruction, for a **2.4x speedup in wall time**.
 
 The overall idea of this implementation is to convert each
 [instruction](https://github.com/sy2002/QNICE-FPGA/blob/b1fb36c56508d1237f662f6234b3bfa4142b3432/doc/intro/qnice_intro.pdf)
