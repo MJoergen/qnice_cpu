@@ -44,6 +44,16 @@ make lint                             # check every VHDL file against CODING_STY
 make clean                            # remove all generated files, including formal/ outputs
 ```
 
+**Vivado is installed on this machine, and `vivado` is deliberately not on `$PATH`.** It lives at
+`/opt/Xilinx/Vivado/2022.2` — the top-level `Makefile`'s `XILINX_DIR`, and the version
+doc/README.md's utilization numbers were measured with. The two targets above source
+`$(XILINX_DIR)/settings64.sh` themselves before invoking `vivado`, so they work from a shell that
+has never seen it. `which vivado` returning nothing therefore says nothing about whether
+`make system.bit` will run: do **not** report Vivado as missing or unavailable on the strength of
+it, and do not add a `source settings64.sh` to any shell profile to "fix" it. (A `2024.1` is
+installed alongside it; `XILINX_DIR` is a plain `=`, so switching versions means editing the
+Makefile, and would move every number in doc/README.md.)
+
 Test programs live in `test/*.asm` and are assembled with the external QNICE assembler at
 `$HOME/git/sy2002/QNICE-FPGA/assembler/asm`, which must be checked out separately — **on the
 `develop` branch**. That is the branch this repo follows, for the ISA as well as the tools, and it
