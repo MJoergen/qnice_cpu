@@ -1,7 +1,9 @@
 [*]
-[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*] Companion save file for the wb_mux formal job. Open a counterexample
+[*] with it, e.g. from this directory:
+[*]     gtkwave wb_mux_bmc2/engine_0/trace.vcd wb_mux.gtkw
 [*]
-[dumpfile] "wb_mux_bmc/engine_0/trace.vcd"
+[dumpfile] "wb_mux_bmc2/engine_0/trace.vcd"
 [savefile] "wb_mux.gtkw"
 [timestart] 0
 [size] 1519 906
@@ -9,71 +11,140 @@
 *-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] wb_mux.
 [sst_width] 249
-[signals_width] 220
+[signals_width] 280
 [sst_expanded] 1
 [sst_vpaned_height] 250
 @800200
--master side
+-clock
 @28
 wb_mux.clk_i
+@28
 wb_mux.rst_i
-[color] 2
-wb_mux.s_cyc_i
-wb_mux.s_stb_i
-[color] 7
-wb_mux.s_stall_o
+@1000200
+-clock
+@800200
+-master side (the CPU)
+@28
+wb_mux.s_ack_o
 @22
 wb_mux.s_addr_i[3:0]
 @28
-[color] 3
-wb_mux.s_ack_o
+wb_mux.s_cyc_i
 @22
-[color] 3
+wb_mux.s_data_i[3:0]
+@22
 wb_mux.s_data_o[3:0]
-@800200
--ordering state
 @28
-wb_mux.sel
-wb_mux.req_accept
-wb_mux.head
-[color] 6
-wb_mux.resp_valid
-wb_mux.mux_stall
-@22
-wb_mux.order[0:1]
-wb_mux.order_fill[1:0]
-wb_mux.buf0_fill[1:0]
-wb_mux.buf1_fill[1:0]
-@800200
--slave 0 (lower half)
+[color] 7
+wb_mux.s_stall_o
 @28
-wb_mux.m0_stb_o
-wb_mux.m0_stall_i
-[color] 3
+wb_mux.s_stb_i
+@28
+wb_mux.s_we_i
+@1000200
+-master side (the CPU)
+@800200
+-slave 0 -- RAM
+@28
 wb_mux.m0_ack_i
 @22
-[color] 3
-wb_mux.m0_data_i[3:0]
-@800200
--slave 1 (upper half)
+wb_mux.m0_addr_o[3:0]
 @28
-wb_mux.m1_stb_o
-wb_mux.m1_stall_i
-[color] 3
+wb_mux.m0_cyc_o
+@22
+wb_mux.m0_data_i[3:0]
+@22
+wb_mux.m0_data_o[3:0]
+@28
+[color] 7
+wb_mux.m0_stall_i
+@28
+wb_mux.m0_stb_o
+@28
+wb_mux.m0_we_o
+@1000200
+-slave 0 -- RAM
+@800200
+-slave 1 -- EAE
+@28
 wb_mux.m1_ack_i
 @22
-[color] 3
-wb_mux.m1_data_i[3:0]
-@800200
--formal shadow model
-@22
-wb_mux.f_fill[1:0]
-wb_mux.f_out0[1:0]
-wb_mux.f_out1[1:0]
+wb_mux.m1_addr_o[3:0]
 @28
-wb_mux.f_req_tgl0
-wb_mux.f_rsp_tgl0
-wb_mux.f_req_tgl1
-wb_mux.f_rsp_tgl1
+wb_mux.m1_cyc_o
+@22
+wb_mux.m1_data_i[3:0]
+@22
+wb_mux.m1_data_o[3:0]
+@28
+[color] 7
+wb_mux.m1_stall_i
+@28
+wb_mux.m1_stb_o
+@28
+wb_mux.m1_we_o
+@1000200
+-slave 1 -- EAE
+@800200
+-ordering state
+@22
+wb_mux.order[2:0]
+@22
+wb_mux.order_fill[1:0]
+@28
+wb_mux.head
+@28
+wb_mux.head_ack
+@22
+wb_mux.head_fill[1:0]
+@28
+[color] 7
+wb_mux.head_ready
+@28
+wb_mux.sel
+@28
+wb_mux.req_accept
+@28
+[color] 2
+wb_mux.resp_valid
+@28
+[color] 7
+wb_mux.mux_stall
+@1000200
+-ordering state
+@800200
+-per-slave buffers
+@22
+wb_mux.buf0[11:0]
+@22
+wb_mux.buf0_fill[1:0]
+@22
+wb_mux.buf1[11:0]
+@22
+wb_mux.buf1_fill[1:0]
+@1000200
+-per-slave buffers
+@800200
+-formal
+@28
+wb_mux.i_wb_mux.f_accept
+@22
+wb_mux.i_wb_mux.f_fill[1:0]
+@22
+wb_mux.i_wb_mux.f_out0[1:0]
+@22
+wb_mux.i_wb_mux.f_out1[1:0]
+@28
+wb_mux.i_wb_mux.f_req_tgl0
+@28
+wb_mux.i_wb_mux.f_req_tgl1
+@28
+wb_mux.i_wb_mux.f_rsp_tgl0
+@28
+wb_mux.i_wb_mux.f_rsp_tgl1
+@22
+wb_mux.i_wb_mux.f_shadow[3:0]
+@1000200
+-formal
 [pattern_trace] 1
 [pattern_trace] 0

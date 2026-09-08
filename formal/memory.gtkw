@@ -1,87 +1,230 @@
 [*]
-[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Fri Aug 21 12:42:43 2026
+[*] Companion save file for the memory formal job. Open a counterexample
+[*] with it, e.g. from this directory:
+[*]     gtkwave memory_bmc/engine_0/trace.vcd memory.gtkw
 [*]
-[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/memory_prove/engine_0/trace.vcd"
-[dumpfile_mtime] "Fri Aug 21 12:41:35 2026"
-[dumpfile_size] 12467
-[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/memory.gtkw"
+[dumpfile] "memory_bmc/engine_0/trace.vcd"
+[savefile] "memory.gtkw"
 [timestart] 0
-[size] 1920 1127
+[size] 1519 906
 [pos] -1 -1
-*-4.425648 36 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] memory.
-[sst_width] 427
-[signals_width] 335
+[sst_width] 249
+[signals_width] 280
 [sst_expanded] 1
-[sst_vpaned_height] 328
+[sst_vpaned_height] 250
+@800200
+-clock
 @28
 memory.clk_i
+@28
 memory.rst_i
-[color] 2
-memory.mreq_valid_i
-[color] 7
-memory.mreq_ready_o
-memory.mreq_op_i[2:0]
+@1000200
+-clock
+@800200
+-request from WRITE
+@28
+memory.mreq_accept
 @22
 memory.mreq_addr_i[15:0]
+@22
 memory.mreq_data_i[15:0]
+@22
+memory.mreq_op_i[2:0]
+@28
+[color] 7
+memory.mreq_ready
+@28
+[color] 7
+memory.mreq_ready_o
 @28
 [color] 2
-memory.msrc_valid_o
-[color] 7
-memory.msrc_ready_i
+memory.mreq_valid
+@28
+[color] 2
+memory.mreq_valid_i
+@1000200
+-request from WRITE
+@800200
+-source response to PREPARE
 @22
 memory.msrc_data_o[15:0]
 @28
-[color] 2
-memory.mdst_valid_o
 [color] 7
-memory.mdst_ready_i
+memory.msrc_ready_i
+@28
+[color] 2
+memory.msrc_valid_o
+@1000200
+-source response to PREPARE
+@800200
+-destination response to PREPARE
 @22
 memory.mdst_data_o[15:0]
 @28
+[color] 7
+memory.mdst_ready_i
+@28
 [color] 2
-memory.wb_cyc_o
-[color] 2
-memory.wb_stb_o
-[color] 6
-memory.wb_stall_i
+memory.mdst_valid_o
+@1000200
+-destination response to PREPARE
+@800200
+-Wishbone master
+@28
+memory.wb_ack_i
 @22
 memory.wb_addr_o[15:0]
 @28
-memory.wb_we_o
+memory.wb_cyc_o
 @22
 memory.wb_dat_o[15:0]
-@28
-[color] 3
-memory.wb_ack_i
 @22
 memory.wb_data_i[15:0]
 @28
-memory.mreq_accept
+[color] 7
+memory.wb_stall_i
+@28
+memory.wb_stb_o
+@28
+memory.wb_we_o
+@1000200
+-Wishbone master
+@800200
+-op-type FIFO nets
+@28
+[color] 7
+memory.tsf_req_in_ready
+@28
 [color] 2
-memory.osf_mem_out_valid
-[color] 6
-memory.osf_mem_out_ready
+memory.tsf_req_in_valid
+@22
+memory.tsf_req_out_data[2:0]
+@28
+[color] 7
+memory.tsf_req_out_ready
+@28
 [color] 2
-memory.osf_mem_in_valid
-[color] 6
-memory.osf_mem_in_ready
+memory.tsf_req_out_valid
+@1000200
+-op-type FIFO nets
+@800200
+-response buffer nets
+@22
+memory.tsb_dst_fill[1:0]
+@28
+[color] 7
+memory.tsb_dst_in_ready
+@28
 [color] 2
-memory.osb_src_in_valid
-[color] 6
-memory.osb_src_in_ready
+memory.tsb_dst_in_valid
+@22
+memory.tsb_src_fill[1:0]
+@28
+[color] 7
+memory.tsb_src_in_ready
+@28
 [color] 2
-memory.osb_dst_in_valid
-[color] 6
-memory.osb_dst_in_ready
+memory.tsb_src_in_valid
+@1000200
+-response buffer nets
+@800200
+-op-type FIFO
+@22
+memory.i_two_stage_fifo_mem.m_data_o[2:0]
+@28
+[color] 7
+memory.i_two_stage_fifo_mem.m_ready_i
+@28
+[color] 2
+memory.i_two_stage_fifo_mem.m_valid_o
+@22
+memory.i_two_stage_fifo_mem.s_data_i[2:0]
+@22
+memory.i_two_stage_fifo_mem.s_fill_o[1:0]
+@28
+[color] 7
+memory.i_two_stage_fifo_mem.s_ready_o
+@28
+[color] 2
+memory.i_two_stage_fifo_mem.s_valid_i
+@1000200
+-op-type FIFO
+@800200
+-source buffer
+@22
+memory.i_two_stage_buffer_src.m_data_o[15:0]
+@28
+[color] 7
+memory.i_two_stage_buffer_src.m_ready_i
+@28
+[color] 2
+memory.i_two_stage_buffer_src.m_valid_o
+@22
+memory.i_two_stage_buffer_src.s_data_i[15:0]
+@22
+memory.i_two_stage_buffer_src.s_fill_o[1:0]
+@28
+[color] 7
+memory.i_two_stage_buffer_src.s_ready_o
+@28
+[color] 2
+memory.i_two_stage_buffer_src.s_valid_i
+@1000200
+-source buffer
+@800200
+-destination buffer
+@22
+memory.i_two_stage_buffer_dst.m_data_o[15:0]
+@28
+[color] 7
+memory.i_two_stage_buffer_dst.m_ready_i
+@28
+[color] 2
+memory.i_two_stage_buffer_dst.m_valid_o
+@22
+memory.i_two_stage_buffer_dst.s_data_i[15:0]
+@22
+memory.i_two_stage_buffer_dst.s_fill_o[1:0]
+@28
+[color] 7
+memory.i_two_stage_buffer_dst.s_ready_o
+@28
+[color] 2
+memory.i_two_stage_buffer_dst.s_valid_i
+@1000200
+-destination buffer
+@800200
+-Wishbone request buffer
+@22
+memory.i_one_stage_buffer_wb.m_data_o[32:0]
+@28
+[color] 7
+memory.i_one_stage_buffer_wb.m_ready_i
+@28
+[color] 2
+memory.i_one_stage_buffer_wb.m_valid_o
+@22
+memory.i_one_stage_buffer_wb.s_data_i[32:0]
+@28
+[color] 7
+memory.i_one_stage_buffer_wb.s_ready_o
+@28
+[color] 2
+memory.i_one_stage_buffer_wb.s_valid_i
+@1000200
+-Wishbone request buffer
+@800200
+-formal
+@22
+memory.i_memory.f_wb_ack_delay[2:0]
+@22
 memory.i_memory.f_wb_req_count[1:0]
-memory.osf_mem_fill[1:0]
-memory.osb_src_fill[1:0]
-memory.osb_dst_fill[1:0]
-memory.i_memory.f_osb_dst_occ[1:0]
-memory.i_memory.f_osb_src_occ[1:0]
-memory.i_memory.f_osf_occ[1:0]
+@22
+[color] 7
+memory.i_memory.f_wb_stall_delay[2:0]
+@1000200
+-formal
 [pattern_trace] 1
 [pattern_trace] 0

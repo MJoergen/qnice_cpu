@@ -1,297 +1,449 @@
 [*]
-[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Mon Apr 26 20:03:57 2021
+[*] Companion save file for the cpu_main formal job. Open a counterexample
+[*] with it, e.g. from this directory:
+[*]     gtkwave cpu_main_bmc/engine_0/trace.vcd cpu_main.gtkw
 [*]
-[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/cpu_main_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Mon Apr 26 20:01:12 2021"
-[dumpfile_size] 32401
-[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/cpu_main.gtkw"
+[dumpfile] "cpu_main_bmc/engine_0/trace.vcd"
+[savefile] "cpu_main.gtkw"
 [timestart] 0
-[size] 1853 1132
+[size] 1519 906
 [pos] -1 -1
-*-3.218250 35 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] cpu_main.
-[treeopen] cpu_main.i_decode.
-[treeopen] cpu_main.i_prepare.
-[treeopen] cpu_main.i_write.
-[sst_width] 264
-[signals_width] 343
+[sst_width] 249
+[signals_width] 280
 [sst_expanded] 1
-[sst_vpaned_height] 328
-@c00200
--cpu_main
+[sst_vpaned_height] 250
+@800200
+-clock
 @28
 cpu_main.clk_i
+@28
 cpu_main.rst_i
-[color] 2
-cpu_main.ic_valid_i
-[color] 7
-cpu_main.ic_ready_o
-cpu_main.ic_double_i
-cpu_main.ic_double_o
+@1000200
+-clock
+@800200
+-from ICACHE
 @22
 cpu_main.ic_addr_i[15:0]
+@22
 cpu_main.ic_data_i[31:0]
+@28
+cpu_main.ic_double_i
+@28
+cpu_main.ic_double_o
+@28
+[color] 7
+cpu_main.ic_ready_o
+@28
+[color] 2
+cpu_main.ic_valid_i
+@1000200
+-from ICACHE
+@800200
+-register file
+@22
+cpu_main.reg_addr_o[3:0]
+@22
+cpu_main.reg_dst_reg_o[3:0]
+@22
+cpu_main.reg_dst_val_i[15:0]
+@22
+cpu_main.reg_r14_i[15:0]
+@22
+cpu_main.reg_r14_o[15:0]
+@28
+cpu_main.reg_r14_we_o
 @28
 cpu_main.reg_rd_en_o
 @22
 cpu_main.reg_src_reg_o[3:0]
-cpu_main.reg_src_val_i[15:0]
-cpu_main.reg_dst_reg_o[3:0]
-cpu_main.reg_dst_val_i[15:0]
-cpu_main.reg_r14_i[15:0]
-@28
-[color] 2
-cpu_main.mem_src_valid_i
-[color] 7
-cpu_main.mem_src_ready_o
 @22
-cpu_main.mem_src_data_i[15:0]
+cpu_main.reg_src_val_i[15:0]
+@22
+cpu_main.reg_val_o[15:0]
 @28
-[color] 2
-cpu_main.mem_dst_valid_i
-[color] 7
-cpu_main.mem_dst_ready_o
+cpu_main.reg_we_o
+@1000200
+-register file
+@800200
+-MEMORY
 @22
 cpu_main.mem_dst_data_i[15:0]
 @28
-[color] 2
-cpu_main.mem_req_valid_o
 [color] 7
-cpu_main.mem_req_ready_i
-cpu_main.mem_req_op_o[2:0]
+cpu_main.mem_dst_ready_o
+@28
+[color] 2
+cpu_main.mem_dst_valid_i
 @22
 cpu_main.mem_req_addr_o[15:0]
+@22
 cpu_main.mem_req_data_o[15:0]
-@28
-cpu_main.reg_r14_we_o
 @22
-cpu_main.reg_r14_o[15:0]
+cpu_main.mem_req_op_o[2:0]
 @28
-cpu_main.reg_we_o
+[color] 7
+cpu_main.mem_req_ready_i
+@28
+[color] 2
+cpu_main.mem_req_valid_o
 @22
-cpu_main.reg_addr_o[3:0]
-cpu_main.reg_val_o[15:0]
+cpu_main.mem_src_data_i[15:0]
+@28
+[color] 7
+cpu_main.mem_src_ready_o
+@28
+[color] 2
+cpu_main.mem_src_valid_i
+@1000200
+-MEMORY
+@800200
+-to FETCH, and the flush
 @28
 [color] 2
 cpu_main.fetch_valid_o
 @22
 cpu_main.fetch_addr_o[15:0]
 @28
+[color] 2
+cpu_main.early_valid_o
+@22
+cpu_main.early_addr_o[15:0]
+@28
 cpu_main.inst_done_o
-@1401200
--cpu_main
-@22
-cpu_main.i_cpu_main.c_src_reg[3:0]
-cpu_main.i_cpu_main.c_src_val[15:0]
-cpu_main.i_cpu_main.c_dst_reg[3:0]
-cpu_main.i_cpu_main.c_dst_val[15:0]
 @28
-cpu_main.i_cpu_main.f_move_reg_reg
-cpu_main.i_cpu_main.f_reg_read
-cpu_main.i_cpu_main.f_mem_src_oustanding
-cpu_main.i_cpu_main.f_mem_dst_oustanding
-@c00200
--DECODE
+cpu_main.halt_o
 @28
-cpu_main.i_decode.clk_i
-cpu_main.i_decode.rst_i
-[color] 2
-cpu_main.i_decode.ic_valid_i
-[color] 7
-cpu_main.i_decode.ic_ready_o
-cpu_main.i_decode.ic_double_i
-cpu_main.i_decode.ic_double_o
-@22
-cpu_main.i_decode.ic_addr_i[15:0]
-cpu_main.i_decode.ic_data_i[31:0]
+cpu_main.bank_switch
 @28
-cpu_main.i_decode.reg_rd_en_o
-@22
-cpu_main.i_decode.reg_src_addr_o[3:0]
-cpu_main.i_decode.reg_dst_addr_o[3:0]
-cpu_main.i_decode.reg_src_val_i[15:0]
-cpu_main.i_decode.reg_dst_val_i[15:0]
-cpu_main.i_decode.reg_r14_i[15:0]
-@28
-[color] 2
-cpu_main.i_decode.prep_valid_o
-[color] 7
-cpu_main.i_decode.prep_ready_i
-@c00200
--prep_stage_o
-@22
-cpu_main.i_decode.prep_stage_o.addr[15:0]
-cpu_main.i_decode.prep_stage_o.dst_addr[3:0]
-@28
-cpu_main.i_decode.prep_stage_o.dst_imm
-cpu_main.i_decode.prep_stage_o.dst_mode[1:0]
-@22
-cpu_main.i_decode.prep_stage_o.dst_val[15:0]
-cpu_main.i_decode.prep_stage_o.immediate[15:0]
-cpu_main.i_decode.prep_stage_o.inst[15:0]
-cpu_main.i_decode.prep_stage_o.microcodes[35:0]
-cpu_main.i_decode.prep_stage_o.r14[15:0]
-cpu_main.i_decode.prep_stage_o.res_reg[3:0]
-cpu_main.i_decode.prep_stage_o.src_addr[3:0]
-@28
-cpu_main.i_decode.prep_stage_o.src_imm
-cpu_main.i_decode.prep_stage_o.src_mode[1:0]
-@22
-cpu_main.i_decode.prep_stage_o.src_val[15:0]
-@1401200
--prep_stage_o
--DECODE
+cpu_main.bank_stale
+@1000200
+-to FETCH, and the flush
 @800200
--PREPARE
+-DECODE decode
 @28
-cpu_main.i_prepare.clk_i
-cpu_main.i_prepare.rst_i
-[color] 2
-cpu_main.i_prepare.dec_valid_i
-[color] 7
-cpu_main.i_prepare.dec_ready_o
-@c00200
--dec_stage_i
-@22
-cpu_main.i_prepare.dec_stage_i.addr[15:0]
-cpu_main.i_prepare.dec_stage_i.alu_ctrl[5:0]
-cpu_main.i_prepare.dec_stage_i.alu_dst_val[15:0]
-cpu_main.i_prepare.dec_stage_i.alu_flags[15:0]
-cpu_main.i_prepare.dec_stage_i.alu_oper[3:0]
-cpu_main.i_prepare.dec_stage_i.alu_src_val[15:0]
-cpu_main.i_prepare.dec_stage_i.dst_addr[3:0]
+cpu_main.i_decode.dst_auto
 @28
-cpu_main.i_prepare.dec_stage_i.dst_imm
-cpu_main.i_prepare.dec_stage_i.dst_mode[1:0]
-@22
-cpu_main.i_prepare.dec_stage_i.dst_val[15:0]
-cpu_main.i_prepare.dec_stage_i.immediate[15:0]
-cpu_main.i_prepare.dec_stage_i.inst[15:0]
-cpu_main.i_prepare.dec_stage_i.microcodes[35:0]
-cpu_main.i_prepare.dec_stage_i.r14[15:0]
-cpu_main.i_prepare.dec_stage_i.res_reg[3:0]
-cpu_main.i_prepare.dec_stage_i.src_addr[3:0]
+cpu_main.i_decode.dst_memory
 @28
-cpu_main.i_prepare.dec_stage_i.src_imm
-cpu_main.i_prepare.dec_stage_i.src_mode[1:0]
-@22
-cpu_main.i_prepare.dec_stage_i.src_val[15:0]
-@1401200
--dec_stage_i
+cpu_main.i_decode.early_jmp
 @28
-[color] 2
-cpu_main.i_prepare.mem_src_valid_i
-[color] 7
-cpu_main.i_prepare.mem_src_ready_o
+cpu_main.i_decode.has_dst_operand
+@28
+cpu_main.i_decode.has_src_operand
+@28
+cpu_main.i_decode.immediate_dst
+@28
+cpu_main.i_decode.immediate_src
+@28
+cpu_main.i_decode.is_crb
+@28
+cpu_main.i_decode.is_sub
 @22
-cpu_main.i_prepare.mem_src_data_i[15:0]
+cpu_main.i_decode.microcode_addr[3:0]
+@22
+cpu_main.i_decode.microcode_value[35:0]
+@28
+cpu_main.i_decode.ptr_sr
+@28
+cpu_main.i_decode.reads_from_dst
+@28
+cpu_main.i_decode.src_auto
+@28
+cpu_main.i_decode.src_memory
+@28
+cpu_main.i_decode.uses_bank
+@28
+cpu_main.i_decode.uses_bank_d
+@28
+cpu_main.i_decode.writes_to_dst
+@1000200
+-DECODE decode
+@800200
+-DECODE -> SEQUENCER
 @28
 [color] 2
-cpu_main.i_prepare.mem_dst_valid_i
+cpu_main.dec2seq_valid
+@28
 [color] 7
-cpu_main.i_prepare.mem_dst_ready_o
+cpu_main.dec2seq_ready
+@1000200
+-DECODE -> SEQUENCER
+@800200
+-...its payload
 @22
-cpu_main.i_prepare.mem_dst_data_i[15:0]
+cpu_main.i_decode.seq_stage_o<addr>[15:0]
+@22
+cpu_main.i_decode.seq_stage_o<dst_addr>[3:0]
+@28
+cpu_main.i_decode.seq_stage_o<dst_imm>
+@22
+cpu_main.i_decode.seq_stage_o<dst_mode>[1:0]
+@28
+cpu_main.i_decode.seq_stage_o<early_jmp>
+@22
+cpu_main.i_decode.seq_stage_o<immediate>[15:0]
+@22
+cpu_main.i_decode.seq_stage_o<inst>[15:0]
+@28
+cpu_main.i_decode.seq_stage_o<is_crb>
+@28
+cpu_main.i_decode.seq_stage_o<is_sub>
+@22
+cpu_main.i_decode.seq_stage_o<microcodes>[35:0]
+@28
+cpu_main.i_decode.seq_stage_o<ptr_sr>
+@22
+cpu_main.i_decode.seq_stage_o<res_reg>[3:0]
+@22
+cpu_main.i_decode.seq_stage_o<src_addr>[3:0]
+@28
+cpu_main.i_decode.seq_stage_o<src_imm>
+@22
+cpu_main.i_decode.seq_stage_o<src_mode>[1:0]
+@1000200
+-...its payload
+@800200
+-SEQUENCER -> PREPARE
 @28
 [color] 2
-cpu_main.i_prepare.wr_valid_o
+cpu_main.seq2prep_valid
+@28
 [color] 7
-cpu_main.i_prepare.wr_ready_i
-@c00200
--wr_stage_o
+cpu_main.seq2prep_ready
+@1000200
+-SEQUENCER -> PREPARE
+@800200
+-...its payload
 @22
-cpu_main.i_prepare.wr_stage_o.addr[15:0]
-cpu_main.i_prepare.wr_stage_o.alu_ctrl[5:0]
-cpu_main.i_prepare.wr_stage_o.alu_dst_val[15:0]
-cpu_main.i_prepare.wr_stage_o.alu_flags[15:0]
-cpu_main.i_prepare.wr_stage_o.alu_oper[3:0]
-cpu_main.i_prepare.wr_stage_o.alu_src_val[15:0]
-cpu_main.i_prepare.wr_stage_o.dst_addr[3:0]
+cpu_main.i_sequencer.m_stage_o<addr>[15:0]
+@22
+cpu_main.i_sequencer.m_stage_o<dst_addr>[3:0]
 @28
-cpu_main.i_prepare.wr_stage_o.dst_imm
-cpu_main.i_prepare.wr_stage_o.dst_mode[1:0]
+cpu_main.i_sequencer.m_stage_o<dst_imm>
 @22
-cpu_main.i_prepare.wr_stage_o.dst_val[15:0]
-cpu_main.i_prepare.wr_stage_o.immediate[15:0]
-cpu_main.i_prepare.wr_stage_o.inst[15:0]
-cpu_main.i_prepare.wr_stage_o.microcodes[35:0]
-cpu_main.i_prepare.wr_stage_o.r14[15:0]
-cpu_main.i_prepare.wr_stage_o.res_reg[3:0]
-cpu_main.i_prepare.wr_stage_o.src_addr[3:0]
+cpu_main.i_sequencer.m_stage_o<dst_mode>[1:0]
+@22
+cpu_main.i_sequencer.m_stage_o<dst_reg_val>[15:0]
 @28
-cpu_main.i_prepare.wr_stage_o.src_imm
-cpu_main.i_prepare.wr_stage_o.src_mode[1:0]
+cpu_main.i_sequencer.m_stage_o<early_jmp>
 @22
-cpu_main.i_prepare.wr_stage_o.src_val[15:0]
-@1401200
--wr_stage_o
+cpu_main.i_sequencer.m_stage_o<immediate>[15:0]
+@22
+cpu_main.i_sequencer.m_stage_o<inst>[15:0]
+@28
+cpu_main.i_sequencer.m_stage_o<is_crb>
+@28
+cpu_main.i_sequencer.m_stage_o<is_sub>
+@22
+cpu_main.i_sequencer.m_stage_o<microcode>[11:0]
+@28
+cpu_main.i_sequencer.m_stage_o<ptr_sr>
+@22
+cpu_main.i_sequencer.m_stage_o<r14>[15:0]
+@22
+cpu_main.i_sequencer.m_stage_o<res_reg>[3:0]
+@22
+cpu_main.i_sequencer.m_stage_o<src_addr>[3:0]
+@28
+cpu_main.i_sequencer.m_stage_o<src_imm>
+@22
+cpu_main.i_sequencer.m_stage_o<src_mode>[1:0]
+@22
+cpu_main.i_sequencer.m_stage_o<src_reg_val>[15:0]
+@1000200
+-...its payload
+@800200
+-...and the chunk index
+@22
+cpu_main.i_sequencer.index[1:0]
+@1000200
+-...and the chunk index
+@800200
+-PREPARE -> WRITE
+@28
+[color] 2
+cpu_main.prep2wr_valid
+@28
+[color] 7
+cpu_main.prep2wr_ready
+@1000200
+-PREPARE -> WRITE
+@800200
+-...its payload
+@22
+cpu_main.i_write.prep_stage_i<addr>[15:0]
+@22
+cpu_main.i_write.prep_stage_i<alu_ctrl>[5:0]
+@22
+cpu_main.i_write.prep_stage_i<alu_dst_val>[15:0]
+@22
+cpu_main.i_write.prep_stage_i<alu_oper>[3:0]
+@22
+cpu_main.i_write.prep_stage_i<alu_src_val>[15:0]
+@22
+cpu_main.i_write.prep_stage_i<dst_addr>[3:0]
+@28
+cpu_main.i_write.prep_stage_i<dst_imm>
+@22
+cpu_main.i_write.prep_stage_i<dst_mode>[1:0]
+@22
+cpu_main.i_write.prep_stage_i<dst_val_pc>[15:0]
+@28
+cpu_main.i_write.prep_stage_i<early_jmp>
+@22
+cpu_main.i_write.prep_stage_i<immediate>[15:0]
+@22
+cpu_main.i_write.prep_stage_i<inst>[15:0]
+@28
+cpu_main.i_write.prep_stage_i<is_crb>
+@28
+cpu_main.i_write.prep_stage_i<is_sub>
+@22
+cpu_main.i_write.prep_stage_i<microcode>[11:0]
+@28
+cpu_main.i_write.prep_stage_i<ptr_sr>
+@22
+cpu_main.i_write.prep_stage_i<r14>[15:0]
+@22
+cpu_main.i_write.prep_stage_i<res_reg>[3:0]
+@22
+cpu_main.i_write.prep_stage_i<src_addr>[3:0]
+@28
+cpu_main.i_write.prep_stage_i<src_imm>
+@22
+cpu_main.i_write.prep_stage_i<src_mode>[1:0]
+@22
+cpu_main.i_write.prep_stage_i<src_val_pc>[15:0]
+@1000200
+-...its payload
+@800200
+-PREPARE resolution
+@22
+cpu_main.i_prepare.alu_ctrl[5:0]
+@22
+cpu_main.i_prepare.alu_dst_val[15:0]
+@22
+cpu_main.i_prepare.alu_oper[3:0]
+@22
+cpu_main.i_prepare.alu_src_val[15:0]
+@22
+cpu_main.i_prepare.dst_val_pc[15:0]
+@22
+cpu_main.i_prepare.src_val_pc[15:0]
+@28
+cpu_main.i_prepare.wait_for_mem_dst
 @28
 cpu_main.i_prepare.wait_for_mem_req
+@28
 cpu_main.i_prepare.wait_for_mem_src
-cpu_main.i_prepare.wait_for_mem_dst
-[color] 2
-cpu_main.i_prepare.seq_valid
-[color] 7
-cpu_main.i_prepare.seq_ready
 @1000200
--PREPARE
-@c00200
+-PREPARE resolution
+@800200
 -WRITE
-@28
-cpu_main.i_write.clk_i
-cpu_main.i_write.rst_i
-[color] 2
-cpu_main.i_write.prep_valid_i
-[color] 7
-cpu_main.i_write.prep_ready_o
-@c00200
--prep_stage_i
 @22
-cpu_main.i_write.prep_stage_i.addr[15:0]
-cpu_main.i_write.prep_stage_i.inst[15:0]
-cpu_main.i_write.prep_stage_i.immediate[15:0]
-cpu_main.i_write.prep_stage_i.microcodes[35:0]
-cpu_main.i_write.prep_stage_i.alu_ctrl[5:0]
-cpu_main.i_write.prep_stage_i.alu_dst_val[15:0]
-cpu_main.i_write.prep_stage_i.alu_flags[15:0]
-cpu_main.i_write.prep_stage_i.alu_oper[3:0]
-cpu_main.i_write.prep_stage_i.alu_src_val[15:0]
-cpu_main.i_write.prep_stage_i.src_addr[3:0]
-@28
-cpu_main.i_write.prep_stage_i.src_imm
-cpu_main.i_write.prep_stage_i.src_mode[1:0]
+cpu_main.i_write.alu_res_flags[15:0]
 @22
-cpu_main.i_write.prep_stage_i.src_val[15:0]
-cpu_main.i_write.prep_stage_i.dst_addr[3:0]
-@28
-cpu_main.i_write.prep_stage_i.dst_imm
-cpu_main.i_write.prep_stage_i.dst_mode[1:0]
+cpu_main.i_write.alu_res_val[15:0]
 @22
-cpu_main.i_write.prep_stage_i.dst_val[15:0]
-cpu_main.i_write.prep_stage_i.r14[15:0]
-cpu_main.i_write.prep_stage_i.res_reg[3:0]
-@1401200
--prep_stage_i
+cpu_main.i_write.mem_addr[15:0]
+@22
+cpu_main.i_write.mem_data[15:0]
 @28
 [color] 2
-cpu_main.i_write.mem_req_valid_o
-[color] 7
-cpu_main.i_write.mem_req_ready_i
-cpu_main.i_write.mem_req_op_o[2:0]
+cpu_main.i_write.mem_valid
 @22
-cpu_main.i_write.mem_req_addr_o[15:0]
-cpu_main.i_write.mem_req_data_o[15:0]
+cpu_main.i_write.next_pc[15:0]
+@22
+cpu_main.i_write.smc_delta[15:0]
 @28
-cpu_main.i_write.reg_r14_we_o
-@22
-cpu_main.i_write.reg_r14_o[15:0]
+cpu_main.i_write.smc_hit
 @28
-cpu_main.i_write.reg_we_o
+cpu_main.i_write.smc_push
 @22
-cpu_main.i_write.reg_addr_o[3:0]
-cpu_main.i_write.reg_val_o[15:0]
-@1401200
+cpu_main.i_write.smc_push_delta[15:0]
+@28
+cpu_main.i_write.smc_push_hit
+@28
+cpu_main.i_write.update_reg
+@28
+cpu_main.i_write.wr_early
+@28
+cpu_main.i_write.wr_r15
+@1000200
 -WRITE
+@800200
+-formal
+@22
+cpu_main.i_cpu_main.c_dst_mode[1:0]
+@22
+cpu_main.i_cpu_main.c_dst_reg[3:0]
+@22
+cpu_main.i_cpu_main.c_dst_val[15:0]
+@22
+cpu_main.i_cpu_main.c_mem_dst_val[15:0]
+@22
+cpu_main.i_cpu_main.c_mem_src_val[15:0]
+@22
+cpu_main.i_cpu_main.c_src_mode[1:0]
+@22
+cpu_main.i_cpu_main.c_src_reg[3:0]
+@22
+cpu_main.i_cpu_main.c_src_val[15:0]
+@28
+cpu_main.i_cpu_main.f_add_modes
+@22
+cpu_main.i_cpu_main.f_add_sr_out[15:0]
+@22
+cpu_main.i_cpu_main.f_add_sum[16:0]
+@28
+cpu_main.i_cpu_main.f_add_zero
+@28
+cpu_main.i_cpu_main.f_addc_in_write
+@28
+cpu_main.i_cpu_main.f_addc_reg_reg
+@22
+cpu_main.i_cpu_main.f_addc_sr_in[15:0]
+@22
+cpu_main.i_cpu_main.f_addc_sr_out[15:0]
+@22
+cpu_main.i_cpu_main.f_addc_sum[16:0]
+@28
+cpu_main.i_cpu_main.f_addc_zero
+@28
+cpu_main.i_cpu_main.f_bank_pending
+@28
+cpu_main.i_cpu_main.f_fetch_uses_bank
+@28
+cpu_main.i_cpu_main.f_gp_regs
+@28
+cpu_main.i_cpu_main.f_mem_dst_oustanding
+@28
+cpu_main.i_cpu_main.f_mem_dst_request
+@28
+cpu_main.i_cpu_main.f_mem_dst_response
+@28
+cpu_main.i_cpu_main.f_mem_src_oustanding
+@28
+cpu_main.i_cpu_main.f_mem_src_request
+@28
+cpu_main.i_cpu_main.f_mem_src_response
+@28
+cpu_main.i_cpu_main.f_mov_in_write
+@28
+cpu_main.i_cpu_main.f_move_modes
+@28
+cpu_main.i_cpu_main.f_move_reg_reg
+@28
+cpu_main.i_cpu_main.f_operand_modes
+@28
+cpu_main.i_cpu_main.f_prep_uses_bank
+@28
+cpu_main.i_cpu_main.f_push_pending
+@22
+cpu_main.i_cpu_main.f_r14_next[15:0]
+@1000200
+-formal
 [pattern_trace] 1
 [pattern_trace] 0

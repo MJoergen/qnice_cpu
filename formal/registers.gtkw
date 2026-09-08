@@ -1,112 +1,206 @@
 [*]
-[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Sun Aug 23 12:32:40 2026
+[*] Companion save file for the registers formal job. Open a counterexample
+[*] with it, e.g. from this directory:
+[*]     gtkwave registers_bmc/engine_0/trace.vcd registers.gtkw
 [*]
-[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/registers_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Sun Aug 23 12:30:16 2026"
-[dumpfile_size] 10323
-[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/registers.gtkw"
+[dumpfile] "registers_bmc/engine_0/trace.vcd"
+[savefile] "registers.gtkw"
 [timestart] 0
-[size] 1516 1002
-[pos] 0 5
-*-3.683995 32 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[size] 1519 906
+[pos] -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] registers.
-[sst_width] 427
-[signals_width] 299
+[sst_width] 249
+[signals_width] 280
 [sst_expanded] 1
-[sst_vpaned_height] 281
+[sst_vpaned_height] 250
 @800200
--registers
+-clock
 @28
 registers.clk_i
+@28
 registers.rst_i
-[color] 2
+@1000200
+-clock
+@800200
+-read ports
+@28
 registers.rd_en_i
 @22
 registers.src_reg_i[3:0]
+@22
 registers.src_val_o[15:0]
+@22
 registers.dst_reg_i[3:0]
+@22
 registers.dst_val_o[15:0]
+@1000200
+-read ports
+@800200
+-write port
 @28
-[color] 2
 registers.wr_en_i
 @22
 registers.wr_reg_i[3:0]
-@c00022
+@22
 registers.wr_val_i[15:0]
-@28
-(0)registers.wr_val_i[15:0]
-(1)registers.wr_val_i[15:0]
-(2)registers.wr_val_i[15:0]
-(3)registers.wr_val_i[15:0]
-(4)registers.wr_val_i[15:0]
-(5)registers.wr_val_i[15:0]
-(6)registers.wr_val_i[15:0]
-(7)registers.wr_val_i[15:0]
-(8)registers.wr_val_i[15:0]
-(9)registers.wr_val_i[15:0]
-(10)registers.wr_val_i[15:0]
-(11)registers.wr_val_i[15:0]
-(12)registers.wr_val_i[15:0]
-(13)registers.wr_val_i[15:0]
-(14)registers.wr_val_i[15:0]
-(15)registers.wr_val_i[15:0]
-@1401200
--group_end
+@1000200
+-write port
+@800200
+-Status Register port
 @22
 registers.sr_val_o[15:0]
 @28
 registers.wr_sr_en_i
 @22
 registers.wr_sr_val_i[15:0]
+@22
+registers.reg_sr[15:0]
 @1000200
--registers
-@c00200
--ram_upper_dst
-@28
-registers.i_ram_upper_dst.clk_i
-registers.i_ram_upper_dst.rst_i
-registers.i_ram_upper_dst.wr_en_i
-registers.i_ram_upper_dst.wr_addr_i[2:0]
+-Status Register port
+@800200
+-write-before-read pipeline
 @22
-registers.i_ram_upper_dst.wr_data_i[15:0]
-@28
-registers.i_ram_upper_dst.rd_en_i
-registers.i_ram_upper_dst.rd_addr_i[2:0]
+registers.dst_reg_d[3:0]
 @22
-registers.i_ram_upper_dst.rd_data_o[15:0]
-@1401200
--ram_upper_dst
-@c00200
--ram_lower_dst
+registers.dst_val_d[15:0]
 @28
-registers.i_ram_lower_dst.clk_i
-registers.i_ram_lower_dst.rst_i
-registers.i_ram_lower_dst.wr_en_i
+registers.rd_en_d
 @22
-registers.i_ram_lower_dst.wr_addr_i[3:0]
-registers.i_ram_lower_dst.wr_data_i[15:0]
+registers.src_reg_d[3:0]
+@22
+registers.src_val_d[15:0]
+@22
+registers.wr_addr_d[3:0]
 @28
-registers.i_ram_lower_dst.rd_en_i
-@22
-registers.i_ram_lower_dst.rd_addr_i[3:0]
-registers.i_ram_lower_dst.rd_data_o[15:0]
-registers.i_ram_lower_dst.rd_data[15:0]
-@1401200
--ram_lower_dst
-@c00200
--ram_lower_src
+registers.wr_en_d
 @28
-registers.i_ram_lower_src.wr_en_i
+registers.wr_sr_en_d
 @22
-registers.i_ram_lower_src.wr_addr_i[3:0]
-registers.i_ram_lower_src.wr_data_i[15:0]
+registers.wr_val_d[15:0]
+@1000200
+-write-before-read pipeline
+@800200
+-lower bank R0-R7 nets
+@22
+registers.lower_rd_addr_dst[3:0]
+@22
+registers.lower_rd_addr_src[3:0]
+@22
+registers.lower_rd_data_dst[15:0]
+@22
+registers.lower_rd_data_src[15:0]
 @28
-registers.i_ram_lower_src.rd_en_i
+registers.lower_rd_en
 @22
-registers.i_ram_lower_src.rd_addr_i[3:0]
-registers.i_ram_lower_src.rd_data_o[15:0]
-@1401200
--ram_lower_src
+registers.lower_wr_addr[3:0]
+@22
+registers.lower_wr_data[15:0]
+@28
+registers.lower_wr_en
+@1000200
+-lower bank R0-R7 nets
+@800200
+-upper bank R8-R15 nets
+@22
+registers.upper_rd_addr_dst[2:0]
+@22
+registers.upper_rd_addr_src[2:0]
+@22
+registers.upper_rd_data_dst[15:0]
+@22
+registers.upper_rd_data_src[15:0]
+@28
+registers.upper_rd_en
+@22
+registers.upper_wr_addr[2:0]
+@22
+registers.upper_wr_data[15:0]
+@28
+registers.upper_wr_en
+@1000200
+-upper bank R8-R15 nets
+@800200
+-RAM: lower src
+@22
+registers.i_ram_lower_src.a_addr_i[3:0]
+@22
+registers.i_ram_lower_src.a_rd_data_o[15:0]
+@28
+registers.i_ram_lower_src.a_rd_en_i
+@22
+registers.i_ram_lower_src.b_addr_i[3:0]
+@22
+registers.i_ram_lower_src.b_wr_data_i[15:0]
+@28
+registers.i_ram_lower_src.b_wr_en_i
+@1000200
+-RAM: lower src
+@800200
+-RAM: lower dst
+@22
+registers.i_ram_lower_dst.a_addr_i[3:0]
+@22
+registers.i_ram_lower_dst.a_rd_data_o[15:0]
+@28
+registers.i_ram_lower_dst.a_rd_en_i
+@22
+registers.i_ram_lower_dst.b_addr_i[3:0]
+@22
+registers.i_ram_lower_dst.b_wr_data_i[15:0]
+@28
+registers.i_ram_lower_dst.b_wr_en_i
+@1000200
+-RAM: lower dst
+@800200
+-RAM: upper src
+@22
+registers.i_ram_upper_src.a_addr_i[2:0]
+@22
+registers.i_ram_upper_src.a_rd_data_o[15:0]
+@28
+registers.i_ram_upper_src.a_rd_en_i
+@22
+registers.i_ram_upper_src.b_addr_i[2:0]
+@22
+registers.i_ram_upper_src.b_wr_data_i[15:0]
+@28
+registers.i_ram_upper_src.b_wr_en_i
+@1000200
+-RAM: upper src
+@800200
+-RAM: upper dst
+@22
+registers.i_ram_upper_dst.a_addr_i[2:0]
+@22
+registers.i_ram_upper_dst.a_rd_data_o[15:0]
+@28
+registers.i_ram_upper_dst.a_rd_en_i
+@22
+registers.i_ram_upper_dst.b_addr_i[2:0]
+@22
+registers.i_ram_upper_dst.b_wr_data_i[15:0]
+@28
+registers.i_ram_upper_dst.b_wr_en_i
+@1000200
+-RAM: upper dst
+@800200
+-formal
+@22
+registers.i_registers.c_addr[3:0]
+@22
+registers.i_registers.f_data[15:0]
+@22
+registers.i_registers.f_falling_dst_reg[3:0]
+@28
+registers.i_registers.f_falling_rd_en
+@22
+registers.i_registers.f_falling_src_reg[3:0]
+@28
+registers.i_registers.f_write_to_sr
+@28
+registers.i_registers.f_written
+@1000200
+-formal
 [pattern_trace] 1
 [pattern_trace] 0

@@ -1,77 +1,136 @@
 [*]
-[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
-[*] Sun Apr 18 11:10:55 2021
+[*] Companion save file for the sequencer formal job. Open a counterexample
+[*] with it, e.g. from this directory:
+[*]     gtkwave sequencer_prove/engine_0/trace.vcd sequencer.gtkw
 [*]
-[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/sequencer_bmc/engine_0/trace.vcd"
-[dumpfile_mtime] "Sun Apr 18 11:07:47 2021"
-[dumpfile_size] 3147
-[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/sequencer.gtkw"
+[dumpfile] "sequencer_prove/engine_0/trace.vcd"
+[savefile] "sequencer.gtkw"
 [timestart] 0
-[size] 1387 890
-[pos] -2205 -210
-*-2.746155 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[size] 1519 906
+[pos] -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] sequencer.
 [sst_width] 249
-[signals_width] 219
+[signals_width] 280
 [sst_expanded] 1
-[sst_vpaned_height] 244
+[sst_vpaned_height] 250
+@800200
+-clock
 @28
 sequencer.clk_i
+@28
 sequencer.rst_i
-[color] 2
-sequencer.dec_valid_i
-[color] 7
-sequencer.dec_ready_o
-@c00200
--dec_stage_i
-@22
-sequencer.dec_stage_i.addr[15:0]
-sequencer.dec_stage_i.dst_addr[3:0]
-@28
-sequencer.dec_stage_i.dst_imm
-sequencer.dec_stage_i.dst_mode[1:0]
-@22
-sequencer.dec_stage_i.dst_val[15:0]
-sequencer.dec_stage_i.immediate[15:0]
-sequencer.dec_stage_i.inst[15:0]
-sequencer.dec_stage_i.microcodes[35:0]
-sequencer.dec_stage_i.r14[15:0]
-sequencer.dec_stage_i.res_reg[3:0]
-sequencer.dec_stage_i.src_addr[3:0]
-@28
-sequencer.dec_stage_i.src_imm
-sequencer.dec_stage_i.src_mode[1:0]
-@22
-sequencer.dec_stage_i.src_val[15:0]
-@1401200
--dec_stage_i
+@1000200
+-clock
+@800200
+-from DECODE
 @28
 [color] 2
-sequencer.prep_valid_o
+sequencer.s_valid_i
+@28
 [color] 7
-sequencer.prep_ready_i
-@c00201
--prep_stage_o
+sequencer.s_ready_o
+@1000200
+-from DECODE
+@800200
+-DECODE payload
 @22
-sequencer.prep_stage_o.addr[15:0]
-sequencer.prep_stage_o.dst_addr[3:0]
+sequencer.s_stage_i<addr>[15:0]
+@22
+sequencer.s_stage_i<dst_addr>[3:0]
 @28
-sequencer.prep_stage_o.dst_imm
-sequencer.prep_stage_o.dst_mode[1:0]
+sequencer.s_stage_i<dst_imm>
 @22
-sequencer.prep_stage_o.dst_val[15:0]
-sequencer.prep_stage_o.immediate[15:0]
-sequencer.prep_stage_o.inst[15:0]
-sequencer.prep_stage_o.microcodes[35:0]
-sequencer.prep_stage_o.r14[15:0]
-sequencer.prep_stage_o.res_reg[3:0]
-sequencer.prep_stage_o.src_addr[3:0]
+sequencer.s_stage_i<dst_mode>[1:0]
 @28
-sequencer.prep_stage_o.src_imm
-sequencer.prep_stage_o.src_mode[1:0]
+sequencer.s_stage_i<early_jmp>
 @22
-sequencer.prep_stage_o.src_val[15:0]
-@1401201
--prep_stage_o
+sequencer.s_stage_i<immediate>[15:0]
+@22
+sequencer.s_stage_i<inst>[15:0]
+@28
+sequencer.s_stage_i<is_crb>
+@28
+sequencer.s_stage_i<is_sub>
+@22
+sequencer.s_stage_i<microcodes>[35:0]
+@28
+sequencer.s_stage_i<ptr_sr>
+@22
+sequencer.s_stage_i<res_reg>[3:0]
+@22
+sequencer.s_stage_i<src_addr>[3:0]
+@28
+sequencer.s_stage_i<src_imm>
+@22
+sequencer.s_stage_i<src_mode>[1:0]
+@1000200
+-DECODE payload
+@800200
+-to PREPARE
+@28
+[color] 2
+sequencer.m_valid_o
+@28
+[color] 7
+sequencer.m_ready_i
+@1000200
+-to PREPARE
+@800200
+-PREPARE payload
+@22
+sequencer.m_stage_o<addr>[15:0]
+@22
+sequencer.m_stage_o<dst_addr>[3:0]
+@28
+sequencer.m_stage_o<dst_imm>
+@22
+sequencer.m_stage_o<dst_mode>[1:0]
+@22
+sequencer.m_stage_o<dst_reg_val>[15:0]
+@28
+sequencer.m_stage_o<early_jmp>
+@22
+sequencer.m_stage_o<immediate>[15:0]
+@22
+sequencer.m_stage_o<inst>[15:0]
+@28
+sequencer.m_stage_o<is_crb>
+@28
+sequencer.m_stage_o<is_sub>
+@22
+sequencer.m_stage_o<microcode>[11:0]
+@28
+sequencer.m_stage_o<ptr_sr>
+@22
+sequencer.m_stage_o<r14>[15:0]
+@22
+sequencer.m_stage_o<res_reg>[3:0]
+@22
+sequencer.m_stage_o<src_addr>[3:0]
+@28
+sequencer.m_stage_o<src_imm>
+@22
+sequencer.m_stage_o<src_mode>[1:0]
+@22
+sequencer.m_stage_o<src_reg_val>[15:0]
+@1000200
+-PREPARE payload
+@800200
+-register file read data
+@22
+sequencer.reg_dst_val_i[15:0]
+@22
+sequencer.reg_r14_i[15:0]
+@22
+sequencer.reg_src_val_i[15:0]
+@1000200
+-register file read data
+@800200
+-internal
+@22
+sequencer.index[1:0]
+@1000200
+-internal
 [pattern_trace] 1
 [pattern_trace] 0
