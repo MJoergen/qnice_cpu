@@ -798,6 +798,13 @@ has Vivado.
 - `src/cpu_main/` — DECODE, SEQUENCER, PREPARE, WRITE, and the `sub/` microcode ROM and ALU.
   SEQUENCER sits beside the stages rather than in `sub/` because `cpu_main.vhd` instantiates it
   itself, on the DECODE→PREPARE link.
+- `src/interrupt/` — **no VHDL yet.** A README and a timing diagram only: the port list and bus
+  protocol `interrupt.vhd` will have to implement, drawn ahead of the module because the
+  `INT_N`/`IGRANT_N` daisy-chain is the part of the feature the upstream sources disagreed about
+  most. It is task T2 of [doc/interrupts.md](doc/interrupts.md), and its `timing.tex` is in the
+  Makefile's `TIMINGS`, so `make diagrams` renders it like any other. Read it as a specification,
+  not as a description of something that exists; the diagram is to be redrawn against a real
+  simulation once the module runs.
 - `src/sub/` — reusable elastic-pipeline building blocks, see
   [Elastic pipeline building blocks](#elastic-pipeline-building-blocks-srcsub) above.
 - `src/cpu.vhd` — top-level entity tying FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN together.
