@@ -567,11 +567,50 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- Note this compares banks, which the RTL never does; it triggers on
    -- "writes R14, or is INCRB/DECRB" instead. That is exactly what makes this
    -- a property and not a transcription.
+   -- Split in two by the deferral write.vhd makes. A bank change on the
+   -- micro-op that RETIRES must flush in the same cycle, as it always did.
    f_flush_on_bank_change : assert always
       {rst_i = '0' and prep2wr_valid = '1' and
+       prep2wr_stage.microcode(work.cpu_constants.C_LAST) = '1' and
        ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
        f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
        dec2seq_valid = '1' and f_prep_uses_bank = '1'}
+      |-> {fetch_valid_o = '1'};
+
+   -- A bank change on a NON-last micro-op has to be deferred instead: flushing
+   -- there resets DECODE, SEQUENCER and PREPARE, and the rest of the
+   -- instruction lives in DECODE's output register, so it would be thrown away
+   -- (see "A pointer through R14 or R15" in doc/README.md -- this is the state
+   -- "MOVE @R14++, R0" used to hang in). Only a pointer write-back can reach
+   -- R14 on a non-last micro-op.
+   --
+   -- Deferring is sound because WRITE is in-order and one micro-op deep: no
+   -- YOUNGER instruction can retire between the change and the flush, and the
+   -- flush discards everything in DECODE and PREPARE when it does come. So the
+   -- obligation is "flushed by the time this instruction retires", which is
+   -- what the shadow register below states.
+   signal f_bank_pending : std_logic;
+
+   p_bank_pending : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if prep2wr_valid = '1' and
+            prep2wr_stage.microcode(work.cpu_constants.C_LAST) = '0' and
+            ((reg_we_o = '1' and reg_addr_o = 14) or reg_r14_we_o = '1') and
+            f_r14_next(15 downto 8) /= prep2wr_stage.r14(15 downto 8) and
+            dec2seq_valid = '1' and f_prep_uses_bank = '1'
+         then
+            f_bank_pending <= '1';
+         end if;
+
+         if fetch_valid_o = '1' or rst_i = '1' then
+            f_bank_pending <= '0';
+         end if;
+      end if;
+   end process p_bank_pending;
+
+   f_flush_on_bank_change_deferred : assert always
+      {rst_i = '0' and inst_done_o = '1' and f_bank_pending = '1'}
       |-> {fetch_valid_o = '1'};
 
    -- (2) THE SAME REQUIREMENT, one stage further back. The instruction at
@@ -909,6 +948,68 @@ vunit i_cpu_main(cpu_main(synthesis))
 
    c_early_redirect_rel : cover {early_valid_o = '1' and
                                  ic_data_i(5 downto 4) = work.cpu_constants.C_JMP_RSUB};
+
+   -- WHY THE R14/R15 POINTER HANG SURVIVED THIS FILE, and the two covers that
+   -- would have caught it.
+   --
+   -- "MOVE @R14++, R0" and its relatives used to hang the CPU: the pointer
+   -- write-back raised fetch_valid_o on a micro-op that was not the last, which
+   -- reset DECODE, SEQUENCER and PREPARE and threw the rest of the instruction
+   -- away. Three things had to line up for that to get past this file.
+   --
+   --   * The registers were excluded by assumption. f_gp_regs is
+   --     "c_src_reg /= 14 and 15 and c_dst_reg /= 14 and 15", and TWENTY-ONE
+   --     properties are qualified by it. That exclusion is right for what those
+   --     properties do -- they predict exact operand values, and R14 and R15
+   --     have semantics of their own -- but the effect was that no property in
+   --     this file ever drove an addressing mode through either register.
+   --   * Nothing asserts that an instruction completes. The note above
+   --     f_mov_r_r_read says so outright: the eventuality was dropped because
+   --     it is liveness and out of reach for BMC. A discarded instruction
+   --     violates no safety property.
+   --   * And f_flush_on_bank_change positively REQUIRED the buggy behaviour.
+   --     It demanded fetch_valid_o in the cycle the bank changes, which for a
+   --     pointer write-back is a non-last micro-op. Fixing the design made that
+   --     property fail; it is split above into an immediate half and a deferred
+   --     half for exactly this reason.
+   --
+   -- A cover is the right instrument for the part that is missing. It cannot
+   -- express "eventually retires", but it can require the retirement to be
+   -- REACHABLE, and an instruction the pipeline discards can never reach it. So
+   -- the two covers below are written from the instruction encoding rather than
+   -- from ptr_sr, and both go unreached if the deferral is removed.
+
+   -- Source pointer: src_imm rules out the immediate @R15++, so a POST or PRE
+   -- mode on R14/R15 is a genuine memory operand, and REG_MOD_SRC then always
+   -- lands on a non-last micro-op.
+   --
+   -- Pinning the opcode to MOVE is load-bearing rather than tidy, and it took
+   -- two goes to get right. Leaving the opcode free let BMC satisfy the cover
+   -- without ever performing a pointer write-back, twice over: a conditional
+   -- JMP that is not taken does no register write at all, because p_reg gates
+   -- every write on update_reg; and a CTRL instruction has no source operand,
+   -- so bits 11..6 are its command field and the "src_addr"/"src_mode" this
+   -- cover reads are not addressing-mode bits at all. Either one retires
+   -- happily with the deferral removed, and the cover proved nothing. MOVE is
+   -- the shape that actually hung.
+   c_ptr_src_retires   : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                                prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_MOVE and
+                                prep2wr_stage.src_imm = '0' and
+                                prep2wr_stage.src_addr(3 downto 1) = "111" and
+                                (prep2wr_stage.src_mode = work.cpu_constants.C_MODE_POST or
+                                 prep2wr_stage.src_mode = work.cpu_constants.C_MODE_PRE)};
+
+   -- Destination pointer, restricted to CMP. For an instruction that writes its
+   -- destination, REG_MOD_DST rides on the last micro-op and always retired
+   -- fine; it is the read-only-destination shape -- entries 9 and 11 of the
+   -- microcode ROM -- that puts REG_MOD_DST on a non-last one. Without the
+   -- opcode term this cover would be satisfied by a MOVE and prove nothing.
+   c_ptr_dst_cmp_retires : cover {rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                                  prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CMP and
+                                  prep2wr_stage.dst_imm = '0' and
+                                  prep2wr_stage.dst_addr(3 downto 1) = "111" and
+                                  (prep2wr_stage.dst_mode = work.cpu_constants.C_MODE_POST or
+                                   prep2wr_stage.dst_mode = work.cpu_constants.C_MODE_PRE)};
 
    c_dec2seq_stalled : cover {dec2seq_valid = '1' and dec2seq_ready = '0' and rst_i = '0' and fetch_valid_o = '0'};
 

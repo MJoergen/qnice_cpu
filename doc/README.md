@@ -145,7 +145,12 @@ precise version is recorded next to each in the RTL.
   against the old, which means `MOVE ST____C_, R14` pays a branch penalty even
   though it leaves the page alone, and so does `R14` used as a pointer
   (`MOVE @R14++, R0`, whose post-increment write-back names `R14` like any
-  other). The precise version was built and measured: it costs the entire
+  other) — though that one has to be **deferred to the instruction's last
+  micro-operation**, because a pointer write-back lands on a micro-operation
+  that is not the last and this flush would otherwise throw away the rest of
+  the instruction; see
+  [A pointer through R14 or R15](#a-pointer-through-r14-or-r15).
+  The precise version was built and measured: it costs the entire
   timing margin (WNS +0.344 → +0.010 ns and +44 LUTs), because it puts the ALU
   result and an 8-bit comparator in front of that high-fanout net. Note that
   `R14` and `R15` share `reg_addr_o(3 downto 1) = "111"`, so these two
@@ -179,6 +184,34 @@ precise version is recorded next to each in the RTL.
   is measured from the target and only applies when DECODE resolved the branch
   itself; see
   [The store the window could not see](#the-store-the-window-could-not-see).
+
+### A pointer through R14 or R15
+
+Three of the four conditions above are tested at the moment an instruction
+retires. The write to `R14`/`R15` is not: `p_reg` drives `reg_addr_o` for the
+pre- and post-increment write-backs too, and those land on whichever
+micro-operation carries the corresponding `REG_MOD` flag. For a *source*
+pointer that is never the last one — `REG_MOD_SRC` always rides with
+`MEM_READ_SRC` on the first — and `CMP` puts `REG_MOD_DST` on a non-last
+micro-operation as well.
+
+Raising the flush there is not merely early, it is fatal. This signal is the
+reset of DECODE, SEQUENCER and PREPARE, and the instruction's remaining
+micro-operations live in DECODE's output register, so they are discarded — and
+the memory read already issued for the operand is never consumed. `MOVE
+@R14++, R0`, `MOVE @--R14, R0` and `CMP R0, @R14++` all hung the CPU outright,
+where the reference emulator completes them.
+
+The flush is still required, since the write really can move the register page,
+so it is deferred instead: DECODE marks such an instruction and WRITE flushes
+when it retires. Nothing extra is needed for the redirect address — by then
+`reg_addr_o` is the instruction's own result register, so the redirect goes to
+the following instruction, which is where a write to `R14` should resume.
+
+One encoding is left deliberately divergent. `MOVE @--R15, R0` sets the Program
+Counter to the address of the instruction itself, so the reference loops on it
+forever; here the deferred flush resumes at the following instruction instead.
+Both are degenerate; this one at least terminates.
 
 Reset is the fifth case, and it goes through the first of those four rather
 than around it: while `rst_i` is asserted, `p_reg` in `write.vhd` forces a write
@@ -348,14 +381,14 @@ serialise. For `test/prog.asm`, the longest of the test programs:
 
 | | |
 | --- | --- |
-| cycles | 15337 |
-| instruction requests | 13715 (89% of cycles) |
-| data requests | 1902 |
-| ...of which simultaneous | 1861 (**97.8%** of data requests) |
+| cycles | 15581 |
+| instruction requests | 13944 (89% of cycles) |
+| data requests | 1927 |
+| ...of which simultaneous | 1884 (**97.8%** of data requests) |
 
 Almost every data access collides with an instruction fetch — which follows from
 the instruction bus being busy 89% of the time. Serialising them onto one port
-would cost at least 1861 cycles, i.e. **+12.1%**, and more in practice, since
+would cost at least 1884 cycles, i.e. **+12.1%**, and more in practice, since
 each inserted stall also delays whatever was behind it in the pipeline. It is a
 lower bound in a second sense as well: it counts only the collisions that
 actually occurred in a machine built not to have to avoid them.
@@ -596,9 +629,10 @@ there to pin the two edges.
 [cpu.png](cpu.png) marks seven flip-flops on the main path with short black
 bars. Each one is a clock cycle of the loop, so the worst setup path arriving at
 each is the thing that sets how fast the loop can be clocked. All nine paths
-below were read off the shipping routed checkpoint (`post_route.dcp`, Vivado
-2022.2, `-flatten_hierarchy rebuilt`, at the 7.35 ns constraint) with
-`report_timing -to` the endpoint pins of each register.
+below were read off a shipping routed checkpoint (`post_route.dcp`, Vivado
+2022.2, `-flatten_hierarchy rebuilt`) with `report_timing -to` the endpoint pins
+of each register, at the 7.35 ns constraint that was current when they were
+taken. They have been left as measured; the constraint is now 7.45 ns.
 
 Two things about reading them. First, the *endpoints* are exact but the
 intermediate cell names are not, for the reason
@@ -974,7 +1008,7 @@ Remaining ideas:
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `fcf91af-dirty`.
+Measured with Vivado 2022.2 on commit `ae675b6-dirty`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -991,18 +1025,21 @@ memory model is essentially all Block RAM, so the LUTs are the CPU's:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  970 |     63400 | 1.53 |
-| Slice Registers |  622 |    126800 | 0.49 |
-| Slices          |  332 |     15850 | 2.09 |
+| Slice LUTs      |  983 |     63400 | 1.55 |
+| Slice Registers |  625 |    126800 | 0.49 |
+| Slices          |  381 |     15850 | 2.40 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 7.35 ns constraint: **WNS +0.005 ns**, no failing endpoints. The
+Timing at the 7.45 ns constraint: **WNS +0.017 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
-**That constraint was 7.25 ns until measurement forced it up**, so timing
-figures quoted elsewhere on this page were taken at 7.25 and have been left as
-measured. The reason for the move is the one
+**That constraint has been relaxed twice, from 7.25 to 7.35 to 7.45 ns**, so
+timing figures quoted elsewhere on this page were taken at whichever constraint
+was current and have been left as measured. The second step is recorded under
+[A pointer through R14 or R15](#a-pointer-through-r14-or-r15): deferring that
+flush costs about 0.11 ns on the net that can least afford it, and the design
+missed at 7.35 ns by -0.100 ns with 21 failing endpoints. The reason for the move is the one
 [The critical path](#the-critical-path) describes, taken to its conclusion: the
 worst path is not a path but a population of near-identical ones — 103 within
 0.2 ns — all closing the same PREPARE → ALU → Status Register →
@@ -1027,9 +1064,9 @@ costs 1.4% of clock rate and buys a margin the design can be edited in.
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_src_val][1]` to
-`i_prepare/wr_stage_o_reg[alu_src_val][3]`: 9 logic levels, with 79% of the
-delay in routing rather than logic.
+The worst setup path runs from `i_prepare/wr_stage_o_reg[dst_val_pc][4]` to
+`i_icache/m_data_reg[13]`: 10 logic levels, with 67% of the delay in routing
+rather than logic.
 <!-- end -->
 
 It is bar 6 of
@@ -1180,21 +1217,21 @@ written:
 | --------------- | ---- | --- |
 | FETCH           |   63 |  92 |
 | ICACHE          |   44 |  66 |
-| DECODE          |   74 |  78 |
+| DECODE          |   78 |  79 |
 | SEQUENCER       |   10 |   2 |
-| PREPARE         |   70 | 148 |
-| WRITE           |  449 |   0 |
+| PREPARE         |   70 | 149 |
+| WRITE           |  490 |   0 |
 | REGISTERS       |  166 | 142 |
 | MEMORY          |   59 |  74 |
 | Glue            |   17 |   1 |
-| **CPU total**   |  952 | 603 |
+| **CPU total**   |  997 | 605 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 47% of the CPU's LUTs**, and 247 of its 449 are the ALU
+* **WRITE dominates, at 49% of the CPU's LUTs**, and 247 of its 490 are the ALU
   (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
@@ -1206,7 +1243,7 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#why-write-needs-no-status-register-bypass).
 
-The two tables do not add up to each other (952 vs 970 LUTs). That is expected,
+The two tables do not add up to each other (997 vs 983 LUTs). That is expected,
 and note that the *sign* of the gap is not stable — it has landed both ways
 round across builds. The per-module figure comes first and stops after synthesis
 with `-flatten_hierarchy none`, which forbids optimisation across module

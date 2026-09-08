@@ -366,10 +366,12 @@ begin
    --
    -- The price is that any write to R14 flushes, even one that leaves the bank
    -- alone. That covers "MOVE ST____C_, R14" and friends; they cost a branch
-   -- penalty now. Since p_reg is combinational and drives reg_addr_o for the
-   -- pre/post-increment write-backs as well as for ordinary results -- on every
-   -- micro-op, not just the last -- this also covers R14 used as a POINTER,
-   -- e.g. "MOVE @R14++, R0".
+   -- penalty now. It also reaches R14 used as a POINTER, e.g. "MOVE @R14++,
+   -- R0", because p_reg drives reg_addr_o for the pre/post-increment
+   -- write-backs as well as for ordinary results -- but NOT on every micro-op:
+   -- see the C_LAST qualification on fetch_valid_o below, which exists because
+   -- a pointer write-back lands on a micro-op that is not the last one and
+   -- flushing there discarded the rest of the instruction.
    --
    -- The bank_stale_i qualification deliberately does NOT extend to that term.
    -- R14 and R15 share reg_addr_o(3 downto 1) = "111", which is what collapses
@@ -448,15 +450,23 @@ begin
    -- [1,11). Testing "< 32" covers that with room to spare, and being a power
    -- of two it is an 11-bit zero-test rather than a magnitude comparison.
    -- Over-approximating is free of correctness risk -- it can only cause a
-   -- flush that was not needed - which is also why R15 as a store pointer is
-   -- simply forced to hit rather than handled: dst_val_pc is the register
-   -- file's stale R15 copy in that case, so the subtraction would be
-   -- meaningless.
+   -- flush that was not needed.
+   --
+   -- A store THROUGH R15 needs nothing extra here, although it used to carry a
+   -- "dst_addr = R15 forces a hit" arm on the grounds that dst_val_pc would be
+   -- the register file's stale R15 copy. It is not: prepare.vhd substitutes
+   -- addr+1 (or addr+2) for dst_val_pc whenever dst_addr is R15, in every
+   -- addressing mode -- that substitution is the whole reason dst_val_pc
+   -- exists -- so smc_delta is 1 or 2 and the window below already covers it.
+   -- The arm could never decide anything. Confirmed by asserting
+   -- "dst_addr = R15 implies smc_delta < 32" over every test program, where it
+   -- never fired, and by a program that really does store through R15, which
+   -- passes with the arm removed. Removing it takes a four-bit compare off the
+   -- design's most timing-critical net.
 
 
    smc_delta <= prep_stage_i.dst_val_pc - prep_stage_i.addr;
-   smc_hit   <= '1' when smc_delta(15 downto 5) = "00000000000" or
-                         prep_stage_i.dst_addr = to_stdlogicvector(C_REG_PC, 4) else
+   smc_hit   <= '1' when smc_delta(15 downto 5) = "00000000000" else
                 '0';
 
    -- The one store the test above cannot see: ASUB/RSUB's return address.
@@ -563,7 +573,42 @@ begin
 
    -- Note that R14 and R15 share reg_addr_o(3 downto 1) = "111", so the two
    -- register-write terms collapse into one: reg_we_o and three address bits.
-   fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1)) and not wr_early) or
+   --
+   -- THE C_LAST QUALIFICATION IS NOT DECORATION, and neither is the term that
+   -- pairs with it below. p_reg drives reg_addr_o for the pre/post-increment
+   -- write-backs as well as for ordinary results, and a SOURCE pointer
+   -- write-back always lands on a micro-op that is not the last one --
+   -- REG_MOD_SRC rides with MEM_READ_SRC on the first -- while CMP puts
+   -- REG_MOD_DST on a non-last micro-op too. So a pointer through R14 or R15
+   -- used to raise this net mid-sequence, and that is fatal rather than merely
+   -- early: this signal resets DECODE, SEQUENCER and PREPARE, so the rest of
+   -- the instruction was discarded and the memory read it had already issued
+   -- was never consumed. "MOVE @R14++, R0", "MOVE @--R14, R0" and
+   -- "CMP R0, @R14++" all hung the CPU outright, where the reference emulator
+   -- completes them.
+   --
+   -- The flush is still needed -- the write really can move the register bank
+   -- -- so it is deferred to the last micro-op instead, which is what
+   -- prep_stage_i.ptr_sr carries (see decode.vhd). fetch_addr_o needs nothing
+   -- extra: at that point reg_addr_o is the instruction's own result register,
+   -- so wr_r15 is low and the redirect goes to next_pc, which is where a write
+   -- to R14 should resume anyway.
+   --
+   -- rst_i is a term of its own rather than an escape inside the product above,
+   -- and that is a timing decision, not a stylistic one. p_reg forces reg_we_o
+   -- with reg_addr_o = R15 while rst_i is asserted -- that write is how FETCH
+   -- gets its initial Program Counter -- and prep_stage_i.microcode is
+   -- meaningless then, so the C_LAST qualification needs an escape. Writing it
+   -- as "(microcode(C_LAST) or rst_i)" puts a two-input OR in series ahead of
+   -- the product, which is one more level on the net that is the reset pin of
+   -- every flip-flop in DECODE and PREPARE: measured, WNS -0.104 ns with 24
+   -- failing endpoints. As a separate term it folds into the final OR for
+   -- nothing. The redirect address is unaffected -- reg_addr_o is R15 during
+   -- reset, so wr_r15 still selects reg_val_o, which p_reg drives to 0.
+   fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1)) and not wr_early
+                     and prep_stage_i.microcode(C_LAST)) or
+                    rst_i or
+                    (inst_done_o and prep_stage_i.ptr_sr) or
                     (bank_switch_o and bank_stale_i) or
                     (inst_done_o and prep_stage_i.microcode(C_MEM_WRITE) and smc_hit) or
                     (inst_done_o and smc_push and smc_push_hit);

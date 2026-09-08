@@ -85,7 +85,7 @@ The statistics file is the performance counterpart of the writes log, and exists
 that makes the CPU flush twice as often produces an identical writes log and passes CI green.
 `test_monitor.vhd` counts cycles (reset release to the retiring `HALT`), accepted beats on each
 Wishbone bus (`cyc and stb and not stall`), and cycles in which *both* buses accepted a beat. That
-last one measures the Harvard split directly: for `prog.asm`, 1861 of 1902 data requests coincide
+last one measures the Harvard split directly: for `prog.asm`, 1884 of 1927 data requests coincide
 with an instruction fetch, so serialising them onto one port would cost at least +12.1% of the run.
 Note the instruction count includes speculative fetches that a flush later discarded, which is part
 of why it is worth watching.
@@ -692,22 +692,28 @@ consequence — logic nowhere near it can still move the slack by perturbing pla
 flip-flop added next to ICACHE for the HALT gate once cost 0.284 ns, the whole margin, without
 appearing on the path; re-measure after an unrelated edit rather than assuming it cannot matter.
 
-**The clock constraint is 7.35 ns** (`hw/system.xdc`), and was 7.25 ns until that placement
-sensitivity made `make system.bit` a coin flip: two refactors that added no logic — the design came
+**The clock constraint is 7.45 ns** (`hw/system.xdc`), and has been relaxed twice. It was 7.25 ns
+until that placement sensitivity made `make system.bit` a coin flip: two refactors that added no logic — the design came
 out 14 LUTs *smaller* — moved WNS from +0.025 to −0.018 ns and stopped the build emitting a
 bitstream, while five `place_design` directives on one unchanged netlist spanned +0.028 to
 −0.028 ns. Every timing figure quoted in this file and in the per-module READMEs predates the change
 and was measured at 7.25 ns; they have deliberately been left as measured, so read them as a record
 of that experiment rather than as the current margin. Shortening the critical loop was tried before
 relaxing the constraint and does not pay — the reasoning and the measurements are in
-doc/README.md's Utilization section. Current build: **WNS +0.005 ns**, no failing endpoints —
-reproducible across three builds, but essentially nothing left. The subroutine-push flush term
-(see [Self-modifying code](#self-modifying-code)) spent 0.055 ns of the 0.060 ns that was there,
-and it did so **without touching the critical path**: it reads `prep_stage_i.immediate`, which
-WRITE had no other use for, so sixteen flip-flops that synthesis used to optimise away came back
-and the extra area moved the placement. That is the sensitivity this section is about, arriving on
-cue. If the next change needs margin, relaxing `hw/system.xdc` again is the lever that has already
-been shown to work.
+doc/README.md's Utilization section.
+
+The **second** relaxation, 7.35 → 7.45 ns, paid for a correctness fix rather than a refactor. Two
+flush terms landed on `fetch_valid_o` in quick succession and between them spent more than the
+margin. The subroutine-push term (see [Self-modifying code](#self-modifying-code)) cost 0.055 ns of
+the 0.060 ns there was, without touching the critical path — it reads `prep_stage_i.immediate`,
+which WRITE had no other use for, so sixteen flip-flops synthesis used to optimise away came back
+and the area moved the placement. Deferring the R14/R15 pointer flush then cost about 0.11 ns more,
+and the design missed at 7.35 ns by −0.100 ns with 21 failing endpoints. Neither is logic depth that
+can be optimised away: the failing path runs `r14` → `update_reg` → `reg_we_o` → `fetch_valid_o` →
+ICACHE's clock enable and is 80% routing, and `update_reg` cannot leave that net. Two attempts to
+buy it back — lifting `rst_i` out of a series OR into its own term, and deleting a provably dead arm
+of `smc_hit` — moved WNS by 0.004 ns between them. Current build: **WNS +0.017 ns**, no failing
+endpoints.
 
 The script rewrites **numbers only** — the surrounding analysis is a hand-written design argument.
 Every substitution is anchored on an exact pattern and a missing anchor is a hard error, so

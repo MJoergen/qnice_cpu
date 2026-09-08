@@ -582,10 +582,10 @@ the file named by `G_STATS_FILE`, which `make` points at
 `test/<program>.stats`:
 
 ```
-cycles: 15337
-instruction memory requests: 13715
-data memory requests: 1902
-simultaneous requests: 1861
+cycles: 15581
+instruction memory requests: 13944
+data memory requests: 1927
+simultaneous requests: 1884
 ```
 
 `cycles` runs from the release of reset up to and including the cycle the `HALT`
@@ -609,14 +609,14 @@ a single-ported design would have had to serialise. For `prog.asm`:
 
 | | |
 | --- | --- |
-| cycles | 15337 |
-| instruction requests | 13715 (89% of cycles) |
-| data requests | 1902 |
-| ...of which simultaneous | 1861 (**97.8%** of data requests) |
+| cycles | 15581 |
+| instruction requests | 13944 (89% of cycles) |
+| data requests | 1927 |
+| ...of which simultaneous | 1884 (**97.8%** of data requests) |
 
 Almost every data access collides with an instruction fetch, which follows from
 the instruction bus being busy 89% of the time. Serialising them would cost at
-least 1861 extra cycles, i.e. **+12.1%**, and in practice more, since each
+least 1884 extra cycles, i.e. **+12.1%**, and in practice more, since each
 inserted stall also delays whatever was behind it in the pipeline. That is a
 lower bound in a second sense too: it counts only the collisions that actually
 happened in a machine built not to have to avoid them.

@@ -124,7 +124,7 @@ package cpu_constants is
    --     Program Counter substituted for a read of R15, which is what every
    --     consumer downstream of PREPARE has to use (see prepare.vhd).
    --
-   -- The thirteen elements common to all three are DECODE's, latched once in
+   -- The fourteen elements common to all three are DECODE's, latched once in
    -- its output register and passed along unchanged.
 
    -- DECODE -> SEQUENCER: one beat per instruction, carrying the whole
@@ -145,6 +145,7 @@ package cpu_constants is
       res_reg    : std_logic_vector(3 downto 0);
       is_crb     : std_logic;                     -- INCRB/DECRB, decoded early (decode.vhd)
       is_sub     : std_logic;                     -- ASUB/RSUB, decoded early (decode.vhd)
+      ptr_sr     : std_logic;                     -- @R14/@R15 pointer write-back (decode.vhd)
       early_jmp  : std_logic;                     -- Redirect already issued (decode.vhd)
    end record t_dec2seq;
 
@@ -166,6 +167,7 @@ package cpu_constants is
       res_reg     : std_logic_vector(3 downto 0);
       is_crb      : std_logic;
       is_sub      : std_logic;
+      ptr_sr      : std_logic;
       early_jmp   : std_logic;
       src_reg_val : std_logic_vector(15 downto 0); -- Straight off the register file
       dst_reg_val : std_logic_vector(15 downto 0); -- Straight off the register file
@@ -195,6 +197,7 @@ package cpu_constants is
       res_reg     : std_logic_vector(3 downto 0);
       is_crb      : std_logic;
       is_sub      : std_logic;
+      ptr_sr      : std_logic;
       early_jmp   : std_logic;
       src_val_pc  : std_logic_vector(15 downto 0); -- Register value, PC swapped in for R15
       dst_val_pc  : std_logic_vector(15 downto 0); -- Register value, PC swapped in for R15

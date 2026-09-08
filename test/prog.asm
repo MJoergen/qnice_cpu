@@ -68,6 +68,8 @@
 ; MEM_OP   : Test every remaining instruction with both operands in memory,
 ;            differentially against its own register form
 ; COND_RSUB: Test the RSUB instruction with a condition, not taken and taken
+; PTR_SR   : Test R14 used as an auto-incrementing/decrementing pointer, read
+;            and written, against every combination of memory operands
 
 ; Instructions:
 ; MOVE, ADD, ADDC, SUB, SUBC, SHL, SHR, SWAP
@@ -4641,6 +4643,98 @@ D_CRSUB_STACK   .DW     0x0000
 L_CRSUB_10
 
 
+; PTR_SR: R14 used as an auto-modifying POINTER, reading and writing.
+;
+; R14 and R15 are the two registers whose write raises the pipeline flush, and
+; a pointer write-back is the one way that write can land on a micro-op which
+; is NOT the last: REG_MOD_SRC always rides with MEM_READ_SRC on the first, and
+; CMP puts REG_MOD_DST on a non-last one too (entries 9 and 11 of the microcode
+; ROM). Flushing there does not merely cost cycles -- it resets DECODE,
+; SEQUENCER and PREPARE, so the rest of the instruction is discarded and the
+; memory read it has already issued is never consumed. Several of the lines
+; below hung the CPU outright before WRITE deferred that flush to the last
+; micro-op; the reference emulator completes all of them.
+;
+; WHAT THIS CHECKS IS COMPLETION, NOT THE VALUE, and that is deliberate. R14 IS
+; the Status Register: bit 0 reads back as 1 and bits 5..0 are rewritten by the
+; flags of every instruction, so a pointer kept in R14 moves under its own
+; program and there is no stable address to compare a load or a store against.
+; Using it as a pointer is pathological. The requirement is not that it compute
+; anything useful, it is that the CPU stay deterministic and keep running -- so
+; each line below simply has to execute, and the arithmetic after them has to
+; still work. The values were checked separately against the develop emulator
+; for the readable cases, and agree bit-for-bit including the resulting SR.
+;
+; The three groups cover every combination of reading and writing memory, since
+; that is what selects the microcode entry and therefore where the pointer
+; write-back lands: MOVE writes the destination without reading it, CMP reads it
+; without writing, and ADD does both.
+;
+; The scratch area is deliberately large and the pointer starts in the middle of
+; it. Every store below goes to an address derived from the Status Register, so
+; the flag bits move it around inside a 64-word window, and the increments walk
+; it further; D_PTR_LOW gives 128 words of slack below and D_PTR_MID 256 above,
+; which is why none of this can reach the code or the test status word. The area
+; sits after everything else in the program for the same reason.
+
+L_PTR_00        MOVE    0x5AA5, R8              ; a value, in an UNBANKED register
+                MOVE    D_PTR_MID, R9           ; a scratch word to point at
+                MOVE    0x0000, R10             ; scratch destination register
+
+; --- reading THROUGH R14: the write-back is on a non-last micro-op ---
+                MOVE    D_PTR_MID, R14
+                MOVE    @R14++, R10             ; MOVE, source in memory
+                MOVE    D_PTR_MID, R14
+                MOVE    @--R14, R10             ; ...and pre-decrement
+                MOVE    D_PTR_MID, R14
+                ADD     @R14++, R10             ; ADD, source in memory
+                MOVE    D_PTR_MID, R14
+                CMP     @R14++, R8              ; CMP, source in memory
+
+; --- writing THROUGH R14 ---
+                MOVE    D_PTR_MID, R14
+                MOVE    R8, @R14++              ; MOVE: writes dst, never reads it
+                MOVE    D_PTR_MID, R14
+                MOVE    R8, @--R14              ; ...and pre-decrement
+                MOVE    D_PTR_MID, R14
+                CMP     R8, @R14++              ; CMP: reads dst, never writes it
+                MOVE    D_PTR_MID, R14
+                ADD     R8, @R14++              ; ADD: reads AND writes dst
+                MOVE    D_PTR_MID, R14
+                ADD     R8, @--R14
+
+; --- both operands in memory, destination through R14 ---
+                MOVE    D_PTR_MID, R14
+                MOVE    @R9, @R14++
+                MOVE    D_PTR_MID, R14
+                CMP     @R9, @R14++
+                MOVE    D_PTR_MID, R14
+                ADD     @R9, @R14++
+
+; --- immediate source (@R15++), destination through R14 ---
+                MOVE    D_PTR_MID, R14
+                MOVE    0x1234, @R14++
+                MOVE    D_PTR_MID, R14
+                CMP     0x1234, @R14++
+                MOVE    D_PTR_MID, R14
+                ADD     0x1234, @R14++
+                MOVE    D_PTR_MID, R14
+                MOVE    0x1234, @--R14
+                MOVE    D_PTR_MID, R14
+                ADD     0x1234, @--R14
+
+; --- and the machine still computes ---
+                MOVE    ST______, R14           ; back to a sane Status Register
+                MOVE    0x1234, R1
+                ADD     0x1111, R1
+                CMP     0x2345, R1
+                RBRA    E_PTR_01, !Z
+                RBRA    L_PTR_10, 1
+
+E_PTR_01        HALT
+
+L_PTR_10
+
 ; Everything worked as expected! We are done now.
 EXIT            MOVE    OK, R8
                 MOVE    0x7FFF, R0      ; Test status word (see test/README.md)
@@ -4648,4 +4742,10 @@ EXIT            MOVE    OK, R8
                 HALT
 
 OK              .ASCII_W    "OK\n"
+
+; Scratch area for the PTR_SR group above, placed last so that a store which
+; walks out of it cannot reach code, data belonging to another test, or the
+; status word. See that group for why the pointer wanders.
+D_PTR_LOW       .BLOCK  0x0080                  ; 128 words of slack below
+D_PTR_MID       .BLOCK  0x0100                  ; 256 words the pointer walks
 

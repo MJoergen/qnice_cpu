@@ -24,7 +24,9 @@ set_property -dict { PACKAGE_PIN V11 IOSTANDARD LVCMOS33 } [get_ports { led_o[15
 
 # Clock definition
 #
-# 7.35 ns, not the 7.25 ns this design was constrained at until now.
+# 7.45 ns. This design has been relaxed twice, and both steps are worth keeping.
+#
+# FIRST, 7.25 -> 7.35 ns, because the build had become a coin flip.
 #
 # The worst setup path here is not one path but a dense population of
 # near-identical ones -- 103 within 0.2 ns of each other -- all closing the same
@@ -42,10 +44,27 @@ set_property -dict { PACKAGE_PIN V11 IOSTANDARD LVCMOS33 } [get_ports { led_o[15
 # turn the build red. The extra 0.10 ns costs 1.4% of clock rate and buys back a
 # margin the design can actually be edited in.
 #
-# Timing numbers quoted in the documentation that cite a 7.25 ns constraint were
-# measured before this change and have been left as measured; see doc/README.md,
-# "The critical path".
-create_clock -name sys_clk -period 7.35 [get_ports {clk_i}];
+# SECOND, 7.35 -> 7.45 ns, to afford a correctness fix.
+#
+# An auto-modifying pointer through R14 or R15 -- "MOVE @R14++, R0" and friends
+# -- used to hang the CPU: the pointer write-back raised fetch_valid_o on a
+# micro-op that was not the last, which reset DECODE, SEQUENCER and PREPARE and
+# discarded the rest of the instruction. See "A pointer through R14 or R15" in
+# doc/README.md. Deferring that flush to the last micro-op costs about 0.11 ns
+# on exactly the net that cannot afford it, and at 7.35 ns the design missed at
+# WNS -0.100 ns with 21 failing endpoints; at 7.45 ns it closes at +0.017.
+#
+# The 0.11 ns is not logic depth to be optimised away. The failing path runs
+# r14 -> update_reg -> reg_we_o -> fetch_valid_o -> ICACHE's clock enable and is
+# 80% routing, and update_reg cannot leave that net: a conditional branch that
+# is not taken must not redirect. Two attempts to buy it back -- lifting rst_i
+# out of a series OR into its own term, and deleting a provably dead arm of
+# smc_hit -- together moved WNS by 0.004 ns.
+#
+# Timing numbers quoted in the documentation that cite a 7.25 or 7.35 ns
+# constraint were measured before the respective change and have been left as
+# measured; see doc/README.md, "The critical path".
+create_clock -name sys_clk -period 7.45 [get_ports {clk_i}];
 
 # Configuration Bank Voltage Select
 set_property CFGBVS VCCO [current_design]

@@ -91,6 +91,9 @@ architecture synthesis of decode is
    signal uses_bank_d : std_logic; -- The instruction in the output register
    signal is_crb      : std_logic; -- Is the instruction at the input INCRB/DECRB?
    signal is_sub      : std_logic; -- Is the instruction at the input ASUB/RSUB?
+   signal ptr_sr      : std_logic; -- Does it auto-modify a pointer through R14/R15?
+   signal src_auto    : std_logic; -- Source mode is @R++ or @--R
+   signal dst_auto    : std_logic; -- Destination mode is @R++ or @--R
 
    -- Is the instruction at the input an unconditional branch with an immediate
    -- target, i.e. one whose redirect this stage can issue itself?
@@ -221,6 +224,39 @@ begin
 
 
    ------------------------------------------------------------
+   -- A pointer through R14 or R15
+   ------------------------------------------------------------
+
+   -- Does this instruction auto-increment or auto-decrement a pointer that
+   -- lives in R14 or R15? Those two are the registers whose write raises
+   -- WRITE's flush, and a pointer write-back is the one way that write can land
+   -- on a micro-op which is NOT the last -- REG_MOD_SRC always rides with
+   -- MEM_READ_SRC on the first micro-op, and CMP puts REG_MOD_DST on a
+   -- non-last one too (entries 9 and 11 of the ROM).
+   --
+   -- Flushing there is fatal rather than merely early: fetch_valid_o resets
+   -- DECODE, SEQUENCER and PREPARE, so the rest of the instruction is
+   -- discarded, and the memory read it has already issued is never consumed.
+   -- "MOVE @R14++, R0" used to hang the CPU outright. WRITE therefore defers
+   -- the flush to the last micro-op, and this is the bit that tells it to.
+   --
+   -- src_memory and dst_memory already exclude register mode and the immediate
+   -- @R15++, so all that is left to test is the auto-modifying modes and the
+   -- register number: address bits 3..1 all set is exactly R14 or R15.
+   -- reg_dst_addr_o rather than the raw field, because JMP substitutes R13
+   -- there and must not match.
+   src_auto <= '1' when ic_data_i(R_SRC_MODE) = C_MODE_POST or
+                        ic_data_i(R_SRC_MODE) = C_MODE_PRE else
+               '0';
+   dst_auto <= '1' when ic_data_i(R_DST_MODE) = C_MODE_POST or
+                        ic_data_i(R_DST_MODE) = C_MODE_PRE else
+               '0';
+
+   ptr_sr <= (src_memory and src_auto and and(reg_src_addr_o(3 downto 1))) or
+             (dst_memory and dst_auto and and(reg_dst_addr_o(3 downto 1)));
+
+
+   ------------------------------------------------------------
    -- Early redirect
    ------------------------------------------------------------
 
@@ -335,6 +371,7 @@ begin
             seq_stage_o.res_reg    <= reg_dst_addr_o;
             seq_stage_o.is_crb     <= is_crb;
             seq_stage_o.is_sub     <= is_sub;
+            seq_stage_o.ptr_sr     <= ptr_sr;
             seq_stage_o.early_jmp  <= early_jmp;
             uses_bank_d            <= uses_bank;
 
