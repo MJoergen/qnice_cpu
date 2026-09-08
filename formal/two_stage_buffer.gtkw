@@ -1,0 +1,94 @@
+[*]
+[*] Companion save file for the two_stage_buffer formal job. Open a counterexample
+[*] with it, e.g. from this directory:
+[*]     gtkwave two_stage_buffer_bmc/engine_0/trace.vcd two_stage_buffer.gtkw
+[*]
+[dumpfile] "two_stage_buffer_bmc/engine_0/trace.vcd"
+[savefile] "two_stage_buffer.gtkw"
+[timestart] 0
+[size] 1519 906
+[pos] -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] two_stage_buffer.
+[sst_width] 249
+[signals_width] 250
+[sst_expanded] 1
+[sst_vpaned_height] 250
+@800200
+-clock
+@28
+two_stage_buffer.clk_i
+@28
+two_stage_buffer.rst_i
+@1000200
+-clock
+@800200
+-slave
+@28
+[color] 2
+two_stage_buffer.s_valid_i
+@28
+[color] 7
+two_stage_buffer.s_ready_o
+@22
+two_stage_buffer.s_data_i[7:0]
+@22
+two_stage_buffer.s_fill_o[1:0]
+@28
+two_stage_buffer.s_afull
+@1000200
+-slave
+@800200
+-master
+@28
+[color] 2
+two_stage_buffer.m_valid_o
+@28
+[color] 7
+two_stage_buffer.m_ready_i
+@22
+two_stage_buffer.m_data_o[7:0]
+@1000200
+-master
+@800200
+-between the two stages
+@28
+[color] 2
+two_stage_buffer.int_valid
+@28
+[color] 7
+two_stage_buffer.int_ready
+@22
+two_stage_buffer.int_data[7:0]
+@28
+two_stage_buffer.int_afull
+@1000200
+-between the two stages
+@800200
+-first stage
+@28
+two_stage_buffer.i_one_stage_buffer_first.m_valid_r
+@22
+two_stage_buffer.i_one_stage_buffer_first.m_data_r[7:0]
+@22
+two_stage_buffer.i_one_stage_buffer_first.i_one_stage_buffer.f_count[1:0]
+@1000200
+-first stage
+@800200
+-second stage
+@28
+two_stage_buffer.i_one_stage_buffer_second.m_valid_r
+@22
+two_stage_buffer.i_one_stage_buffer_second.m_data_r[7:0]
+@22
+two_stage_buffer.i_one_stage_buffer_second.i_one_stage_buffer.f_count[1:0]
+@1000200
+-second stage
+@800200
+-formal
+@22
+two_stage_buffer.i_two_stage_buffer.f_count[1:0]
+@1000200
+-formal
+[pattern_trace] 1
+[pattern_trace] 0

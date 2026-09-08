@@ -1,0 +1,62 @@
+[*]
+[*] Companion save file for the pipe_concat formal job. Open a counterexample
+[*] with it, e.g. from this directory:
+[*]     gtkwave pipe_concat_bmc/engine_0/trace.vcd pipe_concat.gtkw
+[*]
+[dumpfile] "pipe_concat_bmc/engine_0/trace.vcd"
+[savefile] "pipe_concat.gtkw"
+[timestart] 0
+[size] 1519 906
+[pos] -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] pipe_concat.
+[sst_width] 249
+[signals_width] 250
+[sst_expanded] 1
+[sst_vpaned_height] 250
+@800200
+-clock
+@28
+pipe_concat.clk_i
+@28
+pipe_concat.rst_i
+@1000200
+-clock
+@800200
+-slave 0
+@28
+[color] 2
+pipe_concat.s0_valid_i
+@28
+[color] 7
+pipe_concat.s0_ready_o
+@22
+pipe_concat.s0_data_i[7:0]
+@1000200
+-slave 0
+@800200
+-slave 1
+@28
+[color] 2
+pipe_concat.s1_valid_i
+@28
+[color] 7
+pipe_concat.s1_ready_o
+@22
+pipe_concat.s1_data_i[7:0]
+@1000200
+-slave 1
+@800200
+-master
+@28
+[color] 2
+pipe_concat.m_valid_o
+@28
+[color] 7
+pipe_concat.m_ready_i
+@22
+pipe_concat.m_data_o[15:0]
+@1000200
+-master
+[pattern_trace] 1
+[pattern_trace] 0

@@ -1,0 +1,66 @@
+[*]
+[*] Companion save file for the one_stage_fifo formal job. Open a counterexample
+[*] with it, e.g. from this directory:
+[*]     gtkwave one_stage_fifo_bmc/engine_0/trace.vcd one_stage_fifo.gtkw
+[*]
+[dumpfile] "one_stage_fifo_bmc/engine_0/trace.vcd"
+[savefile] "one_stage_fifo.gtkw"
+[timestart] 0
+[size] 1519 906
+[pos] -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] one_stage_fifo.
+[sst_width] 249
+[signals_width] 250
+[sst_expanded] 1
+[sst_vpaned_height] 250
+@800200
+-clock
+@28
+one_stage_fifo.clk_i
+@28
+one_stage_fifo.rst_i
+@1000200
+-clock
+@800200
+-slave
+@28
+[color] 2
+one_stage_fifo.s_valid_i
+@28
+[color] 7
+one_stage_fifo.s_ready_o
+@22
+one_stage_fifo.s_data_i[7:0]
+@1000200
+-slave
+@800200
+-master
+@28
+[color] 2
+one_stage_fifo.m_valid_o
+@28
+[color] 7
+one_stage_fifo.m_ready_i
+@22
+one_stage_fifo.m_data_o[7:0]
+@1000200
+-master
+@800200
+-internal
+@28
+one_stage_fifo.m_valid_r
+@22
+one_stage_fifo.m_data_r[7:0]
+@28
+one_stage_fifo.s_ready_s
+@1000200
+-internal
+@800200
+-formal
+@22
+one_stage_fifo.i_one_stage_fifo.f_count[1:0]
+@1000200
+-formal
+[pattern_trace] 1
+[pattern_trace] 0
