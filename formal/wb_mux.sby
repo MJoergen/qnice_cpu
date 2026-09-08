@@ -1,0 +1,54 @@
+## Verification of the data bus multiplexer.
+##
+## The module is checked at a 4-bit address (only the top bit is decoded, so the
+## width is irrelevant to the logic) and 4-bit data, in two depths.
+##
+## G_MAX_OUTSTANDING=2 is the shipping configuration -- what test/system.vhd
+## instantiates and what both masters in this CPU cap themselves at.
+##
+## G_MAX_OUTSTANDING=3 is NOT redundant, and the reason is worth knowing. At a
+## depth of 2 a per-slave response buffer never holds more than one word
+## (f_buf0_bound in the .psl says why), so order WITHIN one slave is
+## unreachable and a buffer that popped its entries backwards would pass every
+## property. At 3 it is reachable, and f_cover_buf0_deep / f_cover_buf1_deep
+## insist that it actually happens. Fault injection confirms the distinction:
+## replacing buf0(0) with buf0(buf0_fill - 1) is caught only by the 3-deep
+## tasks.
+##
+## The data width is 4 rather than 16 because wb_mux.psl tags responses in the
+## top and bottom data bits and ignores the rest; narrowing the payload cuts the
+## state space without weakening a single property.
+##
+## Only bmc and cover are in the task list, as in memory.sby. Every assertion
+## except f_response_order also closes under k-induction -- adding a "prove"
+## task and commenting that one property out passes basecase and induction
+## both -- but f_response_order itself does not, for the reason written above
+## it in wb_mux.psl. Adding "prove" here as it stands would simply make
+## "make -C formal" fail.
+##
+## Run one task:   sby -f wb_mux.sby bmc
+## Run everything: sby -f wb_mux.sby
+
+[tasks]
+bmc2    bmc    depth2
+cover2  cover  depth2
+bmc3    bmc    depth3
+cover3  cover  depth3
+
+[options]
+bmc:   mode bmc
+bmc:   depth 14
+cover: mode cover
+cover: depth 14
+
+[engines]
+smtbmc
+
+[script]
+depth2: ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=4 -gG_MAX_OUTSTANDING=2 wb_mux.vhd wb_mux.psl -e wb_mux
+depth3: ghdl --std=08 -gG_ADDR_SIZE=4 -gG_DATA_SIZE=4 -gG_MAX_OUTSTANDING=3 wb_mux.vhd wb_mux.psl -e wb_mux
+prep -top wb_mux
+
+[files]
+wb_mux.psl
+../test/wb_mux.vhd

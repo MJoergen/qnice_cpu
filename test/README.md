@@ -1,8 +1,9 @@
 # Test programs and how to tell whether they passed
 
 This directory holds the testbench (`tb_cpu.vhd`), the memory models it needs
-(`wb_dp_mem.vhd`, `system.vhd`), the test-result monitor
-(`test_monitor.vhd`), and the QNICE assembly programs run against the CPU.
+(`wb_dp_mem.vhd`, `wb_mux.vhd`, `system.vhd`), a simulation-only arithmetic
+peripheral (`eae.vhd`), the test-result monitor (`test_monitor.vhd`), and the
+QNICE assembly programs run against the CPU.
 
 The memory model has two read ports and one write port: the instruction bus
 (port A) reads, the data bus (port B) reads and writes. The program is loaded
@@ -13,6 +14,7 @@ still be VHDL-2008 that Vivado will infer a RAM from.
 
 ```
 make test                      # run every test program headless; this is the CI entry point
+make test_slow                 # the same programs against a deliberately slow memory
 make check TEST=prog_r15       # run just one of them, same checks
 make run   TEST=prog_r15       # run it without the writes-log comparison
 make sim                       # assemble test/prog.asm, simulate, open gtkwave
@@ -36,11 +38,11 @@ branches to a nearby `HALT` on *every* failed sub-test.
 
 So the verdict is not inferred from where the program stopped; the program
 states it. Just before its final `HALT`, each program writes a **status word**
-to the reserved address `0x1FFF`:
+to the reserved address `0x7FFF`:
 
 ```asm
 EXIT            MOVE    OK, R8
-                MOVE    0x1FFF, R0      ; Test status word
+                MOVE    0x7FFF, R0      ; Test status word
                 MOVE    0x0000, @R0     ; 0 = pass
                 HALT
 ```
@@ -53,7 +55,7 @@ simulation with an exit code:
 | status word `0x0000`                              | `TEST PASSED`, exit code 0      |
 | status word anything else                         | `TEST FAILED: status code 0x…`, exit code 1 |
 | `HALT` reached, no status word ever written       | `TEST FAILED: HALT reached without a test status write`, exit code 1 |
-| no `HALT` at all within `G_TIMEOUT` (2 ms)        | `TEST FAILED: no HALT within …`, exit code 1 (watchdog in `tb_cpu.vhd`) |
+| no `HALT` at all within `G_TIMEOUT` (10 ms)       | `TEST FAILED: no HALT within …`, exit code 1 (watchdog in `tb_cpu.vhd`) |
 
 The third row is what makes the convention cheap: **every failure `HALT` is a
 failure automatically**, with nothing written on the failure paths at all. So a
@@ -76,9 +78,11 @@ recorded here.
 
 Two details of the mechanism are worth knowing:
 
-* `0x1FFF` is the top word of the 8 kW memory, and no test program uses it. It
-  is an ordinary RAM location, not a decoded I/O register — the monitor watches
-  the bus, so the write itself is harmless.
+* `0x7FFF` is the top word of the RAM half of the data address space (`0x0000`-
+  `0x7FFF`, the EAE holds the half above it), and no test program uses it. The
+  RAM is 8 kW and aliases throughout that half, so the write physically lands on
+  the top word of the array. It is an ordinary RAM location, not a decoded I/O
+  register — the monitor watches the bus, so the write itself is harmless.
 * A `HALT` now stops the CPU. `src/cpu.vhd` gates the ICACHE-to-DECODE
   handshake off as soon as a `HALT` is handed to DECODE (`p_halt_fetched`), so
   the `HALT` is the last instruction that ever enters the pipeline and the CPU
@@ -87,11 +91,39 @@ Two details of the mechanism are worth knowing:
   are already in the pipeline by then. Outstanding memory writes still drain,
   which is why the monitor waits `G_DRAIN_CYCLES` before deciding.
 
+## Probes: getting a measurement out
+
+The same snoop carries a second, optional channel. Writes anywhere in
+`0x7FF0`-`0x7FFE` — the fifteen words just below the status word, which nothing
+else uses — are not a verdict; `test_monitor.vhd` simply reports each one as it
+happens, in hex and in decimal, with the address as the label:
+
+```
+Probe 0x7FF0 = 0x006E (110)
+```
+
+Nothing is checked against them and nothing is written to a file, so this is
+not a second golden mechanism. It is how a program hands a *number* back to a
+human: instrument it with counters, dump them into that window just before the
+final `HALT`, and read them off the simulator output.
+
+Two things follow from doing it this way. The window is inert unless a program
+writes to it, so it costs every other program nothing and there is no generic
+to plumb through `system.vhd`, `tb_cpu.vhd`, or the Makefile. And because it
+rides on ordinary memory writes, a probe write also lands in the `.writes` log,
+which is why a program that probes should stay out of `TESTS` — or expect its
+golden files to record the measurement too.
+
+`prog_mandel_stats.asm` is the one program that uses it today, see below. Its
+first probe is a checksum, and it is dumped *before* the program checks it, so
+a failing run still reports the value it computed.
+
 ## What each program covers
 
-`prog.asm` is the broad self-checking instruction suite; the other nine in
-`TESTS` are narrow, and two further programs are deliberately outside `TESTS`
-(see the end of this section). `prog_simple.asm` walks the addressing modes of
+`prog.asm` is the broad self-checking instruction suite; the other thirteen in
+`TESTS` are narrow. Three further programs are deliberately outside `TESTS`:
+`prog_poll.asm` and `prog_poll_reg.asm` at the end of this section, and
+`prog_mandel_stats.asm` in the one after it. `prog_simple.asm` walks the addressing modes of
 `MOVE`/`ADD`/`CMP` and the branch instructions. `prog_pipeline.asm` and
 `prog_interleave.asm` exist to exercise pipeline behaviour rather than
 instruction semantics — respectively a `@R7++, @R7++` hazard and the
@@ -263,6 +295,197 @@ That difference is the measurement quoted in
 the two programs have to stay word-for-word aligned — the header of
 `prog_poll_reg.asm` says which two lines differ and why each of them has to.
 Change one of the pair and change the other.
+
+## The EAE, and the programs that use it
+
+`eae.vhd` is the QNICE-FPGA project's Extended Arithmetic Element — a 16x16
+multiply/divide device — adapted from upstream to a Wishbone slave interface.
+`system.vhd` gives it the **upper half of the data address space,
+`0x8000`-`0xFFFF`**, and it decodes only `wbd_addr(2 downto 0)`, so its five
+registers alias every 8 words throughout that half. The programs address it at
+`0xFF18`-`0xFF1C`, the same addresses upstream QNICE-FPGA uses.
+
+**It is simulation only**, and so is `wb_mux.vhd` in front of it: both sit in
+`system.vhd`'s `gen_sim : if G_SIMULATION generate`, whose `else generate` wires
+the data bus straight to the RAM. So in hardware there is one slave and the RAM
+aliases across the whole 64 kW data address space; nothing in the CPU addresses
+the EAE's half. Leaving the mux in the bitstream was tried and cost 0.21 ns of
+timing margin — see the next-but-one section.
+
+It is here to make the suite less artificial. Every other program in this
+directory is written to corner some specific part of the CPU, which leaves the
+instruction mix and the memory-access patterns quite unlike real code.
+`prog_mandel_perf.asm` is a genuine program doing genuine work, adapted from
+upstream, and its inner loop calls a monitor-style signed-multiply routine that
+needs a multiplier device. The EAE is that device. That program's header
+records what was changed from upstream — the monitor routines inlined, all
+character output removed, a status word added, and the grid coarsened so the
+run fits the watchdog — and warns that the upstream MIPS figures quoted in it
+describe neither this grid nor this CPU. The number that does track it is
+`prog_mandel_perf.stats.golden`.
+
+### It checks itself, and keeps no write log
+
+Upstream printed the fractal, so a human judged it. There is nowhere to print
+to here, and this program used to check *nothing*: it computed the sweep,
+discarded every result, and wrote a passing status word unconditionally. What
+stood in for a check was `prog_mandel_perf.writes.golden` — and that file was
+3.0 MB across 91k lines, more than every other golden file in this directory
+put together, for one 170000-cycle run. Worse, `make test_slow` diffs no golden
+files at all, so under a slow memory the most realistic program in the suite
+verified only that it terminated.
+
+So it checks itself now. Every pixel folds its final `z0` and `z1` into a
+running sum, and `MANDEL_END` compares that against `C_CHECKSUM` before
+reporting a pass, halting with status `0x0001` otherwise. One sum over the
+actual arithmetic of the whole sweep is a sharper instrument than it sounds: a
+wrong ALU result, a mis-set flag, a dropped EAE response or a misattributed
+Wishbone ACK all move it. Injecting `+256` into the EAE's signed multiply fails
+the run — `+1` does not, because the program's own `/256` discards the low
+byte, which is worth knowing before trusting any fault-injection result here.
+
+It costs three instructions per pixel, none of them in the iteration loop, and
+1.05% of the cycle count. In exchange the 3.0 MB is gone and the check works
+under `test_slow`, where it did not before. `prog_mandel_perf` is therefore
+listed in the Makefile's `NO_WRITES_GOLDEN`: `make check` skips the writes diff
+for it and `make golden` writes no reference copy, while its `.stats.golden`
+is diffed exactly as before. The writes log is still *produced* — it is the
+first thing to read when the checksum does fail.
+
+**`C_CHECKSUM` is part of the grid.** Change `X_STEP`, `Y_STEP` or `ITERATION`
+and the sweep computes something different, so the program fails until the
+constant is updated. `prog_mandel_stats` prints the new value as probe
+`0x7FF0`, before the comparison, so the failing run itself tells you what to
+paste in.
+
+Picking that grid is a judgement call, and `prog_mandel_stats.asm` is what
+informs it. Coarsening the sweep to fit the watchdog also makes it less
+representative — a grid coarse enough and an `ITERATION` budget small enough
+and every pixel diverges after two or three passes, leaving a program that
+spends its time in the outer loops rather than in the multiply-heavy inner one
+it was brought here for. The three numbers that show whether that has happened
+are how many pixels there were, how many iterations they cost, and how many
+pixels used their whole budget without breaking out early, and none of them
+appear in the `.stats` file.
+
+So `prog_mandel_perf.asm` carries counters for exactly those, inside
+`#ifdef INSTRUMENT`, and `prog_mandel_stats.asm` is a two-line file that
+`#define`s that and `#include`s the program. Run it with
+
+```
+make run TEST=prog_mandel_stats
+```
+
+and read the probe lines: the checksum at `0x7FF0`, pixels at `0x7FF1`, pixels
+that did not diverge at `0x7FF2`, and the total iteration count as a 32-bit
+value, low word at `0x7FF3` and high word at `0x7FF4`. At the committed grid
+that is 110 pixels, 18 of them running the full 26 iterations, 888 iterations
+in total — an average of 8.1 passes per pixel.
+
+Instrumenting through the preprocessor rather than by copying the program is
+the point of the arrangement: `prog_mandel_perf.asm` is the benchmark, and four
+extra instructions in its iteration loop would move every counter in
+`prog_mandel_perf.stats.golden`, while a copied program would be the one that
+rots. The `#ifdef` blocks compile out completely, so the benchmark build is
+exactly what it would be with them deleted, and the instrumented one is the
+same source seen through a different `#define` — the measurement always
+describes the benchmark as it actually is. `make` cannot see that `#include`,
+so the Makefile names `prog_mandel_perf.asm` as an explicit prerequisite of
+`prog_mandel_stats.rom`; without it an edit to the benchmark silently fails to
+reach the instrumented build. `prog_mandel_stats.asm` is deliberately not in
+`TESTS` and has no golden files.
+
+Two programs cover the device itself:
+
+* `prog_eae.asm` is table-driven over all four operations. Its DIVS
+  expectations follow `numeric_std`'s `mod` semantics, where the remainder
+  takes the sign of the divisor, not of the dividend.
+* `prog_eae_stall.asm` is a regression test for the stall bug fixed in
+  `bd0b7da`. The EAE stalls the shared data bus for a few cycles after any
+  write to it, and that stall used to reach requests aimed at the RAM, which
+  then re-accepted and re-acked one held request several times until MEMORY's
+  op-type FIFO desynced. Its header explains what the three scenarios pin down,
+  and — worth reading before trusting it — that the fix has two independent
+  halves, either of which masks the bug on its own, so no program at this level
+  can separate them.
+
+## Running against a slow memory
+
+`wb_dp_mem.vhd` can be made slow in the two independent ways a pipelined
+Wishbone slave can be, and **per port**: `G_x_STALL_DELAY` delays acceptance of
+a request, `G_x_ACK_DELAY` is the total acceptance-to-ACK latency, minimum 1.
+The Makefile exposes all four:
+
+```
+make run TEST=prog A_STALL_DELAY=2 B_STALL_DELAY=2 A_ACK_DELAY=3 B_ACK_DELAY=3
+make test_slow                 # every program in TESTS, at exactly that setting
+```
+
+The defaults (no stall, one-cycle ACK) are what every `.golden` file here was
+recorded against, so `make check` is only meaningful at those values.
+`make test_slow` therefore diffs nothing: the delays change every cycle count,
+and stalling the data bus reorders how register and memory writes interleave in
+the write log — a pure reordering, the same writes with the same values. What it
+checks is each program's own status word, which must not depend on how long the
+memory takes to answer. CI runs it as a second step after `make test`.
+
+It is worth having because a zero-latency slave barely exercises the masters'
+response bookkeeping — FETCH's `wb_stale` counting and MEMORY's op-type FIFO —
+and cannot reach FETCH's bus-cycle teardown path at all, since that only runs
+when a request is stuck on `STB` against a *stalling* slave. Concretely:
+removing the model's "drop pending ACKs when `CYC` deasserts" guard leaves
+`make test` fully green while `make test_slow` fails on 7 of the 13 programs.
+
+Both slaves may be slowed independently, and to different values, without the
+CPU seeing anything out of order: `wb_mux.vhd` sits between them and the CPU
+and restores response order itself. That is not automatic — see the next
+section.
+
+## The data bus multiplexer
+
+`wb_mux.vhd` splits the data bus on the top address bit, RAM below `0x8000` and
+EAE above. It is a multiplexer rather than a plain address decode because the
+two slaves have different latencies, and either can be slowed further from the
+Makefile.
+
+A pipelined Wishbone ACK is a bare pulse, so a master with requests in flight
+pairs them with responses by position, and needs its slave to acknowledge in
+issue order — see [src/memory/README.md](../src/memory/README.md). Two slaves
+with unequal latencies break that: ask the slow one, then the fast one, and the
+second answer arrives first. The mux therefore records which slave each accepted
+request went to and releases responses strictly in that order, buffering any
+that turns up early.
+
+It adds no latency doing so. Requests fan out combinationally, and a response
+whose slave is at the head of the queue with nothing buffered ahead of it — the
+common case — reaches the master in the same cycle its ACK arrives. Every
+`.stats.golden` here is unchanged from before the mux existed, which is the
+check: one extra cycle anywhere would have moved them.
+
+`prog_wb_mux.asm` is the regression test. The instruction that catches a broken
+mux is one whose two operands sit on opposite sides of the split, because DECODE
+issues those reads on consecutive cycles and both are in flight at once; `SUB`
+is used rather than `ADD` because it does not commute, so crossed routing flips
+the sign instead of accidentally giving the right answer. It only bites under
+`make test_slow`: at the default delays both slaves answer in one cycle and
+nothing can reorder. Breaking the ordering logic leaves `make test` green and
+fails `test_slow`.
+
+The module is also formally verified, in `formal/wb_mux.{psl,sby,gtkw}` — the
+only DUT there that is a testbench component rather than a CPU module, because
+the CPU's correctness depends on it. See
+[CLAUDE.md](../CLAUDE.md#the-data-bus-multiplexer) for what the properties say
+and why the job runs at two different depths.
+
+**It is not synthesized**, which was forced by measurement: instantiated
+unconditionally it took `make system.bit` to WNS −0.148 ns with three failing
+endpoints. The module is 38 flip-flops and 80 LUTs, but the larger cost is
+indirect — `wb_dp_mem` never stalls at the default latency generics, so with a
+direct connection `wbd_stall` is a synthesis constant `'0'` and the CPU's
+hold-a-stalled-request path folds away entirely. `mux_stall` makes it live,
+putting back 32 flip-flops in MEMORY and 79 LUTs in CPU_MAIN. 1076 LUTs / 673
+registers at −0.148 ns against 939 / 603 at +0.060 ns. The numbers and the
+argument are in the comment above the generate in `system.vhd`.
 
 ## Unimplemented instructions fail the run
 

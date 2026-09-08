@@ -1,0 +1,4 @@
+cycles: 80
+instruction memory requests: 49
+data memory requests: 23
+simultaneous requests: 13

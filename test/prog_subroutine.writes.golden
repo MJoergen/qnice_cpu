@@ -273,5 +273,5 @@ Write value 0x0009 to register F
 Write value 0x0198 to register 0
 Write value 0x0000 to register 1
 Write value 0x0020 to register F
-Write value 0x1FFF to register 0
-Write value 0x0000 to memory 0x1FFF
+Write value 0x7FFF to register 0
+Write value 0x0000 to memory 0x7FFF

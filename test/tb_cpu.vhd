@@ -14,8 +14,27 @@ entity tb_cpu is
       -- memory request counts). An empty string (the default) disables them.
       G_STATS_FILE          : string := "";
       -- A test program that has not halted by now is considered hung. The
-      -- longest of the current test programs (prog.asm) halts at about 840 us.
-      G_TIMEOUT             : time := 2 ms
+      -- longest of the current test programs (prog_mandel_perf.asm) halts at
+      -- about 1683 us, so this leaves roughly a factor of six of headroom.
+      -- That margin is deliberate: prog_mandel_perf exists to measure
+      -- performance, so a slowdown is exactly what it is expected to show, and
+      -- a watchdog set close to its runtime would report a regression as a
+      -- hang instead of as the stats-golden diff it should be. Note this
+      -- generic cannot be overridden from the ghdl command line (it is of type
+      -- "time"), so raising it means editing this line.
+      G_TIMEOUT             : time := 10 ms;
+      -- Wishbone slave latency injected by the memory model, per port. These
+      -- exist to run the whole suite against a slave that is slow in each of
+      -- the two ways a pipelined Wishbone slave can be -- see
+      -- test/wb_dp_mem.vhd's header, and "make test_slow". The defaults are
+      -- the zero-latency behaviour that every *.golden file was recorded
+      -- against, so overriding them changes cycle counts and the interleaving
+      -- of the write log; only the programs' own pass/fail verdicts are
+      -- meaningful then.
+      G_A_STALL_DELAY       : natural  := 0;
+      G_B_STALL_DELAY       : natural  := 0;
+      G_A_ACK_DELAY         : positive := 1;
+      G_B_ACK_DELAY         : positive := 1
    );
 end entity tb_cpu;
 
@@ -62,7 +81,12 @@ begin
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
          G_ROM                 => G_ROM,
          G_WRITES_FILE         => G_WRITES_FILE,
-         G_STATS_FILE          => G_STATS_FILE
+         G_STATS_FILE          => G_STATS_FILE,
+         G_A_STALL_DELAY       => G_A_STALL_DELAY,
+         G_B_STALL_DELAY       => G_B_STALL_DELAY,
+         G_A_ACK_DELAY         => G_A_ACK_DELAY,
+         G_B_ACK_DELAY         => G_B_ACK_DELAY,
+         G_SIMULATION          => true
       )
       port map (
          clk_i  => clk,

@@ -62,7 +62,7 @@ unattended. The thing that could otherwise mislead you is that **reaching
 failed sub-test.
 
 So the verdict is not inferred from where the program stopped. Each program
-states it, by writing a status word to the reserved address `0x1FFF` just before
+states it, by writing a status word to the reserved address `0x7FFF` just before
 its final `HALT`; `test/test_monitor.vhd` reads that off the bus and ends the
 simulation with the matching exit code. A `HALT` reached without such a write —
 which is every failure `HALT` — fails the run, as does never reaching a `HALT`

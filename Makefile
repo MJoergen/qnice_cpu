@@ -33,10 +33,29 @@ SOURCES += src/cpu.vhd
 
 TEST_SOURCES += test/wb_dp_mem.vhd
 TEST_SOURCES += test/test_monitor.vhd
+TEST_SOURCES += test/eae.vhd
+TEST_SOURCES += test/wb_mux.vhd
 TEST_SOURCES += test/system.vhd
 
 TEST ?= prog
 REGISTER_BANK_WIDTH ?= 8
+
+# Wishbone slave latency injected by the memory model test/wb_dp_mem.vhd, per
+# port: *_STALL_DELAY delays acceptance of a request, *_ACK_DELAY is the total
+# acceptance-to-ACK latency (minimum 1). See that file's header -- the two are
+# not interchangeable, and only the ACK delay leaves requests in flight, which
+# is what FETCH's wb_stale counting and MEMORY's op-type FIFO exist to track.
+#
+# These defaults are the zero-latency behaviour that every test/*.golden file
+# was recorded against, so "make check" is only meaningful at these values.
+# "make test_slow" below overrides them and checks the programs' own verdicts.
+A_STALL_DELAY ?= 0
+B_STALL_DELAY ?= 0
+A_ACK_DELAY   ?= 1
+B_ACK_DELAY   ?= 1
+
+# The configuration "make test_slow" uses: slow in both ways, on both ports.
+SLOW = A_STALL_DELAY=2 B_STALL_DELAY=2 A_ACK_DELAY=3 B_ACK_DELAY=3
 
 # Every test program that "make test" runs.
 TESTS  = prog
@@ -49,6 +68,24 @@ TESTS += prog_hazard
 TESTS += prog_self_modifying
 TESTS += prog_subroutine
 TESTS += prog_waveform
+TESTS += prog_eae
+TESTS += prog_eae_stall
+TESTS += prog_wb_mux
+TESTS += prog_mandel_perf
+
+# Programs whose write log is deliberately NOT kept as a golden file. The log
+# is still produced -- it is the first thing to read when one of these fails --
+# it is just not compared against a committed copy, and "make golden" does not
+# write one.
+#
+# Only prog_mandel_perf is on this list, and only because of its size: 91k
+# lines and 3.0 MB, 95% of every golden file in the tree put together, for a
+# 170000-cycle run. What made that affordable to drop is that the program now
+# checks its own arithmetic -- see the CHECKSUM note in its header -- which is
+# a stronger check than the trace in the way that matters here, because a
+# status word is also checked by "make test_slow", where no golden file is
+# diffed at all. Its .stats.golden is unaffected and still diffed.
+NO_WRITES_GOLDEN = prog_mandel_perf
 
 ASM = test/$(TEST).asm
 ROM = test/$(TEST).rom
@@ -85,6 +122,7 @@ help:
 	@echo "Possible targets:"
 	@echo "  make sim        : Run simulation and open the waveform viewer"
 	@echo "  make test       : Run all test programs headless, for CI"
+	@echo "  make test_slow  : Run all test programs against a slow memory model"
 	@echo "  make check      : Run one test program headless"
 	@echo "  make golden     : Regenerate the test/*.{writes,stats}.golden files"
 	@echo "  make system.bit : Run synthesis using Vivado"
@@ -98,6 +136,8 @@ help:
 	@echo "Optional arguments:"
 	@echo "  TEST=<filename>           : Specify assembly source file. Defaults to prog."
 	@echo "  REGISTER_BANK_WIDTH=<val> : Number of bits in register bank number. Defaults to 8."
+	@echo "  A_STALL_DELAY / B_STALL_DELAY=<val> : Memory stall cycles per port. Default 0."
+	@echo "  A_ACK_DELAY / B_ACK_DELAY=<val>     : Memory ACK latency per port. Default 1."
 	@echo
 
 
@@ -112,7 +152,11 @@ GHDL_RUN = ghdl -r --std=08 $(TB) \
 	   -gG_ROM=$(ROM) \
 	   -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) \
 	   -gG_WRITES_FILE=$(WRITES) \
-	   -gG_STATS_FILE=$(STATS)
+	   -gG_STATS_FILE=$(STATS) \
+	   -gG_A_STALL_DELAY=$(A_STALL_DELAY) \
+	   -gG_B_STALL_DELAY=$(B_STALL_DELAY) \
+	   -gG_A_ACK_DELAY=$(A_ACK_DELAY) \
+	   -gG_B_ACK_DELAY=$(B_ACK_DELAY)
 
 .PHONY: build
 build: $(SOURCES) $(TEST_SOURCES)
@@ -138,7 +182,12 @@ run: build $(ROM)
 # that the program's own self-checks do not, so it is what CI should run.
 .PHONY: check
 check: run
-	diff -u $(GOLDEN) $(WRITES)
+	@if [ -n "$(filter $(TEST),$(NO_WRITES_GOLDEN))" ]; then \
+	   echo "($(TEST): writes log deliberately not kept, see test/README.md)"; \
+	else \
+	   echo "diff -u $(GOLDEN) $(WRITES)"; \
+	   diff -u $(GOLDEN) $(WRITES); \
+	fi
 	diff -u $(STATS_GOLDEN) $(STATS)
 
 # Run every test program. Unlike a plain "make -k", this reports the failures
@@ -153,6 +202,24 @@ test:
 	if [ -n "$$failed" ]; then echo "FAILED:$$failed"; exit 1; fi; \
 	echo "All $(words $(TESTS)) tests passed"
 
+# Run every test program against a deliberately slow memory. Unlike "make
+# test" this compares nothing against the golden files: the delays change every
+# cycle count, and stalling the data bus reorders the write log's interleaving
+# of register and memory writes. What is checked is each program's OWN verdict,
+# the status word it writes to 0x7FFF, which must not depend on how long the
+# memory takes to answer. That makes this the test for the masters' response
+# bookkeeping -- FETCH's wb_stale counting and MEMORY's op-type FIFO -- which
+# against a zero-latency slave is barely exercised at all.
+.PHONY: test_slow
+test_slow:
+	@failed=""; \
+	for t in $(TESTS); do \
+	   echo "=== $$t ==="; \
+	   $(MAKE) --no-print-directory run TEST=$$t $(SLOW) || failed="$$failed $$t"; \
+	done; \
+	if [ -n "$$failed" ]; then echo "FAILED:$$failed"; exit 1; fi; \
+	echo "All $(words $(TESTS)) tests passed against slow memory ($(SLOW))"
+
 # Regenerate the reference copies. Only ever do this deliberately, and read the
 # resulting "git diff" carefully -- these files are the regression check.
 .PHONY: golden
@@ -160,12 +227,22 @@ golden:
 	@for t in $(TESTS); do \
 	   echo "=== $$t ==="; \
 	   $(MAKE) --no-print-directory run TEST=$$t || exit 1; \
-	   cp test/$$t.writes test/$$t.writes.golden; \
+	   case " $(NO_WRITES_GOLDEN) " in \
+	      *" $$t "*) echo "(skipping $$t.writes.golden)" ;; \
+	      *) cp test/$$t.writes test/$$t.writes.golden ;; \
+	   esac; \
 	   cp test/$$t.stats  test/$$t.stats.golden; \
 	done
 
 $(ROM): $(ASM)
 	$(ASSEMBLER) $(ASM)
+
+# test/prog_mandel_stats.asm is two preprocessor directives that #include
+# test/prog_mandel_perf.asm; the assembler resolves that, but the rule above
+# lists only the named source, so make cannot see it. Without this an edit to
+# the benchmark silently fails to reach the instrumented build, and the numbers
+# it reports describe the previous version of the program.
+test/prog_mandel_stats.rom: test/prog_mandel_perf.asm
 
 
 ################################################
@@ -299,10 +376,33 @@ hw/$(TOP)_hier.tcl: Makefile
 ## Synthesis using yosys
 ################################################
 
+# Yosys elaborates CPU, not SYSTEM, and that is forced by a limitation in
+# yosys rather than chosen. SYSTEM instantiates test/wb_dp_mem.vhd, whose
+# dp_ram runs with G_RAM_STYLE = "block", and in that mode dp_ram reads port A
+# on the FALLING clock edge -- a deliberate timing trick, described at length in
+# src/sub/dp_ram.vhd, that Vivado is happy with and that buys the read data path
+# most of a clock period. Every port in yosys's Xilinx BRAM library
+# (share/yosys/xilinx/brams_*.txt) is declared "clock posedge", so a negedge
+# read port has no mapping at all and the run dies on
+#
+#   ERROR: no valid mapping found for memory ....dp_ram_r
+#
+# Writing the falling edge as a rising edge on an explicitly inverted clock net
+# does not help: yosys folds "posedge !clk" straight back into "negedge clk".
+# The only ways to keep SYSTEM as the top would be to give up the falling-edge
+# register, which costs Vivado timing, or to let the 8 kW array map to logic,
+# which is 131072 bits of mux. Both are worse than narrowing the scope.
+#
+# Little is lost by narrowing it. Everything under src/ is still synthesised
+# here, and what drops out is testbench-only: the memory model, the data bus
+# multiplexer, the monitor, and system.vhd itself -- all of which Vivado
+# synthesises for real in "make system.bit". The GHDL analysis below still
+# covers every file, so a syntax or semantic error anywhere still fails this
+# target. See CLAUDE.md, "Yosys synthesis".
 .PHONY: synth
 synth: $(SOURCES) $(TEST_SOURCES) $(ROM)
 	ghdl -a --std=08 $(SOURCES) $(TEST_SOURCES)
-	yosys -m ghdl -p 'ghdl --std=08 -gG_ROM=$(ROM) -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) $(TOP); synth_xilinx -top $(TOP) -edif $(TOP).edif' > yosys.log
+	yosys -m ghdl -p 'ghdl --std=08 -gG_REGISTER_BANK_WIDTH=$(REGISTER_BANK_WIDTH) cpu; synth_xilinx -top cpu -edif cpu.edif' > yosys.log
 
 
 ################################################
@@ -354,7 +454,7 @@ clean:
 	rm -rf vivado*
 	rm -rf usage_statistics_webtalk*
 	rm -rf tight_setup_hold_pins.txt
-	rm -rf system.edif
+	rm -rf system.edif cpu.edif
 	rm -rf .Xil
 	make -C formal clean
 

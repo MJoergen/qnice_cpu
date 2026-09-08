@@ -58,6 +58,16 @@
 --                   register suffices; the falling-edge trick is neither possible
 --                   nor necessary here.
 --
+--   The falling edge in "block" mode costs one thing outside Vivado: yosys
+--   cannot map it. Every port in its Xilinx BRAM library is declared "clock
+--   posedge", so a negedge read port has no mapping and synth_xilinx fails with
+--   "no valid mapping found for memory ... dp_ram_r". Writing the edge as a
+--   rising edge on an inverted clock net does not help -- yosys folds
+--   "posedge !clk" back into "negedge clk". That is why "make synth" elaborates
+--   CPU rather than SYSTEM: the register file instantiates this module with
+--   "distributed", which maps fine, and only the testbench memory model asks
+--   for "block". The Makefile's synth rule says the same at more length.
+--
 -- RESET
 --   None. Memory contents come from G_INIT_FILE (or zero) and are not reset by
 --   rst_i. rst_i is unused and kept only for interface uniformity / the formal

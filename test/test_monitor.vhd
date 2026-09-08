@@ -5,7 +5,7 @@
 -- The protocol is entirely in-band. Just before its final HALT, a test program
 -- writes a status word to the reserved address G_STATUS_ADDR:
 --
---    MOVE    0x1FFF, R0
+--    MOVE    0x7FFF, R0
 --    MOVE    0x0000, @R0     ; 0 = pass, anything else = failure code
 --    HALT
 --
@@ -31,6 +31,26 @@
 --
 -- Only the first write to G_STATUS_ADDR counts, so a program cannot accidentally
 -- overwrite its own verdict afterwards.
+--
+--
+-- PROBES
+--
+-- The same snoop serves a second, entirely optional purpose. Any write into the
+-- window G_PROBE_ADDR_LO .. G_PROBE_ADDR_HI -- by default the fifteen words
+-- immediately below the status word, which no test program uses -- is reported
+-- as it happens, in hex and in decimal:
+--
+--    Probe 0x7FF0 = 0x004D (77)
+--
+-- This is how a program hands a measurement back to a human. It is not a
+-- verdict and nothing is checked against it: it exists so that a program can be
+-- instrumented with counters and then dump them just before its final HALT,
+-- with the address acting as the label. test/prog_mandel_stats.asm is the one
+-- program that does this today; see its header.
+--
+-- The window is inert unless a program writes to it, so this costs nothing for
+-- every other program, and nothing is plumbed through system.vhd or the
+-- Makefile to enable it.
 --
 --
 -- STATISTICS
@@ -75,12 +95,17 @@ library ieee;
 entity test_monitor is
    generic (
       -- Reserved address that a test program writes its verdict to. The default
-      -- is the top word of the 8 kW memory, which no test program uses.
-      G_STATUS_ADDR  : std_logic_vector(15 downto 0) := X"1FFF";
+      -- is the top word of the RAM half of the data address space, which no
+      -- test program uses.
+      G_STATUS_ADDR   : std_logic_vector(15 downto 0) := X"7FFF";
       -- Cycles to wait after the halt before deciding, see above.
-      G_DRAIN_CYCLES : natural                       := 32;
+      G_DRAIN_CYCLES  : natural                       := 32;
+      -- Inclusive address window whose writes are reported as measurements
+      -- rather than treated as a verdict. See PROBES above.
+      G_PROBE_ADDR_LO : std_logic_vector(15 downto 0) := X"7FF0";
+      G_PROBE_ADDR_HI : std_logic_vector(15 downto 0) := X"7FFE";
       -- File to write the run statistics to. Empty disables them entirely.
-      G_STATS_FILE   : string                        := ""
+      G_STATS_FILE    : string                        := ""
    );
    port (
       clk_i      : in  std_logic;
@@ -153,6 +178,27 @@ begin
       variable status       : std_logic_vector(15 downto 0) := (others => '0');
       variable drain        : natural;
 
+      -- One cycle's worth of bus snooping, called from both loops below. The
+      -- status word and the probe window are disjoint, and only the first
+      -- status write is taken; probe writes are reported and then forgotten.
+      procedure sample_bus is
+      begin
+         if mem_we_i /= '1' then
+            return;
+         end if;
+
+         if mem_addr_i = G_STATUS_ADDR and not status_valid then
+            status_valid := true;
+            status       := mem_data_i;
+            report "Test status 0x" & to_hstring(mem_data_i);
+         end if;
+
+         if mem_addr_i >= G_PROBE_ADDR_LO and mem_addr_i <= G_PROBE_ADDR_HI then
+            report "Probe 0x" & to_hstring(mem_addr_i) & " = 0x" & to_hstring(mem_data_i) &
+                   " (" & integer'image(to_integer(mem_data_i)) & ")";
+         end if;
+      end procedure sample_bus;
+
       -- Written just before the run ends, so the counters are final. Called on
       -- the failure paths too: a failing run's statistics are worth having, and
       -- "make check" has already failed on the exit code by then anyway.
@@ -187,11 +233,7 @@ begin
       -- Sample the bus until the CPU halts.
       halt_loop : loop
          wait until rising_edge(clk_i);
-         if mem_we_i = '1' and mem_addr_i = G_STATUS_ADDR and not status_valid then
-            status_valid := true;
-            status       := mem_data_i;
-            report "Test status 0x" & to_hstring(mem_data_i);
-         end if;
+         sample_bus;
          exit halt_loop when halt_i = '1';
       end loop halt_loop;
 
@@ -199,11 +241,7 @@ begin
       drain := G_DRAIN_CYCLES;
       drain_loop : while drain > 0 loop
          wait until rising_edge(clk_i);
-         if mem_we_i = '1' and mem_addr_i = G_STATUS_ADDR and not status_valid then
-            status_valid := true;
-            status       := mem_data_i;
-            report "Test status 0x" & to_hstring(mem_data_i);
-         end if;
+         sample_bus;
          drain := drain - 1;
       end loop drain_loop;
 

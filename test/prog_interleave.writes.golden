@@ -18,5 +18,5 @@ Write value 0x0004 to register 0
 Write value 0x0F80 to memory 0x0000
 Write value 0x0005 to register 0
 Write value 0x0003 to memory 0x0000
-Write value 0x1FFF to register 0
-Write value 0x0000 to memory 0x1FFF
+Write value 0x7FFF to register 0
+Write value 0x0000 to memory 0x7FFF

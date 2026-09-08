@@ -84,6 +84,20 @@ jobs:
       - name: Run the test suite
         run: make test ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
 
+      # The run above uses a zero-latency memory: every request is accepted
+      # the cycle it is presented and answered the next one. That leaves the
+      # masters' response bookkeeping -- FETCH's wb_stale counting and
+      # MEMORY's op-type FIFO -- barely exercised, and it cannot reach FETCH's
+      # bus-cycle teardown path at all, which only runs when a request is
+      # stuck on STB against a stalling slave. So run the whole suite again
+      # against a memory that is slow in both of the ways a pipelined Wishbone
+      # slave can be, on both ports. Nothing is diffed against the golden
+      # files here -- the delays change every cycle count -- but each program
+      # still writes its own pass/fail verdict, which must not depend on how
+      # long the memory takes to answer. See test/wb_dp_mem.vhd's header.
+      - name: Run the test suite against a slow memory
+        run: make test_slow ASSEMBLER=$GITHUB_WORKSPACE/QNICE-FPGA/assembler/asm
+
       # On a golden-file mismatch the diff is already in the job log, but the
       # full logs make it much easier to see what moved.
       - name: Upload the write logs

@@ -1,0 +1,79 @@
+[*]
+[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*]
+[dumpfile] "wb_mux_bmc/engine_0/trace.vcd"
+[savefile] "wb_mux.gtkw"
+[timestart] 0
+[size] 1519 906
+[pos] -1 -1
+*-4.435457 14 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] wb_mux.
+[sst_width] 249
+[signals_width] 220
+[sst_expanded] 1
+[sst_vpaned_height] 250
+@800200
+-master side
+@28
+wb_mux.clk_i
+wb_mux.rst_i
+[color] 2
+wb_mux.s_cyc_i
+wb_mux.s_stb_i
+[color] 7
+wb_mux.s_stall_o
+@22
+wb_mux.s_addr_i[3:0]
+@28
+[color] 3
+wb_mux.s_ack_o
+@22
+[color] 3
+wb_mux.s_data_o[3:0]
+@800200
+-ordering state
+@28
+wb_mux.sel
+wb_mux.req_accept
+wb_mux.head
+[color] 6
+wb_mux.resp_valid
+wb_mux.mux_stall
+@22
+wb_mux.order[0:1]
+wb_mux.order_fill[1:0]
+wb_mux.buf0_fill[1:0]
+wb_mux.buf1_fill[1:0]
+@800200
+-slave 0 (lower half)
+@28
+wb_mux.m0_stb_o
+wb_mux.m0_stall_i
+[color] 3
+wb_mux.m0_ack_i
+@22
+[color] 3
+wb_mux.m0_data_i[3:0]
+@800200
+-slave 1 (upper half)
+@28
+wb_mux.m1_stb_o
+wb_mux.m1_stall_i
+[color] 3
+wb_mux.m1_ack_i
+@22
+[color] 3
+wb_mux.m1_data_i[3:0]
+@800200
+-formal shadow model
+@22
+wb_mux.f_fill[1:0]
+wb_mux.f_out0[1:0]
+wb_mux.f_out1[1:0]
+@28
+wb_mux.f_req_tgl0
+wb_mux.f_rsp_tgl0
+wb_mux.f_req_tgl1
+wb_mux.f_rsp_tgl1
+[pattern_trace] 1
+[pattern_trace] 0

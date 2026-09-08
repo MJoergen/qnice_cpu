@@ -91,5 +91,5 @@ Write value 0x1B08 to memory 0x009A
 Write value 0x0006 to register 2
 Write value 0x0000 to register 6
 Write value 0x00A4 to register F
-Write value 0x1FFF to register 0
-Write value 0x0000 to memory 0x1FFF
+Write value 0x7FFF to register 0
+Write value 0x0000 to memory 0x7FFF

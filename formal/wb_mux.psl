@@ -1,0 +1,319 @@
+-- Formal verification of test/wb_mux.vhd.
+--
+-- The property that matters is RESPONSE ORDER, and it is stated end-to-end on
+-- the ports rather than by re-reading the module's own order queue -- otherwise
+-- the proof would just be the implementation written twice.
+--
+-- The trick is to tag the data. Each slave is ASSUMED to answer with its own
+-- identity in the top data bit and an alternating sequence bit in the bottom
+-- one, the latter toggling once per response, so consecutive responses from one
+-- slave are distinguishable. A shadow queue built only from the master-side
+-- handshake then records what each accepted request is owed, and
+-- f_response_order checks that what comes back is exactly that. A mux that
+-- released a fast slave's answer ahead of a slow one fails on the top bit; one
+-- whose per-slave buffer popped in the wrong order fails on the bottom bit.
+--
+-- One alternating bit is enough to catch the latter because G_MAX_OUTSTANDING
+-- bounds how many of one slave's responses can be buffered at once; with the
+-- default of 2, two adjacent entries always differ in that bit.
+
+vunit i_wb_mux(wb_mux(synthesis))
+{
+
+   -- set all declarations to run on clk
+   default clock is rising_edge(clk_i);
+
+
+   -----------------------------------------------------
+   -- MODEL OF THE ENVIRONMENT
+   -----------------------------------------------------
+
+   -- Requests accepted by each slave but not yet answered by it.
+   signal f_out0 : natural range 0 to G_MAX_OUTSTANDING := 0;
+   signal f_out1 : natural range 0 to G_MAX_OUTSTANDING := 0;
+
+   -- Alternating sequence bit, counted separately on the request side (what
+   -- the master is owed) and on the response side (what the slave is about to
+   -- hand over). Both start at '0' and toggle once per request resp. response,
+   -- so they stay in step, and both are cleared together when CYC drops --
+   -- which cancels everything outstanding and so resets the correspondence.
+   signal f_req_tgl0 : std_logic := '0';
+   signal f_req_tgl1 : std_logic := '0';
+   signal f_rsp_tgl0 : std_logic := '0';
+   signal f_rsp_tgl1 : std_logic := '0';
+
+   signal f_accept : std_logic;
+
+   f_accept <= s_cyc_i and s_stb_i and not s_stall_o;
+
+   p_env : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if f_accept = '1' and s_addr_i(G_ADDR_SIZE - 1) = '0' then
+            f_out0     <= f_out0 + 1;
+            f_req_tgl0 <= not f_req_tgl0;
+         end if;
+
+         if f_accept = '1' and s_addr_i(G_ADDR_SIZE - 1) = '1' then
+            f_out1     <= f_out1 + 1;
+            f_req_tgl1 <= not f_req_tgl1;
+         end if;
+
+         if m0_ack_i = '1' then
+            f_out0     <= f_out0 - 1;
+            f_rsp_tgl0 <= not f_rsp_tgl0;
+         end if;
+
+         if m1_ack_i = '1' then
+            f_out1     <= f_out1 - 1;
+            f_rsp_tgl1 <= not f_rsp_tgl1;
+         end if;
+
+         if f_accept = '1' and m0_ack_i = '1' and s_addr_i(G_ADDR_SIZE - 1) = '0' then
+            f_out0 <= f_out0;
+         end if;
+
+         if f_accept = '1' and m1_ack_i = '1' and s_addr_i(G_ADDR_SIZE - 1) = '1' then
+            f_out1 <= f_out1;
+         end if;
+
+         if rst_i = '1' or s_cyc_i = '0' then
+            f_out0     <= 0;
+            f_out1     <= 0;
+            f_req_tgl0 <= '0';
+            f_req_tgl1 <= '0';
+            f_rsp_tgl0 <= '0';
+            f_rsp_tgl1 <= '0';
+         end if;
+      end if;
+   end process p_env;
+
+
+   -- Shadow queue of what each outstanding request is owed, oldest first:
+   -- bit 1 is the slave it went to, bit 0 the sequence bit it must come back
+   -- with. Built purely from the master-side handshake.
+   type t_shadow is array (natural range <>) of std_logic_vector(1 downto 0);
+
+   signal f_shadow : t_shadow(0 to G_MAX_OUTSTANDING - 1);
+   signal f_fill   : natural range 0 to G_MAX_OUTSTANDING := 0;
+
+   p_shadow : process (clk_i)
+      variable shadow_v : t_shadow(0 to G_MAX_OUTSTANDING - 1);
+      variable fill_v   : natural range 0 to G_MAX_OUTSTANDING;
+   begin
+      if rising_edge(clk_i) then
+         shadow_v := f_shadow;
+         fill_v   := f_fill;
+
+         if s_ack_o = '1' and fill_v > 0 then
+            shadow_v(0 to G_MAX_OUTSTANDING - 2) := shadow_v(1 to G_MAX_OUTSTANDING - 1);
+            fill_v                               := fill_v - 1;
+         end if;
+
+         if f_accept = '1' and fill_v < G_MAX_OUTSTANDING then
+            if s_addr_i(G_ADDR_SIZE - 1) = '0' then
+               shadow_v(fill_v) := '0' & f_req_tgl0;
+            else
+               shadow_v(fill_v) := '1' & f_req_tgl1;
+            end if;
+            fill_v := fill_v + 1;
+         end if;
+
+         f_shadow <= shadow_v;
+         f_fill   <= fill_v;
+
+         if rst_i = '1' or s_cyc_i = '0' then
+            f_fill <= 0;
+         end if;
+      end if;
+   end process p_shadow;
+
+
+   -----------------------------
+   -- ASSUMPTIONS ABOUT INPUTS
+   -----------------------------
+
+   -- Require reset at startup.
+   f_reset : assume {rst_i};
+
+   -- WISHBONE MASTER (driving s_*): STB only within a bus cycle.
+   f_s_stb_cyc : assume always {s_stb_i = '1'} |-> {s_cyc_i = '1'};
+
+   -- WISHBONE MASTER: a stalled request may not change until it is accepted.
+   -- The combinational request fan-out relies on this, exactly as the real
+   -- masters (FETCH, MEMORY) provide it.
+   f_s_stable : assume always {s_stb_i = '1' and s_stall_o = '1' and rst_i = '0'} |=>
+      {rst_i = '1' or s_cyc_i = '0' or (stable(s_stb_i) and stable(s_addr_i) and
+                                        stable(s_we_i) and stable(s_data_i))};
+
+   -- WISHBONE SLAVES: no acknowledge that was not asked for. Without this a
+   -- slave could invent responses and the buffers would legitimately overflow.
+   f_m0_ack_owed : assume always {f_out0 = 0} |-> {m0_ack_i = '0'};
+   f_m1_ack_owed : assume always {f_out1 = 0} |-> {m1_ack_i = '0'};
+
+   -- WISHBONE SLAVES: deasserting CYC cancels everything outstanding, so no
+   -- acknowledge may follow it. This is the contract stated in wb_mux.vhd's
+   -- header, and the one test/wb_dp_mem.vhd honours explicitly.
+   f_m0_ack_cyc : assume always {s_cyc_i = '0'} |-> {m0_ack_i = '0'};
+   f_m1_ack_cyc : assume always {s_cyc_i = '0'} |-> {m1_ack_i = '0'};
+
+   -- Tag the response data, as described in the header. This is what makes
+   -- f_response_order an end-to-end statement instead of a restatement of the
+   -- implementation.
+   f_m0_tag : assume always {m0_ack_i = '1'} |->
+      {m0_data_i(G_DATA_SIZE - 1) = '0' and m0_data_i(0) = f_rsp_tgl0};
+   f_m1_tag : assume always {m1_ack_i = '1'} |->
+      {m1_data_i(G_DATA_SIZE - 1) = '1' and m1_data_i(0) = f_rsp_tgl1};
+
+
+   --------------------------------------------
+   -- THE ORDERING PROPERTY
+   --------------------------------------------
+
+   -- Every response handed to the master is the one owed to the oldest
+   -- unanswered request: the right slave (bit 1) and, within that slave, the
+   -- right response (bit 0).
+   --
+   -- NOTE ON INDUCTION STATUS: this is the one property here that is proven
+   -- only up to the BMC depth (see wb_mux.sby), not by k-induction. Every other
+   -- assertion in this file DOES close inductively -- verified by commenting
+   -- this one out, after which "prove" passes basecase and induction both. The
+   -- obstacle is specific: the range invariants above pin the counters, but
+   -- nothing pins the CONTENTS of f_shadow or of the per-slave data buffers, so
+   -- induction may start from a state whose buffered data does not match the
+   -- sequence bits the shadow expects. Closing it needs an invariant relating
+   -- each buffered word to f_rsp_tgl0/1 by its position -- roughly "the j-th
+   -- entry of buf0 carries tag '0' and sequence bit f_rsp_tgl0 xor
+   -- ((buf0_fill - j) mod 2)" -- plus f_shadow(i)(1) = order(i) for every
+   -- occupied slot. That is a real strengthening exercise, not another
+   -- arithmetic adjustment, which is why it is written down rather than done.
+   f_response_order : assert always {s_ack_o = '1' and f_fill > 0} |->
+      {s_data_o(G_DATA_SIZE - 1) = f_shadow(0)(1) and s_data_o(0) = f_shadow(0)(0)};
+
+
+   --------------------------------------------
+   -- INTERNAL ASSERTIONS
+   --------------------------------------------
+
+   -- Load-bearing: a response must never be pushed into a full buffer. This is
+   -- the same claim as the "severity failure" assert inside wb_mux.vhd, and it
+   -- is what G_MAX_OUTSTANDING exists to guarantee.
+   f_buf0_no_overflow : assert always {rst_i = '0' and m0_ack_i = '1' and
+                                       not (resp_valid = '1' and head = '0' and buf0_fill = 0)} |->
+      {buf0_fill < G_MAX_OUTSTANDING};
+   f_buf1_no_overflow : assert always {rst_i = '0' and m1_ack_i = '1' and
+                                       not (resp_valid = '1' and head = '1' and buf1_fill = 0)} |->
+      {buf1_fill < G_MAX_OUTSTANDING};
+
+   -- Range invariants. VHDL constrains these counters, but the netlist handed to
+   -- the solver keeps only their bit width, so k-induction is free to start from
+   -- a count of 3 in a two-bit register that VHDL says can only hold 0..2. That
+   -- state is unreachable, and saying so here is what lets the properties below
+   -- close inductively rather than only up to the BMC depth: at the limit
+   -- mux_stall blocks the next request, so none of these can ever step past it.
+   f_range_order : assert always {order_fill <= G_MAX_OUTSTANDING};
+   f_range_buf0  : assert always {buf0_fill <= G_MAX_OUTSTANDING};
+   f_range_buf1  : assert always {buf1_fill <= G_MAX_OUTSTANDING};
+   f_range_fill  : assert always {f_fill <= G_MAX_OUTSTANDING};
+   f_range_out0  : assert always {f_out0 <= G_MAX_OUTSTANDING};
+   f_range_out1  : assert always {f_out1 <= G_MAX_OUTSTANDING};
+
+   -- A per-slave buffer never holds more than G_MAX_OUTSTANDING - 1 responses.
+   -- A slave's responses only pile up while the OTHER slave is at the head of
+   -- the order queue, and that costs at least one of the outstanding slots, so
+   -- one slot per buffer is always unusable. The arrays in wb_mux.vhd are sized
+   -- G_MAX_OUTSTANDING for symmetry with the order queue; this says a length of
+   -- G_MAX_OUTSTANDING - 1 would also be safe.
+   f_buf0_bound : assert always {buf0_fill <= G_MAX_OUTSTANDING - 1};
+   f_buf1_bound : assert always {buf1_fill <= G_MAX_OUTSTANDING - 1};
+
+   -- Conservation. Every accepted-but-undelivered request is in exactly one of
+   -- three places: still with its slave, buffered here, or (this cycle) on its
+   -- way out. This ties the module's own bookkeeping to the environment model
+   -- and is the invariant the buffer bounds rest on.
+   f_conservation : assert always
+      {order_fill = f_out0 + f_out1 + buf0_fill + buf1_fill};
+
+   -- The shadow queue and the module's own order queue stay the same depth.
+   f_fill_agrees : assert always {f_fill = order_fill};
+
+
+   ------------------------------------------------
+   -- PROPERTIES OF THE MASTER INTERFACES
+   ------------------------------------------------
+
+   -- A request goes to exactly one slave, and only inside a bus cycle.
+   f_m0_stb_cyc  : assert always {m0_stb_o = '1'} |-> {m0_cyc_o = '1'};
+   f_m1_stb_cyc  : assert always {m1_stb_o = '1'} |-> {m1_cyc_o = '1'};
+   f_m_exclusive : assert always {not (m0_stb_o = '1' and m1_stb_o = '1')};
+
+   -- A request presented to a slave may not change while that slave stalls it.
+   f_m0_stable : assert always {m0_stb_o = '1' and m0_stall_i = '1' and rst_i = '0'} |=>
+      {rst_i = '1' or s_cyc_i = '0' or (stable(m0_stb_o) and stable(m0_addr_o) and
+                                        stable(m0_we_o) and stable(m0_data_o))};
+   f_m1_stable : assert always {m1_stb_o = '1' and m1_stall_i = '1' and rst_i = '0'} |=>
+      {rst_i = '1' or s_cyc_i = '0' or (stable(m1_stb_o) and stable(m1_addr_o) and
+                                        stable(m1_we_o) and stable(m1_data_o))};
+
+
+   ------------------------------------------------
+   -- PROPERTIES OF THE SLAVE INTERFACE
+   ------------------------------------------------
+
+   -- Never acknowledge a request that was never made.
+   f_no_spurious_ack : assert always {order_fill = 0} |-> {s_ack_o = '0'};
+
+   -- ZERO LATENCY, and the whole point of the module being combinational: when
+   -- the oldest outstanding request's slave answers on a cycle where nothing of
+   -- its own is buffered ahead of it, that answer reaches the master in the
+   -- same cycle, data and all. No response is ever held back needlessly.
+   f_zero_latency_0 : assert always {s_cyc_i = '1' and order_fill > 0 and head = '0' and
+                                     buf0_fill = 0 and m0_ack_i = '1'} |->
+      {s_ack_o = '1' and s_data_o = m0_data_i};
+   f_zero_latency_1 : assert always {s_cyc_i = '1' and order_fill > 0 and head = '1' and
+                                     buf1_fill = 0 and m1_ack_i = '1'} |->
+      {s_ack_o = '1' and s_data_o = m1_data_i};
+
+   -- A buffered response is released as soon as its turn comes.
+   f_buffered_released : assert always {s_cyc_i = '1' and order_fill > 0 and head_fill > 0} |->
+      {s_ack_o = '1'};
+
+
+   --------------------------------------------
+   -- COVER STATEMENTS TO VERIFY REACHABILITY
+   --------------------------------------------
+
+   -- The reason this module exists: a response arrives before its turn and has
+   -- to be held back, then is delivered later.
+   f_cover_reorder : cover {order_fill > 0 and head = '0' and m1_ack_i = '1' and buf1_fill = 0;
+                            buf1_fill > 0[*];
+                            s_ack_o = '1' and head = '1'};
+
+   -- Both slaves answer on the same cycle; only one response can go out.
+   f_cover_both_ack : cover {m0_ack_i = '1' and m1_ack_i = '1'};
+
+   -- The outstanding-request limit is actually reachable, so the stall it
+   -- produces is exercised rather than dead logic.
+   f_cover_mux_stall : cover {mux_stall = '1'};
+
+   -- The zero-latency path on each slave.
+   f_cover_passthrough_0 : cover {s_ack_o = '1' and head = '0' and buf0_fill = 0};
+   f_cover_passthrough_1 : cover {s_ack_o = '1' and head = '1' and buf1_fill = 0};
+
+   -- Requests to both slaves in flight at once, which is the situation the
+   -- ordering logic exists for.
+   f_cover_both_outstanding : cover {order_fill = 2 and order(0) /= order(1)};
+
+   -- A per-slave buffer actually reaching the maximum f_buf0_bound allows, so
+   -- that bound is known to be tight rather than merely true.
+   --
+   -- At G_MAX_OUTSTANDING = 2 that maximum is one word, which means order
+   -- WITHIN a slave -- the bottom, sequence-bit half of f_response_order -- is
+   -- unreachable there, and a buffer that popped its entries backwards would
+   -- pass everything. That is precisely why wb_mux.sby also runs the 3-deep
+   -- tasks, where this covers two words and the sequence bit starts doing work.
+   -- Fault injection confirms the split: replacing buf0(0) with
+   -- buf0(buf0_fill - 1) is caught only at depth 3.
+   f_cover_buf0_deep : cover {buf0_fill = G_MAX_OUTSTANDING - 1};
+   f_cover_buf1_deep : cover {buf1_fill = G_MAX_OUTSTANDING - 1};
+}

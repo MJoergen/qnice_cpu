@@ -31,7 +31,7 @@
       CMP  0x3579, @R0
       ABRA E2, !Z
 
-      MOVE 0x1FFF, R0   ; Test status word (see test/README.md)
+      MOVE 0x7FFF, R0   ; Test status word (see test/README.md)
       MOVE 0x0000, @R0  ; 0 = pass
 E1    HALT
 E2    HALT

@@ -19,8 +19,16 @@
 -- relies entirely on the "ack'ed in the same order" contract above; if a
 -- Wishbone slave ever completed requests out of order, this scheme (and the
 -- src/dst read-response routing built on it, see below) would silently
--- misattribute data. This is safe here because wbd_* (see cpu.vhd) connects
--- to a single physical memory device with no internal reordering path.
+-- misattribute data.
+--
+-- That used to be guaranteed by wbd_* reaching a single physical memory, and in
+-- a bitstream it still is. In simulation it is not: test/system.vhd splits the
+-- data bus at 0x8000, RAM below and the simulation-only EAE above. There the
+-- requirement is met structurally instead, by test/wb_mux.vhd, which records
+-- which slave each request went to and releases responses strictly in that
+-- order, buffering any that arrives early. So the slaves may have any
+-- latencies, including different ones, without this module seeing anything out
+-- of order. It adds no latency doing so.
 --
 -- mreq_op_i is a one-hot encoding of the request:
 -- * WRITE: This writes mreq_data_i to mreq_addr_i

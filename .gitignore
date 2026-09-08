@@ -24,6 +24,7 @@ doc/cpu.log
 # Yosys
 yosys.log
 system.edif
+cpu.edif
 
 # Vivado
 hw/system.tcl
@@ -38,3 +39,9 @@ vivado*
 usage_statistics_webtalk*
 tight_setup_hold_pins.txt
 .Xil/
+
+# Editor scratch files. Vim names its swap file for src/foo.vhd
+# src/.foo.vhd.swp, and falls back to .swo, .swn, ... when one is already
+# there, so match the whole range rather than just .swp.
+.*.sw[a-p]
+*~

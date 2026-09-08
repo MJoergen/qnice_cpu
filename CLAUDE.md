@@ -28,6 +28,7 @@ All from the repo root unless noted.
 
 ```
 make test                             # run every test program headless; the CI entry point
+make test_slow                        # same, against a deliberately slow memory model
 make check TEST=prog_r15              # run one test program headless (sim + golden writes diff)
 make run   TEST=prog_r15              # same, without the golden writes diff
 make golden                           # regenerate every test/*.{writes,stats}.golden file
@@ -56,13 +57,15 @@ whole pass/fail signal rests on that.
 **Reaching `HALT` does not mean the test passed.** Most test programs contain many `HALT`
 instructions — in the self-checking `prog.asm` every failed sub-test branches to its own `HALT`.
 So the verdict is not inferred from where the program stopped: each program writes a **status
-word** to the reserved address `0x1FFF` (0 = pass) just before its final `HALT`, and
+word** to the reserved address `0x7FFF` (0 = pass) just before its final `HALT`, and
 `test/test_monitor.vhd` snoops the data Wishbone bus for it and ends the simulation via
 `std.env.finish(0)` / `stop(1)`. A `HALT` reached with no status write — which is every failure
 `HALT`, at no cost to the failure paths — fails the run, as does never reaching a `HALT` (the
 `G_TIMEOUT` watchdog in `tb_cpu.vhd`). `make check` / `make test` additionally diff **two** golden
 files per program: the run's register/memory write log against `test/<name>.writes.golden`, and
-its statistics against `test/<name>.stats.golden`. Every one of these targets exits 0 if and only
+its statistics against `test/<name>.stats.golden`. The one exception is any program named in the
+Makefile's `NO_WRITES_GOLDEN` — today only `prog_mandel_perf`, whose log is 3.0 MB and whose
+arithmetic is checked in-band instead; see below. Every one of these targets exits 0 if and only
 if the test passed. See [test/README.md](test/README.md); if a golden diff is *expected*,
 regenerate both with `make golden` and read the `git diff` carefully.
 
@@ -92,7 +95,7 @@ pipeline flush, since a branch retiring can discard an already-accepted `HALT` �
 
 ### Linting
 
-`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 26
+`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 28
 VHDL files with the repo's `vsg.yml`, which maps CODING_STYLE.md onto VSG's rule set. CI runs it
 too, in its own workflow [.github/workflows/lint.yml](.github/workflows/lint.yml), from a **pinned**
 vsg release — the pin is load-bearing, because VSG adds and re-scopes rules between releases and
@@ -117,9 +120,11 @@ check the modules listed in the `DUTS` variable at the top of
 [formal/Makefile](formal/Makefile). CI runs it too, in its own workflow
 [.github/workflows/formal.yml](.github/workflows/formal.yml), taking the whole toolchain from a
 pinned OSS CAD Suite release and using `make -C formal -k` so one failing DUT does not hide the
-rest. All twelve DUTs are currently enabled and **the whole suite
-passes** (35 tasks); if you want to narrow scope while iterating, comment lines out there — but
-put them back. The Makefile tracks each job with a `<dut>.stamp` file whose prerequisites are read
+rest. All thirteen DUTs are currently enabled and **the whole suite
+passes** (39 tasks); if you want to narrow scope while iterating, comment lines out there — but
+put them back. Twelve of the DUTs are CPU modules under `src/`; `wb_mux` is the exception, a
+testbench component under `test/`, verified because the CPU's correctness depends on it keeping
+responses in order. The Makefile tracks each job with a `<dut>.stamp` file whose prerequisites are read
 from that job's own `[files]` section, so `make` re-runs exactly the jobs whose `.sby`, `.psl`, or
 VHDL sources changed, and nothing otherwise. A stamp exists only if that job's last run passed
 (the recipe deletes it before invoking `sby`), so a failure is always retried. Note `make` still
@@ -137,6 +142,35 @@ comments inside or alongside the `.vhd` file), a `<name>.sby` (SymbiYosys job co
 tasks, file list, top-level generics), and a `<name>.gtkw` (GTKWave save file for viewing
 counterexamples). When adding formal properties to a new module, follow this same
 `.psl` + `.sby` + `.gtkw` triplet pattern next to the existing ones in `formal/`.
+
+### Yosys synthesis
+
+`make synth` runs `ghdl -a` over every source file and then `yosys -m ghdl` with `synth_xilinx`. It
+is a second opinion on synthesisability, not a build — nothing consumes `cpu.edif` — and it is not
+in CI.
+
+**It elaborates `cpu`, not `system`, and that is forced rather than chosen.** `system` instantiates
+`test/wb_dp_mem.vhd`, whose `dp_ram` runs at `G_RAM_STYLE = "block"` and therefore reads port A on
+the **falling** clock edge. That is the deliberate timing trick documented in `src/sub/dp_ram.vhd`
+and in [Elastic pipeline building blocks](#elastic-pipeline-building-blocks-srcsub) above; Vivado
+implements it happily. Yosys cannot: every port in its Xilinx BRAM library
+(`share/yosys/xilinx/brams_*.txt`) is declared `clock posedge`, so a negedge read port has no
+mapping at all and the run dies on `no valid mapping found for memory ... dp_ram_r`. Expressing the
+same edge as a rising edge on an explicitly inverted clock net does **not** work — yosys folds
+`posedge !clk` straight back into `negedge clk`. The alternatives were giving up the falling-edge
+register, which costs Vivado timing, or letting an 8 kW array map to logic, so the scope was
+narrowed instead.
+
+Little is lost by that. Everything under `src/` is still synthesised, including both `dp_ram`
+configurations the CPU itself uses (`distributed`); what drops out is testbench-only — the memory
+model, `wb_mux`, `test_monitor`, and `system.vhd` — and Vivado synthesises all of that for real in
+`make system.bit`. The `ghdl -a` step still covers every file, so a syntax or semantic error
+anywhere still fails the target.
+
+This broke in `1617539`, which coalesced `test/dp_mem.vhd` into `src/sub/dp_ram.vhd`: the old
+testbench model read both ports on the rising edge, so the negedge port arrived in `system` for the
+first time with that merge. `git bisect run` on `make synth` finds it in about eight steps —
+the target takes under four seconds.
 
 ## Architecture
 
@@ -417,9 +451,13 @@ or what type. This module recovers that itself via `i_two_stage_fifo_mem`, a dep
 records each accepted-but-unacked request's op-type in issue order; each `wb_ack_i` is matched to
 the *oldest* outstanding request (the FIFO's head) and that entry is popped to decide whether to
 route `wb_data_i` to the SRC buffer, the DST buffer, or nowhere (a WRITE ack). This is correct, but
-depends entirely on the Wishbone slave acking in issue order (stated in the module's header) — safe
-here since `wbd_*` (see `cpu.vhd`) connects to a single, non-reordering physical memory, but would
-silently misattribute data against a slave that completed requests out of order. It also requires
+depends entirely on the Wishbone slave acking in issue order (stated in the module's header), and
+would silently misattribute data against one that completed requests out of order. In a bitstream
+`wbd_*` still reaches a single memory, so that holds trivially; in simulation it does not, because
+`test/system.vhd` splits the bus at `0x8000`, RAM below and the simulation-only EAE above. There the
+requirement is met **structurally**, by `test/wb_mux.vhd`, which releases responses in issue order
+whatever the slaves' latencies are. See
+[The data bus multiplexer](#the-data-bus-multiplexer) below. It also requires
 at least one cycle of ACK latency: a slave that acks in the cycle it accepts the request leaves the
 FIFO's registered output with nothing to route by.
 
@@ -441,6 +479,173 @@ self-correcting shadow register that mirrors the type-tracking FIFO's internal t
 directly — confirmed by testing external names). One property, `f_wb_master_request` (≤2
 outstanding Wishbone requests), remains open under induction — true up to the checked BMC depth,
 with the specific remaining obstacle documented in a comment right above it in `memory.psl`.
+
+### Simulated peripherals: the EAE
+
+`test/eae.vhd` is the QNICE-FPGA project's Extended Arithmetic Element — a 16x16 multiply/divide
+device — adapted from upstream to a Wishbone slave interface. `test/system.vhd` gives it the
+**upper half of the data address space, `0x8000`-`0xFFFF`**, and it decodes only
+`wbd_addr(2 downto 0)`, so its five registers alias every 8 words throughout that half. The
+programs address it at `0xFF18`-`0xFF1C`, the same addresses upstream QNICE-FPGA uses.
+
+**It is simulation only.** The instance sits inside a `pragma synthesis_off` block, exactly like
+`test_monitor`, and is not part of any bitstream. Neither is the multiplexer in front of it: both
+sit in `system.vhd`'s `gen_sim : if G_SIMULATION generate`, whose `else generate` wires the data
+bus straight to the RAM, so the synthesized system has one slave and the RAM aliases across the
+whole 64 kW data address space. Nothing in the CPU addresses the EAE's half. It exists for the
+tests, not for the hardware — and excluding the mux with it is **not** tidiness, it is worth
+0.21 ns of timing margin; see [The data bus multiplexer](#the-data-bus-multiplexer) below.
+
+It is here for one reason: **a more realistic instruction mix**. Every other program in `test/` is
+hand-written to corner some specific part of the CPU, which makes the suite's instruction and
+memory-access patterns quite unlike real code. `test/prog_mandel_perf.asm` is a real program doing
+real work, adapted from upstream, and its inner loop calls a monitor-style signed-multiply routine
+— which needs a multiplier device. The EAE is that device. Its own header records what was changed
+from upstream and why the upstream MIPS figures quoted in it no longer describe either this grid or
+this CPU.
+
+**`prog_mandel_perf.asm` checks its own arithmetic and keeps no writes golden.**
+It used to check nothing — compute the sweep, discard it, write a passing status
+word — with `prog_mandel_perf.writes.golden` standing in: 3.0 MB over 91k lines,
+more than every other golden file in the tree combined, and diffed by neither
+`make test_slow` nor anything else that matters under a slow memory. Now each
+pixel folds its final `z0`/`z1` into `CHECKSUM` and `MANDEL_END` compares the
+total against `C_CHECKSUM`, halting with status `0x0001` on a mismatch: three
+instructions per pixel, none in the iteration loop, **+1.05%** of the cycle
+count, and a check that works under `test_slow` where the trace did not. Fault
+injection confirms the sensitivity — `+256` on the EAE's signed multiply fails
+the run, `+1` does not, because the program's own `/256` discards the low byte.
+So the program is listed in the Makefile's `NO_WRITES_GOLDEN`: `make check`
+skips its writes diff and `make golden` writes no copy, while `.stats.golden` is
+diffed as before. **`C_CHECKSUM` is part of the grid** — retuning `X_STEP` /
+`Y_STEP` / `ITERATION` changes it, and the program fails until it is updated.
+
+`test/prog_mandel_stats.asm` is a two-line file that `#define`s `INSTRUMENT`
+and `#include`s `prog_mandel_perf.asm`, enabling `#ifdef INSTRUMENT` counters in
+that program: pixels, pixels that used their whole `ITERATION` budget without
+diverging, and total iteration count. Those and the checksum are dumped just
+before the status word into the **probe window `0x7FF0`-`0x7FFE`**, which
+`test_monitor.vhd` reports (`Probe 0x7FF1 = 0x006E (110)`) rather than treating
+as a verdict — a one-way channel for handing a measurement to a human, checked
+against nothing, inert unless a program writes to it and therefore needing no
+generic plumbed through `system.vhd` or the Makefile.
+`make run TEST=prog_mandel_stats`. It is not in `TESTS` and has no golden files;
+the feedback exists to tune `X_STEP` / `Y_STEP` / `ITERATION`, which trade
+watchdog headroom against how much of the sweep still does real iteration work
+(currently 110 pixels, 18 of them full, 888 iterations), and the checksum probe
+at `0x7FF0` is dumped *before* the comparison so a failing run reports the value
+to paste into `C_CHECKSUM`. **Instrumenting through the preprocessor rather than
+by copying the program is load-bearing**: `prog_mandel_perf.asm` is the
+benchmark, so four extra instructions in the iteration loop would move every
+counter in `prog_mandel_perf.stats.golden`. `make` cannot see the `#include`, so
+the Makefile names the benchmark as an explicit prerequisite of
+`prog_mandel_stats.rom` — without it an edit silently fails to reach the
+instrumented build.
+
+Two test programs cover the device itself. `test/prog_eae.asm` is table-driven over all four
+operations (MULU, MULS, DIVU, DIVS); note its DIVS expectations follow `numeric_std`'s `mod`
+semantics, where the remainder takes the sign of the divisor. `test/prog_eae_stall.asm` is the
+regression test for the stall bug in `bd0b7da` — the EAE stalls the shared data bus after a write
+to it, and the fix has two independent halves (a chip-select gate in `eae.vhd`, an addressed-slave
+mux in `system.vhd`), either of which masks the bug alone, so the test pins the pair rather than
+each line. Its header says so.
+
+### Simulating a slow memory
+
+`test/wb_dp_mem.vhd` models slave latency in the two independent ways a pipelined Wishbone slave
+can be slow, **per port**: `G_x_STALL_DELAY` delays acceptance of a request, `G_x_ACK_DELAY` is the
+total acceptance-to-ACK latency (minimum 1). The Makefile exposes all four as `A_STALL_DELAY`,
+`B_STALL_DELAY`, `A_ACK_DELAY`, `B_ACK_DELAY`, defaulting to the zero-latency behaviour every
+`test/*.golden` was recorded against.
+
+`make test_slow` runs the whole suite at `2/2/3/3`, and CI runs it as a second step after
+`make test`. It diffs nothing against the golden files — the delays change every cycle count, and
+stalling the data bus reorders the write log's interleaving of register and memory writes — and
+checks each program's own status word instead. That is the point: against a zero-latency slave,
+FETCH's `wb_stale` counting and MEMORY's op-type FIFO are barely exercised, and FETCH's bus-cycle
+teardown path is unreachable, since it only runs when a request is stuck on `STB` against a
+**stalling** slave — the case the "Two things were measured and rejected" note above calls
+impossible against the dual-port RAM. Setting `A_STALL_DELAY` is what makes it possible.
+
+Two things are load-bearing in the model. Read data must be delayed alongside the ACK, because
+`dp_ram` presents a read one cycle after its address and re-reads every cycle, so the array output
+has moved on by the time a late ACK is due; being a fixed-latency shift register, that chain also
+gives in-order ACKs for free. And **pending ACKs must be dropped when `CYC` deasserts**, since
+dropping `CYC` cancels everything outstanding — without that, `A_STALL_DELAY` corrupts instruction
+fetch through the teardown path above. Reverting that one guard leaves `make test` green while
+`make test_slow` fails on 7 of 13 programs.
+
+### The data bus multiplexer
+
+`test/wb_mux.vhd` splits the data bus between two slaves on the top address bit — RAM below
+`0x8000`, EAE above. It exists because an address decode alone is **not** enough once the two
+slaves have different latencies.
+
+A pipelined Wishbone ACK is a bare pulse, so a master with several requests in flight pairs them
+with responses by position, and therefore requires its slave to acknowledge in issue order (see
+[MEMORY module](#memory-module-srcmemorymemoryvhd) above). Fan that bus out to two slaves and the
+requirement breaks the moment they differ: issue to the slow one and then the fast one, and the
+second response comes back first. This was demonstrable — before this module existed, a single
+`SUB @ram, @eae`, whose two operand reads DECODE issues on consecutive cycles, hung or computed the
+wrong answer at every `B_ACK_DELAY` above 1.
+
+So the mux records which slave each accepted request went to, in issue order, and releases
+responses strictly in that order, buffering any that arrives early. Both slaves may be arbitrarily
+slow, in either way and differently from each other, and the master sees nothing out of order.
+
+Two properties are worth preserving if this is ever touched:
+
+* **It adds no latency.** Requests fan out combinationally; a response whose slave is at the head of
+  the order queue with nothing buffered ahead of it — the common case, and the only case when the
+  latencies match — reaches the master in the same cycle its ACK arrives. The proof is cheap: every
+  `test/*.stats.golden` is unchanged from before the module was introduced, and a single added
+  cycle anywhere would have moved them.
+* **Nothing on the request path comes off an ACK.** The stall the master sees is its slave's stall
+  plus a term off a register, so the response path is never spliced onto the front of the request
+  path — the same discipline `memory.vhd`'s `mreq_accept` documents.
+
+`G_MAX_OUTSTANDING` (default 2) bounds the response buffers by stalling a request that would exceed
+that many in flight, which is what makes overflow impossible rather than merely unlikely; an
+`assert ... severity failure` catches it if the reasoning is ever wrong. Both masters cap themselves
+at two outstanding (`C_MAX_PENDING` in `fetch.vhd`, the depth-2 FIFO in `memory.vhd`), so the limit
+is never reached and costs nothing.
+
+`test/prog_wb_mux.asm` is the regression test, and it is the `make test_slow` run that gives it
+teeth: at the default delays both slaves answer in one cycle and nothing can reorder. Breaking the
+ordering logic leaves `make test` green and fails `test_slow`.
+
+**It is not synthesized**, and that is a measured decision rather than a stylistic one — it was
+instantiated unconditionally at first and `make system.bit` failed timing, at WNS −0.148 ns with
+three failing endpoints. Two separate costs, both measured by building it each way:
+
+* the module itself, 38 flip-flops and 80 LUTs, mostly the response buffer;
+* and, larger, what it does to the CPU. `wb_dp_mem` never stalls at the default latency generics,
+  so with a direct connection `wbd_stall` is a synthesis **constant** `'0'` and the CPU's whole
+  hold-a-stalled-request path folds away. `mux_stall` makes it live again, putting back 32
+  flip-flops in MEMORY and 79 LUTs in CPU_MAIN — the latter in exactly the stage the critical path
+  runs through.
+
+1076 LUTs / 673 registers at −0.148 ns, against 939 / 603 at +0.060 ns. None of the failing paths
+touched the mux; it is the area and the un-folded back-pressure logic perturbing a
+routing-dominated path, which is the placement sensitivity the
+[Utilization numbers](#utilization-numbers) section warns about, arriving on cue. Note the second
+cost would survive a leaner multiplexer — any slave that can stall pays it — so the lever is
+keeping the mux out of the bitstream, not shrinking it. The comment above the generate in
+`system.vhd` carries these numbers.
+
+It is also formally verified — `formal/wb_mux.{psl,sby,gtkw}`, four tasks, all passing. The
+ordering property is stated end-to-end on the ports rather than by re-reading the module's own
+order queue: each slave is *assumed* to answer with its identity in the top data bit and an
+alternating sequence bit in the bottom one, and a shadow queue built only from the master-side
+handshake says what each accepted request is owed. A mux that released a fast slave's answer early
+fails on the top bit; one whose per-slave buffer popped backwards fails on the bottom bit.
+
+Two things there are worth knowing before editing it. **The 3-deep task is not redundant**: at
+`G_MAX_OUTSTANDING = 2` a per-slave buffer never holds more than one word (`f_buf0_bound` proves
+the bound is `G_MAX_OUTSTANDING - 1`), so order *within* one slave is unreachable and a buffer that
+popped backwards passes everything — fault injection confirms that fault is caught only at depth 3.
+And **`f_response_order` is proven only to the BMC depth**, not by k-induction; every other
+assertion does close inductively, and the specific obstacle is written above the property.
 
 ### Utilization numbers
 
@@ -467,7 +672,7 @@ bitstream, while five `place_design` directives on one unchanged netlist spanned
 and was measured at 7.25 ns; they have deliberately been left as measured, so read them as a record
 of that experiment rather than as the current margin. Shortening the critical loop was tried before
 relaxing the constraint and does not pay — the reasoning and the measurements are in
-doc/README.md's Utilization section. Current build: **WNS +0.087 ns**, no failing endpoints.
+doc/README.md's Utilization section. Current build: **WNS +0.060 ns**, no failing endpoints.
 
 The script rewrites **numbers only** — the surrounding analysis is a hand-written design argument.
 Every substitution is anchored on an exact pattern and a missing anchor is a hard error, so
@@ -491,7 +696,15 @@ has Vivado.
 - `src/cpu.vhd` — top-level entity tying FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN together.
 - `test/` — testbench (`tb_cpu.vhd`), memory models, the pass/fail monitor (`test_monitor.vhd`),
   and `.asm` test programs. See [test/README.md](test/README.md) for how to tell a passing run
-  from a failing one. One of them, `test/prog_waveform.asm`, is not really a test: it
+  from a failing one. `test/eae.vhd` is a simulation-only arithmetic peripheral,
+  `test/wb_dp_mem.vhd` the memory model whose latency generics drive `make test_slow`, and
+  `test/wb_mux.vhd` the order-restoring data bus multiplexer between them,
+  and `test/prog_mandel_stats.asm` the instrumented build of
+  `test/prog_mandel_perf.asm` — see
+  [Simulated peripherals: the EAE](#simulated-peripherals-the-eae),
+  [Simulating a slow memory](#simulating-a-slow-memory) and
+  [The data bus multiplexer](#the-data-bus-multiplexer) above.
+  One of the programs, `test/prog_waveform.asm`, is not really a test: it
   is the program the pipeline timing diagram in
   [src/cpu_main/README.md](src/cpu_main/README.md#waveforms) was read off, and it is in `TESTS`
   only so that a change invalidating the diagram's quoted addresses and cycle counts fails the

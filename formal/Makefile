@@ -12,6 +12,7 @@ DUTS += sequencer
 DUTS += registers
 DUTS += fetch
 DUTS += cpu_main
+DUTS += wb_mux
 
 # One stamp file per DUT, touched only when sby exits successfully.
 #

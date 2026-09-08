@@ -4304,7 +4304,7 @@ L_COND_ASUB_40
 
 ; Everything worked as expected! We are done now.
 EXIT            MOVE    OK, R8
-                MOVE    0x1FFF, R0      ; Test status word (see test/README.md)
+                MOVE    0x7FFF, R0      ; Test status word (see test/README.md)
                 MOVE    0x0000, @R0     ; 0 = pass
                 HALT
 

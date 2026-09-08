@@ -61,11 +61,11 @@ DOUBLE          ADD     R9, R9
                 RET
 
 ; ---------------------------------------------------------------
-FAIL            MOVE    0x1FFF, R0      ; Test status word (see test/README.md)
+FAIL            MOVE    0x7FFF, R0      ; Test status word (see test/README.md)
                 MOVE    0x0001, @R0     ; Non-zero = fail
                 HALT
 
-EXIT            MOVE    0x1FFF, R0      ; Test status word (see test/README.md)
+EXIT            MOVE    0x7FFF, R0      ; Test status word (see test/README.md)
                 MOVE    0x0000, @R0     ; 0 = pass
                 HALT
 
