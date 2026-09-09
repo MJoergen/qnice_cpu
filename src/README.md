@@ -2,7 +2,7 @@
 
 Everything the CPU is made of. This page is the map: what each file is, which
 of them have a design write-up of their own, and where the three files that do
-*not* — [`cpu.vhd`](cpu.vhd), [`cpu_constants.vhd`](cpu_constants.vhd) and
+*not* — [`cpu.vhd`](cpu.vhd), [`cpu_constants.vhd`](cpu_constants.vhd), and
 [`debug.vhd`](debug.vhd) — are described.
 
 Twenty-two VHDL files, all **VHDL-2008**, all synthesised into the bitstream
@@ -21,7 +21,7 @@ models and the test programs are not here; they are in
 | [`icache/`](icache/README.md) | Two-word buffer, so DECODE sees an instruction and its immediate together | [ICACHE](icache/README.md) |
 | [`registers/`](registers/README.md) | Register file: 2 read ports, 1 write port, write-before-read | [REGISTERS](registers/README.md) |
 | [`memory/`](memory/README.md) | Wishbone data-side arbiter and operand response buffers | [MEMORY](memory/README.md) |
-| [`cpu_main/`](cpu_main/README.md) | DECODE, SEQUENCER, PREPARE, WRITE, the microcode ROM and the ALU | [the main pipeline](cpu_main/README.md) |
+| [`cpu_main/`](cpu_main/README.md) | DECODE, SEQUENCER, PREPARE, WRITE, the microcode ROM, and the ALU | [the main pipeline](cpu_main/README.md) |
 | [`sub/`](sub) | Reusable valid/ready primitives everything above is built from | [below](#the-building-blocks) |
 | [`interrupt/`](interrupt/README.md) | **No VHDL yet** — a specification and a timing diagram | [interrupts](interrupt/README.md) |
 
@@ -32,7 +32,7 @@ than looking for a file.
 
 ## The top level
 
-`cpu.vhd` instantiates FETCH, ICACHE, REGISTERS, MEMORY and CPU_MAIN and names
+`cpu.vhd` instantiates FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN and names
 the signals between them. It is mostly a wiring file, but four things happen
 here and nowhere else:
 
@@ -97,7 +97,7 @@ program's life. See
 ## The building blocks
 
 `src/sub/` holds six small valid/ready ("AXI-style") primitives. FETCH,
-REGISTERS, MEMORY and CPU_MAIN are built from them, which is what makes the
+REGISTERS, MEMORY, and CPU_MAIN are built from them, which is what makes the
 back-pressure in this design uniform rather than hand-written per stage.
 
 | Module | Depth | Forward path | Backward path |
@@ -127,7 +127,7 @@ this tree: all six primitives in `sub/`, plus `icache`, `memory`, `sequencer`,
 triplet; `make formal` runs the lot. The thirteenth, `wb_mux`, is a testbench
 component.
 
-DECODE, PREPARE and WRITE have no job of their own — they are verified through
+DECODE, PREPARE, and WRITE have no job of their own — they are verified through
 `cpu_main`, which is exactly why the three stages share one entity. `cpu.vhd`,
 the ALU and the microcode ROM are covered only by simulation: the test suite,
 the differential tests against upstream's emulator and RTL, and — for the

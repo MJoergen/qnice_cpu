@@ -202,6 +202,8 @@ why; six files carry them. Most violations are machine-fixable with
 `vsg -c vsg.yml --fix -f <files>`, but read the diff: `--fix` will happily reformat a deliberate
 table.
 
+Prose (both documentation and comments) shall be written using Oxford comma.
+
 ### Formal verification
 
 `make formal` runs `make -C formal`, which uses SymbiYosys (`sby`) with the GHDL plugin to
