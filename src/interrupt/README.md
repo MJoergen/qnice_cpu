@@ -113,7 +113,8 @@ combinational logic, not as a CDC synchroniser — see
 `irq_addr_i` as the payload:
 
 1. The device asserts `irq_valid_i` and presents `irq_addr_i` in the same cycle.
-2. It holds both steady until accepted. Valid never withdraws.
+2. It holds both steady until accepted. Valid never withdraws — see device
+   obligation 2 below, which is the part of this contract under review.
 3. The CPU asserts `irq_ready_o` for one cycle to accept.
 4. The device de-asserts `irq_valid_i` in the cycle after that.
 
@@ -164,8 +165,11 @@ separate mechanism, but it is a property worth stating and worth a PSL cover.
 1. Assert `irq_valid_i` and drive `irq_addr_i` in the same cycle.
 2. Hold both steady until accepted — the cycle in which `irq_ready_o` is high.
    There is no way to abort a request: once asserted, the CPU will eventually
-   accept it, and the address must still be valid then even if the interrupt has
-   since been masked in software.
+   accept it, and the address must still be valid then. **This is the obligation
+   most likely to be relaxed**, and upstream's own external masking controller
+   would violate it as written; what allowing a device to withdraw would cost is
+   worked out in
+   [doc/interrupts.md](../../doc/interrupts.md#withdrawal-and-what-allowing-it-would-cost).
 3. De-assert `irq_valid_i` in the cycle after the accept, and keep it low until
    it has a new request to make. A device that never releases it never gets a
    second interrupt.
@@ -179,13 +183,33 @@ separate mechanism, but it is a property worth stating and worth a PSL cover.
 1. Assert `irq_ready_o` only after committing — `R14` and `R15` saved,
    `int_active` set. This is what makes an accept mean "you are being serviced
    now" rather than "you may be serviced eventually".
-2. Assert `irq_ready_o` only at an instruction boundary with no ISR active.
+2. Accept every held request eventually. While no ISR is active and instructions
+   continue to retire, a held request is accepted within a bounded number of
+   instruction boundaries. Nothing is promised while an ISR is running — that is
+   the no-nesting rule, and the device's obligation 4 is its mirror — or once the
+   CPU has halted.
 3. Hold `irq_ready_o` high for **exactly one cycle**, and only while
-   `irq_valid_i` is high. The CPU never accepts speculatively.
+   `irq_valid_i` is high. The CPU never accepts speculatively. This one holds
+   today only *because* the device may not withdraw; the two clauses lean on each
+   other, which is half of why relaxing the device's obligation 2 is not free.
 4. Redirect FETCH to the address of the accepted request, and to no other.
 5. Retire nothing between the saved return address and the redirect. This is free
    here — they are the same cycle — where the daisy-chain version needed an
    explicit `int_wait` stall to get it.
+
+**What is deliberately not in that list:** "assert `irq_ready_o` only at an
+instruction boundary". Interrupt entry does commit at a boundary, and must — the
+saved return address is `next_pc` of a retiring instruction, and mid-instruction
+there is no such value. But that is a property of WRITE, not of this interface. A
+device can neither observe it nor exploit it; `formal/interrupt.psl` cannot state
+it, because this module has no view of `inst_done_o`; and as an interface clause
+it was not even true of the diagram above, since `irq_ready_o` is registered off
+`start_i` and lands the cycle *after* the boundary. The rule now sits beside the
+commit it constrains, in
+[doc/interrupts.md](../../doc/interrupts.md) at T3, and is asserted in
+`cpu_main.psl` at T9. Obligation 2 above is what took its place: liveness is what
+a device actually needs from the CPU and what the contract previously failed to
+promise.
 
 ## What the adaptation layer has to do
 
@@ -229,7 +253,15 @@ layer either satisfies the five device obligations above or it does not.
   interface in this design is built. But it is a cheap decision to reverse, and
   whoever writes T2 should reverse it if the entity turns out to be nothing but
   wires.
+* Whether a device may withdraw a request before it is accepted. Today it may
+  not, and that is the strongest thing this interface asks of a device — strong
+  enough that upstream's own masking controller would not conform. Answer it
+  before writing the registers, since it changes what they are for:
+  [doc/interrupts.md](../../doc/interrupts.md#withdrawal-and-what-allowing-it-would-cost)
+  works out both ways of allowing it and what each costs.
 * `formal/interrupt.{psl,sby,gtkw}`: the contract above is written as five and
   five obligations precisely so that each becomes an assumption or an assertion.
-  The device's five are assumptions, the CPU's five are assertions, and the two
-  properties in the section above are covers.
+  The device's five are assumptions and the CPU's five are assertions, with one
+  exception — CPU obligation 2 is liveness, which BMC cannot prove unbounded, so
+  it becomes a bounded cover (a held request is accepted within N instruction
+  boundaries) alongside the two properties in the section above.

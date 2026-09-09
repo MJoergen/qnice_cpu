@@ -225,10 +225,97 @@ version — which signal moves on which edge, and which are registered — is th
 diagram and its walkthrough in
 [src/interrupt/README.md](../src/interrupt/README.md).
 
-There is still no way to abort a request. Once a device has asserted
-`irq_valid_i` it must hold it, and the CPU will eventually accept; the address
-must still be valid then, even if the interrupt has since been masked in
-software.
+There is still no way to abort a request: once a device has asserted
+`irq_valid_i` it must hold it until accepted, and the address must still be valid
+then. That is inherited from upstream's daisy chain, where a device that had
+asked could not be un-asked, and it is the strongest obligation this interface
+places on a device. It is also the one most likely to have to change — see
+[Withdrawal, and what allowing it would cost](#withdrawal-and-what-allowing-it-would-cost)
+below.
+
+#### Withdrawal, and what allowing it would cost
+
+**OPEN, deliberately deferred to T2.** The question is whether a device may
+de-assert `irq_valid_i` before it is accepted, the use case being software that
+masks an interrupt in the window between the request and the CPU taking it.
+
+**Upstream's own masking mechanism is a device that would violate the hold
+rule.** The ISA document has no CPU-side interrupt mask: the status register's
+`M` bit ("if set to 1, maskable interrupts are allowed") and its `I` bit are both
+*commented out* in `qnice_intro.tex`. Masking is explicitly external — "an
+extremely simple (optional) interrupt controller implemented as an external
+device which allows to mask interrupts using a simple register and an
+`AND`-gate". An `AND` gate on the request line drops the request on whatever
+cycle software's write lands, which is exactly what the hold rule forbids. So
+this is not a hypothetical relaxation: it is upstream's documented way of
+masking, and today it would be non-conforming in front of this CPU.
+
+**Where it breaks if the rule is simply dropped.** Three places, all from one
+root — the CPU commits on a registered copy of valid, and redirects before it
+accepts:
+
+1. `pending_o` is a one-cycle-stale copy of `irq_valid_i` and the commit term
+   reads it, so a device that withdraws during the commit cycle still gets an ISR
+   entered.
+2. The redirect is *in* the commit cycle. By the time anything could re-check
+   valid, `fetch_valid_o` has flushed DECODE and PREPARE and FETCH is refilling
+   from `addr_o`. There is nothing left to cancel.
+3. `irq_ready_o` is registered off `start_i` and so lands the cycle after — a
+   ready pulse into a device that is no longer asserting valid, which is the CPU
+   violating its own side of the handshake.
+
+Note what that last one shows about CPU obligation 3 in
+[src/interrupt/README.md](../src/interrupt/README.md#the-contract) ("only while
+`irq_valid_i` is high"): it holds today *only because* the device is forbidden to
+withdraw. The two clauses are load-bearing on each other.
+
+**Two ways to fix it, costing different currencies.** Everything turns on whether
+`irq_valid_i` reaches `fetch_valid_o` combinationally.
+
+* **Option A — pay timing, keep the cycle count.** Use `irq_valid_i` directly in
+  the commit term instead of `pending_o`. Withdrawal is then honoured at no
+  latency cost and needs nothing else. But it puts a signal from outside CPU_MAIN
+  into the cone of `fetch_valid_o`, the reset pin of every flip-flop in DECODE
+  and PREPARE, at a current WNS of +0.017 ns. T0 measured that fourth term as
+  free using *a free-running toggle flip-flop*, deliberately, because a register
+  output is what the topology assumed; an entity input is not what was measured.
+  Re-measure before believing it, and see
+  [The critical path](README.md#the-critical-path) on why logic nowhere near a
+  path can still move it.
+* **Option B — pay one cycle, keep the topology.** Split the commit from the
+  redirect. At the boundary, assert `irq_ready_o` as `inst_done_o and pending_o
+  and not int_active and irq_valid_i` — combinational in the pin, but reaching
+  only an output port and a register enable, never `fetch_valid_o` — and latch
+  `R14`, `next_pc`, the address, `int_active`, and an `accepted` bit. Redirect
+  the next cycle off `accepted`, which is a single register bit and therefore a
+  *simpler* fourth term than the product used today. The cost is precisely what
+  dropping the daisy chain bought back: **`int_wait` returns**, one cycle of it,
+  because an instruction in PREPARE could otherwise retire between the saved PC
+  and the redirect and `RTI` would replay it. Interrupt entry goes from four
+  cycles to five — latency only, no throughput effect.
+
+**One cost falls on either option.** `addr_o` would have to be captured at the
+accept rather than free-running. It is a continuous copy of `irq_addr_i` today,
+which is safe only because valid cannot withdraw; once it can, an arbiter may
+switch devices between two cycles with valid never going low, and a one-cycle
+stale address then belongs to the wrong device.
+
+**It does not close the race it is meant to close.** Software's mask write
+retires in WRITE, crosses the data Wishbone, updates the device register, and
+only then drops the pin — several cycles, at any boundary of which the CPU may
+commit. `MOVE 0, @MASK` followed by anything can still take the interrupt either
+way. Allowing withdrawal narrows the window by one cycle and stops the CPU
+committing to requests it can already see have gone away; it does not give
+software "no interrupt after this instruction". Only a CPU-side mask does that,
+and the ISA has one commented out, which reads like the question was weighed
+upstream and dropped.
+
+**Why it is safe to defer.** The relaxation is *strictly widening*: every device
+that satisfies the hold rule satisfies the weaker one unchanged. No device
+written against the current contract can be stranded by deciding this later, and
+deciding it later means deciding it against a measurement of Option A rather than
+an argument about one. **Provisional decision: keep the hold rule for T2, with
+Option B the favourite if it is revisited.**
 
 DECISION: the ISR address arrives on a **port of its own**, `irq_addr_i`, not on
 the data Wishbone. This decision survives the rewrite and is now easier to
@@ -593,9 +680,13 @@ The reference halts on both.
   the port table, the ten-obligation contract, and the walkthrough before writing
   any VHDL, and take the device's five obligations as PSL assumptions and the
   CPU's five as assertions. **Done when** `sby` passes bmc, cover, and prove, and
-  the diagram still matches. First decide whether the entity is worth having at
-  all — see the last bullet of
-  [Open for T2](../src/interrupt/README.md#open-for-t2).
+  the diagram still matches. Two things to decide before writing any of it:
+  whether the entity is worth having at all (the last bullet of
+  [Open for T2](../src/interrupt/README.md#open-for-t2)), and whether a device
+  may withdraw a request before it is accepted
+  ([Withdrawal](#withdrawal-and-what-allowing-it-would-cost)) — the second
+  changes what the module's registers are for, so it is cheaper answered now than
+  after.
 * **T2b. Protocol timing diagram. DONE, ahead of T2, and redrawn since.** Drawn
   first rather than last, because the bus protocol was the part of this feature
   the upstream sources disagreed about most, so it is worth pinning down before
@@ -637,6 +728,21 @@ The reference halts on both.
 
 * **T3. Interrupt state.** The in-ISR flag and the saved `R14`/`R15`, in WRITE.
   The commit pulse is `inst_done_o and pending_o and not int_active`.
+
+  The commit must happen **at an instruction boundary**, and that is not a
+  stylistic choice: the saved return address is `next_pc` of a *retiring*
+  instruction, and mid-instruction there is no such value. A QNICE instruction
+  may be partway through a three-micro-op expansion with a memory read
+  outstanding and post-increments already applied to `R13` or `R15`, and nothing
+  in the pipeline can reconstruct a resumable PC from that. This rule used to be
+  written as an obligation on `irq_ready_o` in
+  [src/interrupt/README.md](../src/interrupt/README.md), which was the wrong
+  place three times over — a device can neither observe nor exploit it,
+  `formal/interrupt.psl` cannot state it (that module has no view of
+  `inst_done_o`), and as an interface clause it was not even true, since
+  `irq_ready_o` is registered off `start_i` and lands the cycle *after* the
+  boundary. It is a property of the commit inside WRITE, and it is asserted in
+  `cpu_main.psl` (T9).
 
   `int_wait` is **no longer needed**, and the reason is worth keeping because it
   is the clearest single benefit of the interface change. Under the daisy chain,
@@ -688,9 +794,11 @@ The reference halts on both.
   files and read the diff carefully. **Done when** `TESTS_PENDING` is empty.
 
 * **T9. Formal.** Extend [cpu_main.psl](../formal/cpu_main.psl): no `irq_ready_o`
-  while an ISR is active; `RTI` restores both registers; interrupt entry asserts
-  `fetch_valid_o` with `fetch_addr_o` equal to the accepted request's address;
-  the saved PC equals `next_pc`. Model them on the existing
+  while an ISR is active; interrupt entry happens only on `inst_done_o` (moved
+  here from the interface contract, where it could not be stated — see T3);
+  `RTI` restores both registers; interrupt entry asserts `fetch_valid_o` with
+  `fetch_addr_o` equal to the accepted request's address; the saved PC equals
+  `next_pc`. Model them on the existing
   `f_flush_on_bank_change`, which states the same kind of obligation.
 * **T10. Disarm the trap.** Drop the `RTI` and `INT` arms of `p_unimplemented`,
   keep `EXC` and opcode `0xD`, and update the list in
