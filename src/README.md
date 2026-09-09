@@ -40,8 +40,14 @@ here and nowhere else:
   WRITE when a branch retires, and DECODE when it resolves an unconditional
   immediate branch on the spot (see
   [Early redirect](cpu_main/README.md#early-redirect)). They cannot fire in the
-  same cycle, but WRITE still takes priority in the mux rather than the two
-  being OR-ed, so that the address does not depend on that exclusivity.
+  same cycle — DECODE's redirect is qualified by `ic_valid_i`, which ICACHE
+  gates combinationally with `ic_rst`, which is WRITE's redirect — but WRITE
+  still takes priority in the mux rather than the two being OR-ed, so that the
+  address does not depend on that exclusivity. No formal job elaborates this
+  file, and one level down the two are simply two outputs of CPU_MAIN whose
+  relationship runs through `ic_rst`, wired here; so the exclusivity itself is
+  checked by `p_check_redirect_exclusive`, a simulation-only assert next to the
+  mux.
 * **The hard/soft flush split.** `ic_rst` (from WRITE) and `ic_flush` (from
   DECODE) are separate signals because ICACHE must treat them differently: one
   withdraws what it is offering DECODE in the same cycle, the other must not.

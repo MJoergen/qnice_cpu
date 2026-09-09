@@ -161,6 +161,44 @@ begin
                      dc2fetch_addr;
 
 
+-- pragma synthesis_off
+   -- Simulation-only check of that exclusivity. It holds structurally, and by a
+   -- single AND gate: dc2fetch_valid is DECODE's early_valid_o, which is
+   -- qualified by ic_valid_i; that is icache2decode_valid, which ICACHE gates
+   -- combinationally with its rst_i; and ic_rst below is rst_i or
+   -- wr2fetch_valid. So WRITE redirecting holds DECODE's redirect low in the
+   -- same cycle, with no appeal to timing or to pipeline state.
+   --
+   -- It is checked here because nothing else can. No formal job elaborates this
+   -- file, and the property is not visible one level down either: inside
+   -- CPU_MAIN, early_valid_o and fetch_valid_o are two outputs whose
+   -- relationship runs through ic_rst, which is wired here -- so formal/
+   -- cpu_main.psl proves what each redirect means (f_early_sound,
+   -- f_early_complete) but cannot say the two never coincide.
+   --
+   -- A violation is not immediately a wrong PC: the mux above gives WRITE
+   -- priority, and WRITE's branch is the older one, so its target is the
+   -- correct answer and its flush discards the instruction DECODE had just
+   -- accepted. What breaks is everything that reads the claim as an invariant
+   -- -- ICACHE seeing ic_rst and ic_flush at once, which contract (d) in
+   -- icache.vhd does not describe; the note in p_halt_fetched below on which
+   -- flush is reachable; and the sentence in src/README.md. Hence failure:
+   -- the value of this check is that it fires the first time the gating above
+   -- it changes, rather than leaving a stale claim behind.
+   p_check_redirect_exclusive : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         assert not (wr2fetch_valid = '1' and dc2fetch_valid = '1')
+            report "cpu: both redirect sources fired in the same cycle -- WRITE to 0x" &
+                   to_hstring(wr2fetch_addr) & ", DECODE to 0x" &
+                   to_hstring(dc2fetch_addr) & ". The mux drops the latter, and " &
+                   "the exclusivity documented above no longer holds."
+            severity failure;
+      end if;
+   end process p_check_redirect_exclusive;
+-- pragma synthesis_on
+
+
    ------------------------------------------------------------
    -- Instruction ICACHE
    ------------------------------------------------------------
