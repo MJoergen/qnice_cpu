@@ -15,13 +15,25 @@ in CI.
 `test/wb_dp_mem.vhd`, whose `dp_ram` runs at `G_RAM_STYLE = "block"` and therefore reads port A on
 the **falling** clock edge. That is the deliberate timing trick documented in `src/sub/dp_ram.vhd`
 and in [Elastic pipeline building blocks](../src/sub/CLAUDE.md); Vivado
-implements it happily. Yosys cannot: every port in its Xilinx BRAM library
-(`share/yosys/xilinx/brams_*.txt`) is declared `clock posedge`, so a negedge read port has no
-mapping at all and the run dies on `no valid mapping found for memory ... dp_ram_r`. Expressing the
-same edge as a rising edge on an explicitly inverted clock net does **not** work — yosys folds
-`posedge !clk` straight back into `negedge clk`. The alternatives were giving up the falling-edge
-register, which costs Vivado timing, or letting an 8 kW array map to logic, so the scope was
-narrowed instead.
+implements it happily. Yosys's Xilinx target does not — and **the limitation is the library, not
+the tool**, which matters because the obvious page to reason from is the wrong one. `synth_xilinx`
+maps memories with `memory_libmap`; the legacy `memory_bram` pass, whose rules format documents a
+`clkpol` field, has not been part of this flow for years. The libmap format handles falling edges
+perfectly well too — `clock <posedge|negedge|anyedge>`, where an `anyedge` port hands the map file
+a `PORT_<name>_CLKPOL` parameter to switch on (`passes/memory/memlib.md` in the yosys sources) —
+and the `ecp5`, `ice40`, and `gatemate` libraries all use it. The Xilinx one does not: every port
+in `share/yosys/xilinx/brams_*.txt` is declared `clock posedge`, so a negedge read port has no
+mapping at all and the run dies on `no valid mapping found for memory ... dp_ram_r`, which
+`yosys -g` expands to `incompatible clock polarity` against every `$__XILINX_BLOCKRAM_TDP_` option.
+The hardware is not the obstacle either: `RAMB18E1`/`RAMB36E1` carry `IS_CLKARDCLK_INVERTED`, which
+is how Vivado implements this very port, but no `brams_*_map.v` wires it up. So this is a gap in
+yosys's Xilinx target rather than a fundamental limit — reconfirmed against yosys 0.56, where it
+has not moved.
+
+Expressing the same edge as a rising edge on an explicitly inverted clock net does **not** work
+either — yosys folds `posedge !clk` straight back into `negedge clk`. The alternatives were giving
+up the falling-edge register, which costs Vivado timing, or letting an 8 kW array map to logic, so
+the scope was narrowed instead.
 
 Little is lost by that. Everything under `src/` is still synthesised, including both `dp_ram`
 configurations the CPU itself uses (`distributed`); what drops out is testbench-only — the memory

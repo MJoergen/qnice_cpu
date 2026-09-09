@@ -568,15 +568,32 @@ hw/$(TOP)_hier.tcl: Makefile
 ################################################
 
 # Yosys elaborates CPU, not SYSTEM, and that is forced by a limitation in
-# yosys rather than chosen. SYSTEM instantiates test/wb_dp_mem.vhd, whose
-# dp_ram runs with G_RAM_STYLE = "block", and in that mode dp_ram reads port A
-# on the FALLING clock edge -- a deliberate timing trick, described at length in
-# src/sub/dp_ram.vhd, that Vivado is happy with and that buys the read data path
-# most of a clock period. Every port in yosys's Xilinx BRAM library
-# (share/yosys/xilinx/brams_*.txt) is declared "clock posedge", so a negedge
-# read port has no mapping at all and the run dies on
+# yosys's Xilinx library rather than chosen. SYSTEM instantiates
+# test/wb_dp_mem.vhd, whose dp_ram runs with G_RAM_STYLE = "block", and in that
+# mode dp_ram reads port A on the FALLING clock edge -- a deliberate timing
+# trick, described at length in src/sub/dp_ram.vhd, that Vivado is happy with
+# and that buys the read data path most of a clock period.
+#
+# The limitation is the library, not the tool, and the distinction matters
+# because the obvious page to reason from is the wrong one. synth_xilinx maps
+# memories with memory_libmap; the legacy memory_bram pass, whose rules format
+# documents a "clkpol" field, has not been part of this flow for years. The
+# libmap format handles falling edges perfectly well too -- "clock
+# <posedge|negedge|anyedge>", where an anyedge port hands the map file a
+# PORT_<name>_CLKPOL parameter to switch on (passes/memory/memlib.md in the
+# yosys sources) -- and the ecp5, ice40, and gatemate libraries all use it.
+# The Xilinx one does not: every port in share/yosys/xilinx/brams_*.txt is
+# declared "clock posedge", so a negedge read port has no mapping at all and
+# the run dies on
 #
 #   ERROR: no valid mapping found for memory ....dp_ram_r
+#
+# which "yosys -g" expands to "incompatible clock polarity" against every
+# $__XILINX_BLOCKRAM_TDP_ option. The hardware is not the obstacle either:
+# RAMB18E1/RAMB36E1 carry IS_CLKARDCLK_INVERTED, which is how Vivado implements
+# this very port, but no brams_*_map.v wires it up. So this is a gap in yosys's
+# Xilinx target rather than a fundamental limit -- reconfirmed against yosys
+# 0.56, where it has not moved.
 #
 # Writing the falling edge as a rising edge on an explicitly inverted clock net
 # does not help: yosys folds "posedge !clk" straight back into "negedge clk".
