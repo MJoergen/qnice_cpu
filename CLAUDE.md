@@ -821,6 +821,8 @@ has Vivado.
 
 ### Directory layout
 
+- `src/README.md` — the map of this tree: what each file is, and the only write-up of the
+  three that have none of their own (`cpu.vhd`, `cpu_constants.vhd`, `debug.vhd`).
 - `src/cpu_constants.vhd` — shared constants/types used across modules.
 - `src/fetch/` — WISHBONE instruction fetcher.
 - `src/icache/` — two-word instruction buffer between FETCH and DECODE.

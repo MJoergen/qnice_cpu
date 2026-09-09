@@ -283,6 +283,10 @@ There are three sources of back-pressure in the design:
 
 ## Detailed design description
 For more detailed information about the design look here:
+* [The source tree](../src/README.md) — the file-by-file map of `src/`, and the
+  only write-up of the three files that have none of their own: the top level
+  `cpu.vhd`, the shared package `cpu_constants.vhd`, and the write log
+  `debug.vhd`
 * [FETCH](../src/fetch/README.md)
 * [ICACHE](../src/icache/README.md)
 * [REGISTERS](../src/registers/README.md)
@@ -292,10 +296,12 @@ For more detailed information about the design look here:
 The six stages and the two shared blocks are all built from a small set of
 reusable valid/ready primitives in `src/sub/` (`one_stage_buffer`,
 `one_stage_fifo`, `two_stage_buffer`, `two_stage_fifo`, `dp_ram`,
-`pipe_concat`); they are described in the top-level
-[CLAUDE.md](../CLAUDE.md#elastic-pipeline-building-blocks-srcsub) and each has
-its own formal job in `formal/`. How to run the test programs, and how to tell a
-passing run from a failing one, is in [test/README.md](../test/README.md).
+`pipe_concat`); they are listed in
+[src/README.md](../src/README.md#the-building-blocks), described in the
+top-level [CLAUDE.md](../CLAUDE.md#elastic-pipeline-building-blocks-srcsub), and
+each has its own formal job in `formal/`. How to run the test programs, and how
+to tell a passing run from a failing one, is in
+[test/README.md](../test/README.md).
 
 
 ## Wishbone

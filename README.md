@@ -324,7 +324,8 @@ memory operation is possible in each clock cycle, such an instruction will
 need to be serialized and will take a total of three clock cycles.
 
 Please go to the [doc](doc) directory for more in-depth description of the
-architecture and the design.
+architecture and the design, and to [src/README.md](src/README.md) for a
+file-by-file map of the source tree.
 
 ## Makefile
 The current makefile supports the following targets:
