@@ -15,20 +15,30 @@ in CI.
 `test/wb_dp_mem.vhd`, whose `dp_ram` runs at `G_RAM_STYLE = "block"` and therefore reads port A on
 the **falling** clock edge. That is the deliberate timing trick documented in `src/sub/dp_ram.vhd`
 and in [Elastic pipeline building blocks](../src/sub/CLAUDE.md); Vivado
-implements it happily. Yosys's Xilinx target does not — and **the limitation is the library, not
-the tool**, which matters because the obvious page to reason from is the wrong one. `synth_xilinx`
-maps memories with `memory_libmap`; the legacy `memory_bram` pass, whose rules format documents a
-`clkpol` field, has not been part of this flow for years. The libmap format handles falling edges
-perfectly well too — `clock <posedge|negedge|anyedge>`, where an `anyedge` port hands the map file
-a `PORT_<name>_CLKPOL` parameter to switch on (`passes/memory/memlib.md` in the yosys sources) —
-and the `ecp5`, `ice40`, and `gatemate` libraries all use it. The Xilinx one does not: every port
-in `share/yosys/xilinx/brams_*.txt` is declared `clock posedge`, so a negedge read port has no
-mapping at all and the run dies on `no valid mapping found for memory ... dp_ram_r`, which
-`yosys -g` expands to `incompatible clock polarity` against every `$__XILINX_BLOCKRAM_TDP_` option.
-The hardware is not the obstacle either: `RAMB18E1`/`RAMB36E1` carry `IS_CLKARDCLK_INVERTED`, which
-is how Vivado implements this very port, but no `brams_*_map.v` wires it up. So this is a gap in
-yosys's Xilinx target rather than a fundamental limit — reconfirmed against yosys 0.56, where it
-has not moved.
+implements it happily. Yosys dies on it, with `no valid mapping found for memory ... dp_ram_r` —
+which `yosys -g` expands to `incompatible clock polarity` against every `$__XILINX_BLOCKRAM_TDP_`
+option.
+
+**Be precise about why, because the two obvious explanations are both wrong.** It is not that
+`memory_bram`'s documentation applies: `synth_xilinx` maps memories with `memory_libmap`, and has
+not used `memory_bram` in years, so that pass's `clkpol` field is the wrong thing to reason from.
+Nor is it that yosys cannot do falling edges — `memory_libmap` realises a negedge port against a
+`clock posedge` library port by inverting that port's clock, and this same `dp_ram` maps without
+complaint on `-family xc4v`, `xc5v`, `xcu`, and `xcup`. Only `xc6v` and `xc7` fail.
+
+What those two share is `-D HAS_CONFLICT_BUG` (`techlibs/xilinx/synth_xilinx.cc`), which exists
+because Spartan 6 and Virtex 6 cannot do `READ_FIRST` across asynchronous clocks. Under it,
+`brams_xc4v.txt` offers `READ_FIRST` only inside an option declaring a **shared** clock,
+`clock posedge "C"` — one clock signal for both ports, hence one edge for both ports. `dp_ram`'s
+port B is a read-first read/write port, so that is the only option that fits it, and port A's
+falling edge then has nowhere to go. The combination is what fails, not either half: make port B
+`WRITE_FIRST` and the same falling-edge port A maps on `xc7` too.
+
+Two ports on opposite edges of one clock net are not actually asynchronous — they cannot even
+collide — so the restriction looks stricter than the erratum needs, and `RAMB18E1`/`RAMB36E1` carry
+`IS_CLKARDCLK_INVERTED`, which expresses the inversion on the primitive rather than on the net. That
+makes it a gap in yosys's Xilinx target rather than a fundamental limit. Measured against yosys
+0.56.
 
 Expressing the same edge as a rising edge on an explicitly inverted clock net does **not** work
 either — yosys folds `posedge !clk` straight back into `negedge clk`. The alternatives were giving

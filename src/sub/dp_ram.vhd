@@ -59,14 +59,22 @@
 --                   nor necessary here.
 --
 --   The falling edge in "block" mode costs one thing outside Vivado: yosys
---   cannot map it. Every port in its Xilinx BRAM library is declared "clock
---   posedge", so a negedge read port has no mapping and synth_xilinx fails with
---   "no valid mapping found for memory ... dp_ram_r". Writing the edge as a
---   rising edge on an inverted clock net does not help -- yosys folds
---   "posedge !clk" back into "negedge clk". That is why "make synth" elaborates
---   CPU rather than SYSTEM: the register file instantiates this module with
---   "distributed", which maps fine, and only the testbench memory model asks
---   for "block". The Makefile's synth rule says the same at more length.
+--   cannot map it for a Series 7 part, and synth_xilinx fails with
+--   "no valid mapping found for memory ... dp_ram_r". Not because negedge
+--   ports are unsupported -- memory_libmap realises one by inverting that
+--   port's clock, and this very module maps on -family xc4v, xc5v, xcu, and
+--   xcup -- but because of what port B needs. Port B is a read-first
+--   read/write port, and for xc6v/xc7 alone (-D HAS_CONFLICT_BUG) the Xilinx
+--   library offers READ_FIRST only under a SHARED clock, "clock posedge C",
+--   which pins both ports to one net and therefore one edge. Port A's falling
+--   edge then has nowhere to go: "incompatible clock polarity". Make port B
+--   WRITE_FIRST and the same falling-edge port A maps on xc7 too. Writing the
+--   edge as a rising edge on an inverted clock net does not help either --
+--   yosys folds "posedge !clk" back into "negedge clk". That is why "make
+--   synth" elaborates CPU rather than SYSTEM: the register file instantiates
+--   this module with "distributed", which maps fine, and only the testbench
+--   memory model asks for "block". The Makefile's synth rule says the same at
+--   more length.
 --
 -- RESET
 --   None. Memory contents come from G_INIT_FILE (or zero) and are not reset by
