@@ -40,7 +40,7 @@
 -- same way rst_i clears it. Leaving that out corrupts instruction fetch, and
 -- only for one specific reason -- FETCH tears the bus cycle down rather than
 -- redirecting it when a request is stuck on STB against a stalling slave, a
--- path doc/CLAUDE.md notes "cannot happen against the dual-port RAM here".
+-- path src/fetch/CLAUDE.md notes "cannot happen against the dual-port RAM here".
 -- Setting G_A_STALL_DELAY is what makes it happen.
 
 library ieee;

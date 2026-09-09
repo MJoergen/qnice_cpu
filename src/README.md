@@ -98,7 +98,7 @@ what this CPU left in memory and in the register file, to compare against
 upstream. That second use is why a write to `R0`-`R7` carries the **bank** it
 landed in: without it, "to register 3" names eight different registers over a
 program's life. See
-[Differential testing against upstream](../CLAUDE.md#differential-testing-against-upstream).
+[Differential testing against upstream](../test/CLAUDE.md#differential-testing-against-upstream).
 
 ## The building blocks
 
@@ -121,7 +121,7 @@ and not "not ready"; `two_stage_fifo`'s reset is asymmetric on purpose, so its
 consumer must share `rst_i`; `dp_ram` has one address per port, and that is
 load-bearing for RAM inference rather than an omission. Read the header before
 reusing or modifying one. The set is summarised in
-[CLAUDE.md](../CLAUDE.md#elastic-pipeline-building-blocks-srcsub), and
+[sub/CLAUDE.md](sub/CLAUDE.md), and
 `dp_ram`'s two configurations are also discussed in
 [test/README.md](../test/README.md).
 

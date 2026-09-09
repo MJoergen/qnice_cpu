@@ -206,6 +206,6 @@ The same reasoning is why `icache.psl`'s stability properties carry an
 `rst_i = '0'` term: there too `rst_i` is the flush. See
 [Formal verification](../icache/README.md#formal-verification).
 
-Omitting one of these is the trap described in the top-level `CLAUDE.md`, and
+Omitting one of these is the trap described in `src/sub/CLAUDE.md`, and
 BMC finds it immediately.
 

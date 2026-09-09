@@ -573,7 +573,7 @@ hw/$(TOP)_hier.tcl: Makefile
 # multiplexer, the monitor, and system.vhd itself -- all of which Vivado
 # synthesises for real in "make system.bit". The GHDL analysis below still
 # covers every file, so a syntax or semantic error anywhere still fails this
-# target. See CLAUDE.md, "Yosys synthesis".
+# target. See hw/CLAUDE.md, "Yosys synthesis".
 .PHONY: synth
 synth: $(SOURCES) $(TEST_SOURCES) $(ROM)
 	ghdl -a --std=08 $(SOURCES) $(TEST_SOURCES)

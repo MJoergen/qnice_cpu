@@ -515,7 +515,7 @@ fails `test_slow`.
 The module is also formally verified, in `formal/wb_mux.{psl,sby,gtkw}` — the
 only DUT there that is a testbench component rather than a CPU module, because
 the CPU's correctness depends on it. See
-[CLAUDE.md](../CLAUDE.md#the-data-bus-multiplexer) for what the properties say
+[CLAUDE.md](CLAUDE.md#the-data-bus-multiplexer) for what the properties say
 and why the job runs at two different depths.
 
 **It is not synthesized**, which was forced by measurement: instantiated

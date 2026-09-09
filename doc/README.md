@@ -297,8 +297,8 @@ The six stages and the two shared blocks are all built from a small set of
 reusable valid/ready primitives in `src/sub/` (`one_stage_buffer`,
 `one_stage_fifo`, `two_stage_buffer`, `two_stage_fifo`, `dp_ram`,
 `pipe_concat`); they are listed in
-[src/README.md](../src/README.md#the-building-blocks), described in the
-top-level [CLAUDE.md](../CLAUDE.md#elastic-pipeline-building-blocks-srcsub), and
+[src/README.md](../src/README.md#the-building-blocks), described in
+[src/sub/CLAUDE.md](../src/sub/CLAUDE.md), and
 each has its own formal job in `formal/`. How to run the test programs, and how
 to tell a passing run from a failing one, is in
 [test/README.md](../test/README.md).

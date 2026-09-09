@@ -339,7 +339,7 @@ Prefix the message with the module name.
 A formally-verified module has a `formal/<name>.psl` + `<name>.sby` + `<name>.gtkw` triplet.
 When you touch RTL that has PSL, re-run it (`cd formal && sby --yosys "yosys -m ghdl" -f <name>.sby`)
 — several properties in this repo hold only because of non-obvious interactions. See
-[CLAUDE.md](CLAUDE.md#formal-verification).
+[formal/CLAUDE.md](formal/CLAUDE.md).
 
 ## 8. Linting
 
