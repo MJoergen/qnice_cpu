@@ -37,7 +37,10 @@ Check `git branch --show-current` in the QNICE-FPGA checkout before trusting
 anything below.
 
 * `doc/intro/qnice_intro.tex` — the Interrupts slides; the programmer's model.
-* `doc/int-device.md` — the daisy-chain bus protocol.
+* `doc/int-device.md` — the daisy-chain bus protocol. Still the definitive
+  source on that protocol, but it is no longer a specification of anything
+  inside this CPU; see
+  [The interrupt request interface](#the-interrupt-request-interface).
 * `doc/programming_card/programming_card.tex` — a one-page ISA summary with an
   `Interrupts` section of its own. Terse, and it disagrees with the slides.
 * `doc/best-practices.md` — the rules ISR *authors* are told to follow, which
@@ -180,107 +183,118 @@ only about `dev-V1.61`. **The decision below has not been re-derived on this
 evidence** — it is left as it stands, marked, for whoever starts the interrupt
 work.
 
-### Bus protocol
+### The interrupt request interface
 
-Two active-low lines: `INT_N` in, `IGRANT_N` out. Devices form a daisy chain in
-which position is priority — the closer to the CPU, the higher.
+**REVISED, and this is the largest revision this note has taken.** Everything
+under this heading previously specified upstream's `INT_N`/`IGRANT_N` daisy
+chain directly on the CPU's pins. It no longer does. The decisions below replace
+it; the ones they supersede are listed at the end of the section so that the
+argument is not simply deleted.
 
-1. A device pulls `INT_N` low to request. It may hold it low indefinitely and
-   must tolerate waiting arbitrarily long, because an ISR may already be
-   running or a higher-priority device may be ahead of it.
-2. When the CPU can service it, it saves `R14` and `R15` and *then* pulls
-   `IGRANT_N` low. The ISA document states that ordering explicitly — "it will
-   save `R14` and `R15` and then signals the device by pulling `/IGRANT` low" —
-   so the save is not merely concurrent with the grant. The device drives the
-   address of its ISR onto the bus in that same cycle.
-3. The CPU samples the address at the end of that cycle and releases `IGRANT_N`.
-4. The device releases the bus and pulls `INT_N` high.
+DECISION: **this CPU does not have to be a pin-compatible drop-in replacement**,
+and an adaptation layer around it is accepted. That is not a new concession, it
+is the same one already made twice over: the CPU is Harvard where the original is
+not, and speaks Wishbone where the original speaks a bespoke bus, and the layer
+that reconciles both exists and works — `env1.vhd` in the QNICE-FPGA tree, commit
+`cfb0893`, written up in `doc/cpu_replacement.md` there. Interrupts get the same
+treatment. What this buys is room to design an interface in the same style as the
+rest of this repo rather than one dictated by a 1990s-shaped bus.
 
-The cycle-level version of those four steps — which signal moves on which edge,
-and which are registered — is the T2b diagram and its walkthrough in
-[src/interrupt/README.md](../src/interrupt/README.md). The handshake costs two
-cycles between the commit and the redirect.
+DECISION: **the CPU is agnostic of daisy chaining.** Position-is-priority, the
+grant pass-through, the wait-your-turn rules — all of it is an *optional*
+implementation detail of the surrounding system. Nothing in `src/` knows the
+chain exists.
 
-DECISION (revised after T2b): the grant lasts **exactly one cycle**, and the
-address is sampled at the end of it. Read the two pins as an inverted AXI-style
-handshake — `VALID` is `INT_N` low, `READY` is `IGRANT_N` low — and the transfer
-is the one cycle in which both are low. The CPU never waits inside the grant,
-because it only grants when a request is already asserted and held.
+DECISION: **the CPU sees exactly one interrupt-generating device**, in the same
+way it sees exactly one memory on each of its other two buses. If several
+interrupt-capable devices are connected, some arbitration mechanism must exist;
+it is not in the CPU.
 
-That is one cycle faster than the first draft of this note, which had the CPU
-wait for `INT_N` to go high as the device's data-valid signal, exactly as
-`cs_int_wait_isr` in `vhdl/qnice_cpu.vhd` does. It is also **tighter than the
-upstream prose**: `int-device.md` and `doc/intro/interrupt_timing.jpg` both put
-the data after the grant and let a device take any number of cycles to produce
-it. The reference *device* nonetheless satisfies the tighter rule already —
-`fsm_output_decode` in `vhdl/timer.vhd` drives `data_out <= reg_int` in the very
-cycle it sees `grant_n_in = '0'`, still holding `int_n_out` low, and raises
-`int_n_out` only in the following state `s_provide_isr`. A device that *registers*
-its address output is conforming upstream and would break here. That divergence,
-the timing cost of the now single-cycle capture path, and the one thing it buys
-in return (an early release of `INT_N` becomes a detectable violation instead of
-an undetectable one) are written up in
+DECISION: **the interface is three signals** — `irq_valid_i`, `irq_ready_o`,
+`irq_addr_i` — and is exactly an AXI-stream handshake:
+
+1. The device asserts `irq_valid_i` and presents the ISR address on `irq_addr_i`
+   in the same clock cycle.
+2. It holds both steady until accepted.
+3. The CPU asserts `irq_ready_o` for one clock cycle to accept.
+4. The device de-asserts `irq_valid_i` after that.
+
+This is the valid/ready discipline every stage boundary in this design already
+uses, so it introduces no protocol and no vocabulary of its own. The cycle-level
+version — which signal moves on which edge, and which are registered — is the
+diagram and its walkthrough in
 [src/interrupt/README.md](../src/interrupt/README.md).
 
-What does **not** work, and was considered: having the device present the address
-from the moment it asserts `INT_N`, so that the address lines are literally an
-AXI data channel. The address lines are shared by the whole chain, and a
-requesting device de-couples only its right neighbour's *grant*, not its request
-— so devices further right are free to request during a transaction, and would
-drive the bus at the same time as the granted device. The grant is what resolves
-who owns the bus, so the data cannot precede it.
+There is still no way to abort a request. Once a device has asserted
+`irq_valid_i` it must hold it, and the CPU will eventually accept; the address
+must still be valid then, even if the interrupt has since been masked in
+software.
 
-DECISION (revised at T2b): the device must hold `isr_addr_i` for as long as
-`igrant_n_o` is low, and may release it any cycle at or after the one in which it
-sees `igrant_n_o` go high. It does **not** have to release combinationally.
+DECISION: the ISR address arrives on a **port of its own**, `irq_addr_i`, not on
+the data Wishbone. This decision survives the rewrite and is now easier to
+defend, not harder: the address is not the result of any bus transaction at all,
+so putting it on `wbd_data_i` would mean a Wishbone protocol violation, a mux
+outside the CPU, or modelling the interrupt as a read from a reserved address.
+A dedicated port avoids all three and costs nothing this design has to defend.
 
-An earlier draft of this note did require a combinational release, on the
-assumption that the CPU would use `isr_addr_i` directly. Drawing the diagram
-showed it does not: the address is captured into a register at the end of the
-granted cycle, so the bus turnaround afterwards cannot be observed. The weaker rule is
-also what upstream already satisfies — `fsm_output_decode` in `vhdl/timer.vhd`
-holds `data_out` until it sees `grant_n_in` high — so requiring more would have
-made a conforming device non-conforming here for no gain. Neither
-`int-device.md` nor the slides state any cycle budget in the first place, and the
-reference CPU is more relaxed still, spending a whole state between sampling the
-address and fetching (`cs_int_jmp_isr`, commented "IGRANT_N goes back to high,
-new PC and CpuAddr is being clocked in").
-
-DECISION: the ISR address arrives on a **port of its own**, `isr_addr_i`, not on
-the data Wishbone. The daisy-chain data phase is not a Wishbone transaction —
-the device drives the bus while `igrant_n_o` is low, outside any CYC/STB cycle —
-so reusing `wbd_data_i` would mean a bus protocol violation, or a mux outside
-the CPU, or modelling the grant as a read from a reserved address. A dedicated
-port avoids all three, and costs nothing this design has to defend: the
-instruction and data interfaces are already split Harvard-style, and this CPU is
-already not a drop-in replacement for the original.
-
-There is no way to abort a request. Once a device has asked, the CPU will
-eventually grant, and the device must have a valid ISR address to supply even if
-the interrupt has since been masked in software.
-
-DECISION: Port names are to be lower case (snake case?) following the
-CODING_STYLE.md. This means "int_n_i" and "igrant_n_o".
+DECISION: port names are lower case, per CODING_STYLE.md, and active high. The
+`_n` suffixes are gone with the pins they described.
 
 DECISION: Make a timing diagram (similar to src/cpu_main/timing.tex) that shows
-the relationship between the important signals (e.g. int_n_i, igrant_n_o,
-isr_addr_i).
-Particularly important is whether changes are registered (i.e. delayed until
-next clock cycle) or combinational.  The current design already allows for data
-input to be registered.
+the relationship between the important signals, and in particular which changes
+are registered and which are combinational.
 
 **DONE — see [src/interrupt/README.md](../src/interrupt/README.md).** The diagram
 is [src/interrupt/timing.tex](../src/interrupt/timing.tex), rendered by
 `make diagrams`, and the module README next to it carries the cycle-by-cycle
 walkthrough and the contract as five obligations on the device and five on the
-CPU. Everything on the CPU side of the boundary is registered; the two
-exceptions, `start_i` and the device's drive of `isr_addr_i`, are named as such.
-Read that page before writing `interrupt.vhd` — the diagram is the specification
-now, since it was drawn ahead of the implementation rather than off a simulation.
+CPU. Everything on the CPU side of the boundary is registered; the one exception,
+`start_i`, is named as such. Read that page before writing `interrupt.vhd` — the
+diagram is the specification now, since it was drawn ahead of the implementation
+rather than off a simulation.
+
+#### What this supersedes
+
+Recorded rather than deleted, because each of these was argued at length above
+this line in an earlier draft and someone will otherwise re-derive them.
+
+* **"The grant lasts exactly one cycle and the address is sampled at the end of
+  it."** Gone: there is no grant. `irq_ready_o` is an accept, and it carries no
+  data phase.
+* **"A device must drive `isr_addr_i` combinationally off the grant."** Gone,
+  and this is the one that matters most. It was the single place this design was
+  *tighter* than upstream's own prose — upstream lets a device take any number of
+  cycles between grant and valid data, and the reference CPU's `cs_int_wait_isr`
+  spins waiting for exactly that — so a conforming upstream device that
+  registered its address output would have been broken here. With the address
+  arriving alongside the request, the divergence disappears rather than being
+  documented.
+* **"The address cannot precede the grant."** Reverses outright. That was true of
+  a *shared* address bus, where a device that has not been granted must not drive
+  the lines and devices further right are free to request mid-transaction. Point
+  to point, there is nobody to collide with, so the address can and does
+  accompany the request.
+* **"The device need not release the bus combinationally."** Moot; there is no
+  shared bus to release.
+* **"Commit, then grant, then redirect: two cycles."** Gone. The address is
+  already in a register when WRITE decides to take the interrupt, so the redirect
+  happens in the commit cycle. With it goes `int_wait`, the back-pressure WRITE
+  needed to stop an instruction retiring inside that two-cycle window (T3).
+* **Port names `int_n_i`, `igrant_n_o`, `isr_addr_i`.** Replaced by
+  `irq_valid_i`, `irq_ready_o`, `irq_addr_i`.
+
+Be clear about where the cost went: **it moved, it did not vanish.** Somebody
+still has to run the daisy chain, and in a QNICE-FPGA system that somebody is the
+adaptation layer. What the split buys is that the chain's awkward parts — a data
+phase that follows its own grant, a capture window one cycle wide, an address bus
+several devices can drive — are now outside a design whose timing margin is
+measured in hundredths of a nanosecond, and outside the formal proofs. The
+layer's obligations are enumerated in
+[src/interrupt/README.md](../src/interrupt/README.md#what-the-adaptation-layer-has-to-do).
 
 ### Programmer's model
 
-* **Interrupts do not nest.** A request is granted only when no ISR is already
+* **Interrupts do not nest.** A request is accepted only when no ISR is already
   running. The reference gates this on `Int_Active` in the `cs_fetch` arm of
   `fsm_output_decode`, before the fetched word is taken as an instruction.
 * **`R14` (SR) and `R15` (PC) are saved** into latches invisible to software.
@@ -425,11 +439,18 @@ what the note at the top of this section is about.
   causes. The in-ISR flag and the saved `R14`/`R15` must sit in WRITE, which is
   not on that net, or outside CPU_MAIN entirely.
 
-* **The grant handshake is multi-cycle**, so it does not belong inline in WRITE.
-  It should be a leaf module, `src/interrupt/interrupt.vhd`, presenting a
-  valid/ready interface to the CPU and hiding the `INT_N`/`IGRANT_N` protocol
-  behind it. That is how every other protocol FSM in this design is built, and
-  it gets the usual `.psl`/`.sby`/`.gtkw` triplet in `formal/`.
+* **The request pins must not reach WRITE's combinational logic.** With the
+  daisy chain gone there is no multi-cycle handshake left to hide, so the case
+  for a leaf module is no longer "this FSM is too big for WRITE" — it is two
+  states and a pair of registers. It is still worth having: `interrupt.vhd`
+  registers `irq_valid_i` and `irq_addr_i` into `pending_o`/`addr_o`, which keeps
+  two external pins out of CPU_MAIN, where the timing margin is; it gives the
+  interface contract one place to live and one `formal/interrupt.psl` to check
+  it; and it matches how every other interface in this design is built, with the
+  usual `.psl`/`.sby`/`.gtkw` triplet in `formal/`. That call is recorded as
+  reversible in
+  [src/interrupt/README.md](../src/interrupt/README.md#open-for-t2) — if T2 finds
+  the entity is nothing but wires, fold it into WRITE.
 
 ### The timing problem
 
@@ -437,9 +458,21 @@ what the note at the top of this section is about.
 three address bits), a register bank switch (`inst_done_o`, `prep_stage_i.is_crb`,
 and `bank_stale_i`), and a store into the instruction stream (see the "Register
 bank switch" note in [write.vhd](../src/cpu_main/write.vhd)). It used to fit a
-single 6-input LUT and no longer does. An interrupt grant is a fourth term on a
-net that is the reset pin of two entire pipeline stages, and the bank-switch work
+single 6-input LUT and no longer does. Interrupt entry is a fourth term on a net
+that is the reset pin of two entire pipeline stages, and the bank-switch work
 spent 0.072 ns of the margin quoted below getting the third one in.
+
+The fourth term is the **commit** itself — `inst_done_o and pending_o and not
+int_active` — because the redirect now happens in the commit cycle. That is
+exactly the topology T0 measured, so T0's result applies directly rather than as
+an upper bound; under the daisy-chain design the term was the interrupt module's
+`done_o` alone, one input fewer, and T0 read as a bound. `pending_o` is a
+register output, which is the whole reason `irq_valid_i` is registered inside
+`interrupt.vhd` rather than used raw.
+
+`fetch_addr_o` gains a mux — `addr_o` on interrupt entry, the existing
+register-write path otherwise — but that is a different net from `fetch_valid_o`
+and is not the one with the margin problem.
 
 The budget is **+0.093 ns** — see [Utilization](README.md#utilization), measured
 at the 7.25 ns constraint. For scale, adding the register-bank flush alone cost
@@ -463,9 +496,10 @@ Happy path:
    skipped nor repeated.
 3. Set flags, `INT`, have the ISR deliberately clobber them, `RTI`. Checks `R14`
    is restored bit for bit.
-4. Hardware path: the program writes the trigger address, the device pulls
-   `INT_N`. Checks the whole handshake including bus release.
-5. Request a second interrupt from inside an ISR. Checks it is **not** granted
+4. Hardware path: the program writes the trigger address, the device asserts
+   `irq_valid_i` with an ISR address. Checks the whole handshake, including that
+   the device holds the request until `irq_ready_o` and releases it after.
+5. Request a second interrupt from inside an ISR. Checks it is **not** accepted
    until after the `RTI`.
 6. Interrupt an instruction that is two words, e.g. `MOVE 0x1234, R0`. Checks
    the `+2` path of `next_pc`. The reference treats this as a case worth handling
@@ -523,8 +557,13 @@ The reference halts on both.
 
 * **T1. Interrupt source for the testbench.** A device that requests an
   interrupt when the program writes a magic address, wired into
-  [test/system.vhd](../test/system.vhd). It must be **program-triggered, not
-  free-running**: a timer would still be deterministic in simulation, but the
+  [test/system.vhd](../test/system.vhd). It speaks the three-signal interface
+  directly — assert `irq_valid_i` with the ISR address on `irq_addr_i`, hold both
+  until `irq_ready_o`, drop `irq_valid_i` the cycle after — so it is a handful of
+  registers rather than a daisy-chain participant. Nothing in `test/` needs to
+  model the chain; if the chain is ever worth exercising, it belongs in a
+  separate adaptation-layer testbench, not in this CPU's. It must be
+  **program-triggered, not free-running**: a timer would still be deterministic in simulation, but the
   interrupt would land at a different instruction after any pipeline change,
   churning the golden files on unrelated commits. **Done when** all existing
   tests still pass unchanged.
@@ -546,18 +585,24 @@ The reference halts on both.
   to `TESTS` on the commit that makes it pass, which gives each step below a
   crisp definition of done: name the programs that graduate.
 
-* **T2. `src/interrupt/interrupt.vhd`.** The daisy-chain FSM: `int_n_i` in,
-  `igrant_n_o` out, `isr_addr_i` sampled, ISR address out to WRITE. Plus
+* **T2. `src/interrupt/interrupt.vhd`.** The request-side adapter:
+  `irq_valid_i`/`irq_addr_i` in, `irq_ready_o` out, `pending_o`/`addr_o` to
+  WRITE, `start_i` back from it. Two states, `IDLE` and `ACCEPTED`. Plus
   `formal/interrupt.{psl,sby,gtkw}`. **The specification is
   [src/interrupt/README.md](../src/interrupt/README.md)**, written at T2b: read
   the port table, the ten-obligation contract, and the walkthrough before writing
   any VHDL, and take the device's five obligations as PSL assumptions and the
   CPU's five as assertions. **Done when** `sby` passes bmc, cover, and prove, and
-  the diagram still matches.
-* **T2b. Protocol timing diagram. DONE, ahead of T2.** Drawn first rather than
-  last, because the bus protocol was the part of this feature the upstream
-  sources disagreed about most, so it is worth pinning down before any code
-  commits to a reading of it. The diagram is
+  the diagram still matches. First decide whether the entity is worth having at
+  all — see the last bullet of
+  [Open for T2](../src/interrupt/README.md#open-for-t2).
+* **T2b. Protocol timing diagram. DONE, ahead of T2, and redrawn since.** Drawn
+  first rather than last, because the bus protocol was the part of this feature
+  the upstream sources disagreed about most, so it is worth pinning down before
+  any code commits to a reading of it. It has since been redrawn against the
+  three-signal interface that replaced the daisy chain; the version described
+  below is the daisy-chain one, kept because the four changes it forced are how
+  this plan got its present shape. The diagram is
   [src/interrupt/timing.tex](../src/interrupt/timing.tex) and the prose around it
   is [src/interrupt/README.md](../src/interrupt/README.md); `make diagrams` renders
   the `.png`, and both are committed. The `diagrams` rule is now a pattern rule
@@ -565,16 +610,23 @@ The reference halts on both.
   (`src/cpu_main/timing.png` re-renders byte-identical after that move).
 
   It changed three things in this plan, all recorded where they belong: the
-  combinational bus release is no longer required (see
-  [Bus protocol](#bus-protocol)), `int_wait` appeared as a new obligation on
+  combinational bus release is no longer required, `int_wait` appeared as a new obligation on
   WRITE (T3), and the redirect turns out to happen at the module's `done_o`
   rather than at `inst_done_o` (T6).
 
   A fourth followed on review of the drawing: the grant was shortened from two
   cycles to one, dropping the wait for `INT_N` to rise and taking the address at
-  the end of the granted cycle instead. That is a cycle off the interrupt
-  response and a contract on devices slightly tighter than upstream's prose —
-  both argued in [Bus protocol](#bus-protocol) above.
+  the end of the granted cycle instead.
+
+  **Then the interface changed**, and the redraw undid two of those four. There
+  is no grant, so nothing is shortened and nothing is tighter than upstream; the
+  address is registered a cycle *before* the commit rather than two cycles after
+  it, so `int_wait` is gone and the redirect is back at `inst_done_o` where the
+  one-line version of T6 originally had it. What survives is the reason the
+  diagram was drawn early at all: it is still the thing that shows whether a
+  signal is registered, and it still found the answer before any VHDL committed
+  to one. See
+  [The interrupt request interface](#the-interrupt-request-interface).
 
   **Still to do:** the diagram is a specification, not a recording. Redraw it
   from a GHDL simulation once T2 runs, as `src/cpu_main/timing.tex` is read off
@@ -586,13 +638,15 @@ The reference halts on both.
 * **T3. Interrupt state.** The in-ISR flag and the saved `R14`/`R15`, in WRITE.
   The commit pulse is `inst_done_o and pending_o and not int_active`.
 
-  Plus `int_wait`, which T2b turned up: between the commit and the redirect the
-  saved PC is already fixed, but DECODE and PREPARE still hold the instructions
-  that follow it, and if one of them retired in that window `RTI` would replay
-  it. So WRITE holds its ready to PREPARE low for those cycles. It is ordinary
-  back-pressure, not new machinery, and it is *not* the same mechanism as
-  `p_halt_fetched` in `cpu.vhd` — gating the ICACHE feed does not help here,
-  because the instructions in question are already past it.
+  `int_wait` is **no longer needed**, and the reason is worth keeping because it
+  is the clearest single benefit of the interface change. Under the daisy chain,
+  commit and redirect were two cycles apart: the saved PC was already fixed while
+  DECODE and PREPARE still held the instructions after it, so if one retired in
+  that window `RTI` would replay it, and WRITE had to hold its ready to PREPARE
+  low for two cycles to prevent it. Here the address is registered before the
+  commit, so commit and redirect are the same cycle and there is no window. If
+  T2's implementation reintroduces a gap for any reason, `int_wait` comes back
+  with it.
 * **T4. `RTI`.** Restore `R15` through the ordinary write port and `R14` through
   the SR port in one cycle; clear the in-ISR flag. The write to `R15` already
   drives the flush. Rogue `RTI` halts.
@@ -605,21 +659,26 @@ The reference halts on both.
   from `TESTS_PENDING` to `TESTS` on this commit — they need only `INT R0` and
   `RTI`, so they do not depend on T6 or T7.
 
-* **T6. Hardware grant.** Commit at `inst_done_o`, taking `next_pc` as the return
-  address, and redirect two cycles later at the module's `done_o`. T2b split
-  those two apart: the earlier one-line version of this task had the redirect
-  happening at `inst_done_o` too, which cannot work, because the ISR address does
-  not exist yet at the commit point — the grant handshake is what fetches it, and
-  the grant may not be issued before the commit.
+* **T6. Hardware interrupt entry.** Commit at `inst_done_o`, taking `next_pc` as
+  the return address, and redirect in that same cycle to `addr_o`, with
+  `irq_ready_o` following one registered cycle later.
 
-  So the fourth term on `fetch_valid_o` is `done_o` alone, not
-  `inst_done_o and done_o`. That is one input fewer than the topology T0 measured
-  as free, so T0's headroom result stands as an upper bound rather than needing a
-  re-run — but re-measure at T12 regardless, as T0 already says.
+  This is where the interface change lands hardest. T2b had split commit and
+  redirect two cycles apart, because under the daisy chain the ISR address did
+  not exist at the commit point — the grant handshake was what fetched it, and
+  the grant could not be issued before the commit. With the address arriving
+  alongside the request, the redirect returns to `inst_done_o`, which is where
+  the original one-line version of this task had it.
+
+  So the fourth term on `fetch_valid_o` is the commit itself, which is exactly
+  the topology T0 measured as free. T0's headroom result therefore applies
+  directly rather than as an upper bound — but re-measure at T12 regardless, as
+  T0 already says.
 
   Graduates test cases 4, 5, and 7 from `TESTS_PENDING`.
-* **T7. Top-level ports.** `int_n_i`, `igrant_n_o`, and `isr_addr_i` on
-  [cpu.vhd](../src/cpu.vhd) and `system.vhd`.
+* **T7. Top-level ports.** `irq_valid_i`, `irq_ready_o`, and `irq_addr_i` on
+  [cpu.vhd](../src/cpu.vhd) and `system.vhd`. Active high, no `_n` suffixes; the
+  daisy chain, if a system wants one, is the adaptation layer's business.
 
 ### Phase 3 — close it out
 
@@ -628,9 +687,10 @@ The reference halts on both.
   `TESTS` and passing, including the two rogue cases. Regenerate the golden
   files and read the diff carefully. **Done when** `TESTS_PENDING` is empty.
 
-* **T9. Formal.** Extend [cpu_main.psl](../formal/cpu_main.psl): no grant while
-  an ISR is active; `RTI` restores both registers; a grant asserts
-  `fetch_valid_o`; the saved PC equals `next_pc`. Model them on the existing
+* **T9. Formal.** Extend [cpu_main.psl](../formal/cpu_main.psl): no `irq_ready_o`
+  while an ISR is active; `RTI` restores both registers; interrupt entry asserts
+  `fetch_valid_o` with `fetch_addr_o` equal to the accepted request's address;
+  the saved PC equals `next_pc`. Model them on the existing
   `f_flush_on_bank_change`, which states the same kind of obligation.
 * **T10. Disarm the trap.** Drop the `RTI` and `INT` arms of `p_unimplemented`,
   keep `EXC` and opcode `0xD`, and update the list in
@@ -638,13 +698,24 @@ The reference halts on both.
 * **T11. Documentation.** Fold this note into
   [doc/README.md](README.md), delete its TODO bullet, record the saved-state
   divergence — the reference restores `R13` on `RTI` and this design does not —
-  where a reader will find it, and update [CLAUDE.md](../CLAUDE.md).
+  where a reader will find it, and update [CLAUDE.md](../CLAUDE.md). Record the
+  interface divergence in the same place: this CPU has no `INT_N`/`IGRANT_N`
+  pins, and a QNICE-FPGA system needs an adaptation layer for interrupts as it
+  already does for the two memory buses.
 * **T12. Re-measure.** `make lint`, `make test`, `make -C formal -k`, then
   `make utilization` against the `a9f2c0b` baseline.
 
 ## Risks
 
-* **Timing on `fetch_valid_o`.** T0 exists to find this out on day one.
+* **Timing on `fetch_valid_o`.** T0 exists to find this out on day one, and its
+  measured topology is now the one the design actually uses (T6).
+* **The adaptation layer is untested here.** Dropping the daisy chain moves it
+  out of this repository, which is the point, but it also moves it out of this
+  repository's test suite and formal proofs. Nothing in `make test` will ever
+  exercise a chain again. The mitigation is that the CPU's side of the contract
+  is five obligations wide and each is a PSL assumption (T2), so a layer that
+  violates one is violating something written down rather than something
+  implied.
 * **The saved-state divergence.** Settled: `R14` and `R15` only, one register
   short of the reference. Upstream's own best-practices rule for ISR authors is
   what makes that cheap. Retrofitting extra saved state into a `dp_ram`-backed
@@ -652,6 +723,6 @@ The reference halts on both.
 * **Golden-file churn.** T1's determinism choice is what protects against it.
 * **Interaction with the HALT gate.** `p_halt_fetched` in `cpu.vhd` gates the
   ICACHE-to-DECODE handshake off when a `HALT` is handed to DECODE, and clears
-  that gate on a flush. An interrupt grant is a new flush source, so check it
+  that gate on a flush. Interrupt entry is a new flush source, so check it
   cannot un-gate a `HALT` that has already been accepted.
 
