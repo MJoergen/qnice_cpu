@@ -1,7 +1,23 @@
-# Available make targets:
-# 'make' runs the simulation
-# 'make system.bit' runs Vivado synthesis and bitfile generation
-# 'make synth' runs Yosys synthesis
+# Build, test, and synthesis rules for the pipelined QNICE CPU.
+#
+# There is no default target: plain "make" prints the list of targets and the
+# variables that can be overridden, and that list -- the "help" target below --
+# is the one to keep up to date, not this header. In outline, the sections that
+# follow it are simulation ("sim", "run", "check", "test", "test_slow",
+# "golden"), the two differential tests against upstream ("crosscheck" against
+# the C emulator, "crosscheck_rtl" against upstream's own VHDL CPU), the
+# diagrams ("diagrams"), synthesis with Vivado ("system.bit", "utilization")
+# and with Yosys ("synth"), formal verification ("formal"), style linting
+# ("lint"), and "clean".
+#
+# Not everything here runs out of the box. The test programs are assembled by
+# the external QNICE assembler at $(ASSEMBLER), which has to be checked out
+# separately on its "develop" branch; the differential tests build upstream's
+# emulator and patch its sources; Vivado lives at $(XILINX_DIR) and is
+# deliberately not on $PATH, so those targets source its settings64.sh
+# themselves; and "diagrams", "formal", and "lint" need pdflatex, SymbiYosys,
+# and vsg respectively. "make test" is what CI runs, and needs none of that
+# beyond GHDL and the assembler.
 
 XILINX_DIR = /opt/Xilinx/Vivado/2022.2
 
