@@ -73,54 +73,74 @@ architecture synthesis of write is
    signal smc_push_delta : std_logic_vector(15 downto 0);
    signal smc_push_hit   : std_logic;
 
-   -- Interrupt support, combinational signals
-   signal irq_active_s   : std_logic;                         -- Are we entering an interrupt service routine?
-   signal irq_rogue_s    : std_logic;                         -- Halt the CPU when a rogue interrupt occurs
+   -- Interrupt support. The "_s" signals are combinational, driven by p_irq_sw;
+   -- the three below them are the state it registers in p_irq. Kept in one
+   -- declaration group so they align together; splitting them with a comment
+   -- makes VSG align each half to its own width (architecture_026).
+   signal irq_is_int_s   : std_logic;                         -- An INT is retiring
+   signal irq_is_rti_s   : std_logic;                         -- An RTI is retiring
+   signal irq_active_s   : std_logic;                         -- Next value of irq_active
+   signal irq_rogue_s    : std_logic;                         -- A rogue INT or RTI is retiring
    signal irq_sw_addr_s  : std_logic_vector(15 downto 0);     -- New value for PC
    signal irq_sw_valid_s : std_logic;                         -- irq_sw_addr_s is valid
-   -- Interrupt support, state information (registered)
-   signal irq_active     : std_logic;                         -- State bit: Are we in an interrupt service routine?
+   signal irq_active     : std_logic;                         -- In an interrupt service routine?
    signal irq_r14        : std_logic_vector(15 downto 0);     -- Stored value of R14
    signal irq_r15        : std_logic_vector(15 downto 0);     -- Stored value of R15
 
 begin
 
-   -- Handle software interrupt request.
-   -- This is a combinational process
-   -- The irq_sw_valid_s is pulsed when entering and/or leaving an interrupt service routine.
-   -- It controls updating R14 (in p_reg), R15 (in fetch_addr_o and fetch_valid_o), as
-   -- well as storing the old values of R14 and R15 (in p_irq).
+   -- Is an INT / an RTI retiring this cycle? Factored out of p_irq_sw below,
+   -- which would otherwise repeat the same ten-bit compare four times.
+   irq_is_int_s <= inst_done_o when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
+                                    prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INT else
+                   '0';
+
+   irq_is_rti_s <= inst_done_o when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
+                                    prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_RTI else
+                   '0';
+
+
+   -- Handle software interrupt request. This is a combinational process.
+   --
+   -- irq_sw_valid_s is pulsed when entering or leaving an interrupt service
+   -- routine. It controls restoring R14 (in p_reg), redirecting R15 (in
+   -- fetch_addr_o and fetch_valid_o), and storing the old R14/R15 (in p_irq).
+   --
+   -- The two illegal cases -- an RTI outside a service routine and an INT
+   -- inside one, since interrupts do not nest -- raise irq_rogue_s and change
+   -- nothing else, so in hardware they retire as no-ops. doc/interrupts.md
+   -- says they should halt the CPU instead; the two rogue assertions in
+   -- p_unimplemented below are a simulation-only stand-in for that, not the
+   -- implementation of it.
    p_irq_sw : process (all)
    begin
       -- Set defaults, to avoid latches
       irq_active_s   <= irq_active; -- irq_active is the registered copy of irq_active_s
-      irq_rogue_s    <= '0';        -- TODO: Not currently used
+      irq_rogue_s    <= '0';
       irq_sw_addr_s  <= (others => '0');
       irq_sw_valid_s <= '0';
 
-      if inst_done_o = '1' and irq_active = '0' then
-         if prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INT then
-            -- Entering an interrupt service routine.
+      if irq_active = '0' then
+         -- Entering an interrupt service routine: jump to the destination.
+         if irq_is_int_s = '1' then
             irq_active_s   <= '1';
-            -- Jump to destination
             irq_sw_addr_s  <= alu_res_val;
             irq_sw_valid_s <= '1';
          end if;
 
-         if prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_RTI then
+         -- Rogue: RTI with nothing to return to.
+         if irq_is_rti_s = '1' then
             irq_rogue_s <= '1';
          end if;
-      end if;
-
-      if inst_done_o = '1' and irq_active = '1' then
-         if prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INT then
+      else
+         -- Rogue: interrupts do not nest.
+         if irq_is_int_s = '1' then
             irq_rogue_s <= '1';
          end if;
 
-         if prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_RTI then
-            -- Leaving an interrupt service routine.
+         -- Leaving an interrupt service routine: return to the previous location.
+         if irq_is_rti_s = '1' then
             irq_active_s   <= '0';
-            -- Return to previous location
             irq_sw_addr_s  <= irq_r15;
             irq_sw_valid_s <= '1';
          end if;
@@ -133,13 +153,26 @@ begin
       end if;
    end process p_irq_sw;
 
+   -- The hardware-interrupt request port is not implemented yet: this stage
+   -- serves INT/RTI only, and irq_valid_i/irq_addr_i are left unread. Drive the
+   -- ready low rather than leaving the port undriven -- an unconnected "out"
+   -- resolves to 'U' and would propagate out through cpu.vhd the moment
+   -- anything but "open" is attached to it. See src/interrupt/README.md.
+   irq_ready_o <= '0';
+
+
    p_irq : process (clk_i)
    begin
       if rising_edge(clk_i) then
          -- Store new interrupt state
          irq_active <= irq_active_s;
-         -- Store R14 and R15 when accepting the interrupt request
-         if irq_sw_valid_s = '1' then
+         -- Store R14 and R15 when accepting the interrupt request -- on ENTRY
+         -- only. irq_sw_valid_s also pulses on the way out, and latching there
+         -- would overwrite the pair with the service routine's own R14 and the
+         -- return address it is in the middle of consuming.
+         -- Harmless today -- the next INT overwrites both before anything reads
+         -- them -- but it makes the state meaningless to look at in a trace.
+         if irq_sw_valid_s = '1' and irq_active = '0' then
             irq_r14 <= prep_stage_i.r14;
             irq_r15 <= next_pc;
          end if;
@@ -234,6 +267,26 @@ begin
                       ctrl_str(prep_stage_i.inst(R_CTRL_CMD)) & "). " &
                       "It is not decoded anywhere and would otherwise retire " &
                       "as a no-op."
+               severity failure;
+
+            -- Same argument, for the two interrupt instructions that ARE
+            -- decoded but are illegal where they stand: an RTI with nothing to
+            -- return to, and an INT inside a service routine. p_irq_sw raises
+            -- irq_rogue_s for both and then does nothing with it, so they too
+            -- retire silently. doc/interrupts.md specifies a halt; until
+            -- irq_rogue_s reaches halt_o, this is what stops a test program
+            -- from quietly passing over one. No test program executes either
+            -- case today, so this assertion is not currently reachable.
+            assert not (irq_rogue_s = '1' and irq_active = '0')
+               report "ROGUE RTI at address 0x" & to_hstring(prep_stage_i.addr) &
+                      ". There is no interrupt service routine to return from, " &
+                      "so it would otherwise retire as a no-op."
+               severity failure;
+
+            assert not (irq_rogue_s = '1' and irq_active = '1')
+               report "ROGUE INT at address 0x" & to_hstring(prep_stage_i.addr) &
+                      ". Interrupts do not nest, so it would otherwise retire " &
+                      "as a no-op and lose the outer return address."
                severity failure;
 
             assert prep_stage_i.inst(R_OPCODE) /= C_OPCODE_RES
