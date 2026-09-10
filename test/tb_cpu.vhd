@@ -40,7 +40,8 @@ entity tb_cpu is
       -- status word and the writes log rather than from reading them. Turn it
       -- on with "make run TEST=... DEBUG=true" when a run needs following
       -- instruction by instruction. See src/cpu_main/write.vhd.
-      G_DEBUG               : boolean := false
+      G_DEBUG               : boolean := false;
+      G_DEVICE              : string := ""
    );
 end entity tb_cpu;
 
@@ -93,7 +94,7 @@ begin
          G_A_ACK_DELAY         => G_A_ACK_DELAY,
          G_B_ACK_DELAY         => G_B_ACK_DELAY,
          G_DEBUG               => G_DEBUG,
-         G_SIMULATION          => true
+         G_DEVICE              => G_DEVICE
       )
       port map (
          clk_i  => clk,

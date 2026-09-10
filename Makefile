@@ -50,6 +50,7 @@ SOURCES += src/cpu.vhd
 TEST_SOURCES += test/wb_dp_mem.vhd
 TEST_SOURCES += test/test_monitor.vhd
 TEST_SOURCES += test/eae.vhd
+TEST_SOURCES += test/interrupt.vhd
 TEST_SOURCES += test/wb_mux.vhd
 TEST_SOURCES += test/system.vhd
 
@@ -142,6 +143,7 @@ SAVE          = test/$(TB).gtkw
 
 TOP = system
 
+DEVICE = EAE
 
 ################################################
 ## Help
@@ -191,7 +193,8 @@ GHDL_RUN = ghdl -r --std=08 $(TB) \
 	   -gG_B_STALL_DELAY=$(B_STALL_DELAY) \
 	   -gG_A_ACK_DELAY=$(A_ACK_DELAY) \
 	   -gG_B_ACK_DELAY=$(B_ACK_DELAY) \
-	   -gG_DEBUG=$(DEBUG)
+	   -gG_DEBUG=$(DEBUG) \
+	   -gG_DEVICE=$(DEVICE)
 
 .PHONY: build
 build: $(SOURCES) $(TEST_SOURCES)

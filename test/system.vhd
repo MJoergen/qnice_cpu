@@ -5,7 +5,7 @@ library ieee;
 -- with a test program read from the file G_ROM, and is accessible via both the
 -- Instruction Memory and Data Memory interfaces.
 --
--- With G_SIMULATION, an EAE (Extended Arithmetic Element) is additionally
+-- With G_DEVICE, a special-purpose device is additionally
 -- addressable in the upper half of the data address space, 0x8000-0xFFFF, and
 -- a multiplexer splits the data bus between the two. Neither is synthesised;
 -- the comment above that generate says why it matters that they are not.
@@ -30,9 +30,10 @@ entity system is
       -- Simulation only: disassemble each retiring instruction to the console.
       -- Passed straight through to WRITE, see src/cpu_main/write.vhd.
       G_DEBUG               : boolean  := false;
-      -- True in the testbench, false in synthesis, and it is not merely a
-      -- switch for simulation-only conveniences: see the generate below.
-      G_SIMULATION          : boolean  := false
+      -- Selects additional device. Supported values are: "" (used in
+      -- synthesis), "EAE" for Extended Arithmetic Element, and "INT" for
+      -- Interrupt Generator.
+      G_DEVICE              : string  := ""
    );
    port (
       clk_i  : in  std_logic;
@@ -74,6 +75,10 @@ architecture synthesis of system is
    signal wbd_ack_mem     : std_logic;
    signal wbd_data_rd_mem : std_logic_vector(15 downto 0);
 
+   signal irq_valid : std_logic := '0';
+   signal irq_ready : std_logic;
+   signal irq_addr  : std_logic_vector(15 downto 0) := (others => '0');
+
 begin
 
    -- Force driving output ports, to avoid Vivado Synthesis pruning to entire
@@ -109,9 +114,9 @@ begin
          wbd_dat_o   => wbd_data_wr,
          wbd_ack_i   => wbd_ack,
          wbd_data_i  => wbd_data_rd,
-         irq_valid_i => '0',
-         irq_ready_o => open,
-         irq_addr_i  => (others => '0'),
+         irq_valid_i => irq_valid,
+         irq_ready_o => irq_ready,
+         irq_addr_i  => irq_addr,
          halt_o      => halt
       ); -- i_cpu
 
@@ -173,20 +178,20 @@ begin
    -- effect would survive a leaner multiplexer: any slave that can stall costs
    -- it.
 
-   gen_sim : if G_SIMULATION generate
+   gen_sim : if G_DEVICE /= "" generate
 
-      signal wbd_cyc_eae     : std_logic;
-      signal wbd_stb_eae     : std_logic;
-      signal wbd_stall_eae   : std_logic;
-      signal wbd_we_eae      : std_logic;
-      signal wbd_addr_eae    : std_logic_vector(15 downto 0);
-      signal wbd_data_wr_eae : std_logic_vector(15 downto 0);
-      signal wbd_ack_eae     : std_logic;
-      signal wbd_data_rd_eae : std_logic_vector(15 downto 0);
+      signal wbd_cyc_dev     : std_logic;
+      signal wbd_stb_dev     : std_logic;
+      signal wbd_stall_dev   : std_logic;
+      signal wbd_we_dev      : std_logic;
+      signal wbd_addr_dev    : std_logic_vector(15 downto 0);
+      signal wbd_data_wr_dev : std_logic_vector(15 downto 0);
+      signal wbd_ack_dev     : std_logic;
+      signal wbd_data_rd_dev : std_logic_vector(15 downto 0);
 
    begin
 
-      -- Split the data bus at 0x8000: RAM below, EAE above. Note this is a real
+      -- Split the data bus at 0x8000: RAM below, dev above. Note this is a real
       -- multiplexer and not just an address decode -- the two slaves have
       -- different, and configurable, latencies, and a pipelined WISHBONE master
       -- can only pair responses with requests by position. See wb_mux.vhd.
@@ -217,33 +222,54 @@ begin
             m0_ack_i   => wbd_ack_mem,
             m0_data_i  => wbd_data_rd_mem,
             --
-            m1_cyc_o   => wbd_cyc_eae,
-            m1_stb_o   => wbd_stb_eae,
-            m1_stall_i => wbd_stall_eae,
-            m1_we_o    => wbd_we_eae,
-            m1_addr_o  => wbd_addr_eae,
-            m1_data_o  => wbd_data_wr_eae,
-            m1_ack_i   => wbd_ack_eae,
-            m1_data_i  => wbd_data_rd_eae
+            m1_cyc_o   => wbd_cyc_dev,
+            m1_stb_o   => wbd_stb_dev,
+            m1_stall_i => wbd_stall_dev,
+            m1_we_o    => wbd_we_dev,
+            m1_addr_o  => wbd_addr_dev,
+            m1_data_o  => wbd_data_wr_dev,
+            m1_ack_i   => wbd_ack_dev,
+            m1_data_i  => wbd_data_rd_dev
          ); -- i_wb_mux
 
-      -- EAE (Extended Arithmetic Element)
-      i_eae : entity work.eae
-         generic map (
-            G_DELAY => 3
-         )
-         port map (
-            clk_i     => clk_i,
-            rst_i     => not rstn_i,
-            cyc_i     => wbd_cyc_eae,
-            stb_i     => wbd_stb_eae,
-            stall_o   => wbd_stall_eae,
-            addr_i    => wbd_addr_eae(2 downto 0),
-            we_i      => wbd_we_eae,
-            wr_data_i => wbd_data_wr_eae,
-            ack_o     => wbd_ack_eae,
-            rd_data_o => wbd_data_rd_eae
-         ); -- i_eae
+      gen_dev : if G_DEVICE = "EAE" generate
+         -- EAE (Extended Arithmetic Element)
+         i_eae : entity work.eae
+            generic map (
+               G_DELAY => 3
+            )
+            port map (
+               clk_i     => clk_i,
+               rst_i     => not rstn_i,
+               cyc_i     => wbd_cyc_dev,
+               stb_i     => wbd_stb_dev,
+               stall_o   => wbd_stall_dev,
+               addr_i    => wbd_addr_dev(2 downto 0),
+               we_i      => wbd_we_dev,
+               wr_data_i => wbd_data_wr_dev,
+               ack_o     => wbd_ack_dev,
+               rd_data_o => wbd_data_rd_dev
+            ); -- i_eae
+      elsif G_DEVICE = "INT" generate
+         -- INT (Interupt generator)
+         i_interrupt : entity work.interrupt
+            port map (
+               clk_i       => clk_i,
+               rst_i       => not rstn_i,
+               cyc_i       => wbd_cyc_dev,
+               stb_i       => wbd_stb_dev,
+               stall_o     => wbd_stall_dev,
+               addr_i      => wbd_addr_dev(2 downto 0),
+               we_i        => wbd_we_dev,
+               wr_data_i   => wbd_data_wr_dev,
+               ack_o       => wbd_ack_dev,
+               rd_data_o   => wbd_data_rd_dev,
+               irq_valid_o => irq_valid,
+               irq_ready_i => irq_ready,
+               irq_addr_o  => irq_addr
+            ); -- i_interrupt
+      end generate gen_dev;
+
 
    else generate
 
