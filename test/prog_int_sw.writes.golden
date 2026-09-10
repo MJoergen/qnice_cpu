@@ -1,0 +1,141 @@
+Write value 0x0000 to register 8
+Write value 0x0000 to register 8
+Write value 0x0000 to register 8
+Write value 0x0000 to register 0 bank 0x00
+Write value 0x00FF to register 1 bank 0x00
+Write value 0x0001 to register 0 bank 0x00
+Write value 0xE000 to memory 0x0000
+Write value 0x0002 to register 0 bank 0x00
+Write value 0xE000 to memory 0x0001
+Write value 0x0003 to register 0 bank 0x00
+Write value 0xE000 to memory 0x0002
+Write value 0x0108 to register D
+Write value 0x0108 to register 0 bank 0x00
+Write value 0x0107 to register 0 bank 0x00
+Write value 0xBEEF to memory 0x0107
+Write value 0x0100 to register 8
+Write value 0x1000 to memory 0x0100
+Write value 0x1001 to register 9
+Write value 0x0100 to register 2 bank 0x00
+Write value 0x1001 to memory 0x0100
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0001 to register E
+Write value 0x001B to register F
+Write value 0x0100 to register 8
+Write value 0x1100 to memory 0x0100
+Write value 0x1101 to register 9
+Write value 0x005F to register 0 bank 0x00
+Write value 0x0100 to register 2 bank 0x00
+Write value 0x1101 to memory 0x0100
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0001 to register E
+Write value 0x0028 to register F
+Write value 0x0100 to register 8
+Write value 0x1200 to memory 0x0100
+Write value 0x1201 to register 9
+Write value 0x0101 to register 0 bank 0x00
+Write value 0x005F to memory 0x0101
+Write value 0x0100 to register 2 bank 0x00
+Write value 0x1201 to memory 0x0100
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0001 to register E
+Write value 0x0037 to register F
+Write value 0x0100 to register 8
+Write value 0x1300 to memory 0x0100
+Write value 0x1301 to register 9
+Write value 0x0101 to register 0 bank 0x00
+Write value 0x005F to memory 0x0101
+Write value 0x0102 to register 0 bank 0x00
+Write value 0x0100 to register 2 bank 0x00
+Write value 0x1301 to memory 0x0100
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0001 to register E
+Write value 0x004B to register F
+Write value 0x0100 to register 8
+Write value 0x1400 to memory 0x0100
+Write value 0x1401 to register 9
+Write value 0x0101 to register 0 bank 0x00
+Write value 0x0102 to register 0 bank 0x00
+Write value 0x005F to memory 0x0101
+Write value 0x0101 to register 0 bank 0x00
+Write value 0x0100 to register 2 bank 0x00
+Write value 0x1401 to memory 0x0100
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0100 to register 8
+Write value 0x0001 to register E
+Write value 0x0068 to register F
+Write value 0x0101 to register 0 bank 0x00
+Write value 0x1234 to memory 0x0101
+Write value 0x1111 to register 1 bank 0x00
+Write value 0x0108 to register D
+Write value 0x0001 to register E
+Write value 0x2345 to memory 0x0101
+Write value 0x0078 to register F
+Write value 0x007D to register F
+Write value 0x0108 to register 0 bank 0x00
+Write value 0x0107 to register 0 bank 0x00
+Write value 0x0085 to register F
+Write value 0x0101 to register 0 bank 0x00
+Write value 0x3456 to memory 0x0101
+Write value 0x1111 to register 1 bank 0x00
+Write value 0x0094 to register 8
+Write value 0x0001 to register E
+Write value 0x4567 to memory 0x0101
+Write value 0x009A to register F
+Write value 0x0100 to register 8
+Write value 0x3000 to memory 0x0100
+Write value 0xFFFF to register E
+Write value 0x0100 to register 2 bank 0xFF
+Write value 0x3001 to memory 0x0100
+Write value 0x003C to register E
+Write value 0xFFFF to register E
+Write value 0x00A7 to register F
+Write value 0x0000 to register E
+Write value 0x0100 to register 2 bank 0x00
+Write value 0x3002 to memory 0x0100
+Write value 0xFFFE to register E
+Write value 0x0001 to register E
+Write value 0x00B0 to register F
+Write value 0x3002 to register 9
+Write value 0x00BD to register F
+Write value 0x0100 to register 8
+Write value 0x7000 to memory 0x0100
+Write value 0x0000 to register E
+Write value 0xFF00 to register 8
+Write value 0x00F1 to register 0 bank 0x00
+Write value 0x00E4 to register 0 bank 0x01
+Write value 0xFF00 to register 8
+Write value 0xFF00 to register 8
+Write value 0xFF00 to register 8
+Write value 0x0111 to register 1 bank 0x01
+Write value 0x0100 to register 1 bank 0x01
+Write value 0x0100 to register 2 bank 0x01
+Write value 0x7001 to memory 0x0100
+Write value 0xFEFE to register E
+Write value 0x0111 to register E
+Write value 0x00E4 to register 9
+Write value 0x0100 to register 8
+Write value 0x00D7 to register F
+Write value 0x00DC to register F
+Write value 0x0100 to register 8
+Write value 0x7001 to register 9
+Write value 0x00F2 to register F
+Write value 0x0000 to register 0 bank 0x01
+Write value 0x00FE to register 1 bank 0x01
+Write value 0x0001 to register 0 bank 0x01
+Write value 0x0820 to memory 0x0000
+Write value 0x0002 to register 0 bank 0x01
+Write value 0x0820 to memory 0x0001
+Write value 0x0003 to register 0 bank 0x01
+Write value 0x0820 to memory 0x0002
+Write value 0x7FFF to register 0 bank 0x01
+Write value 0x0000 to memory 0x7FFF

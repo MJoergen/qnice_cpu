@@ -97,6 +97,7 @@ TESTS += prog_r15
 TESTS += prog_hazard
 TESTS += prog_self_modifying
 TESTS += prog_subroutine
+TESTS += prog_int_sw
 TESTS += prog_waveform
 TESTS += prog_eae
 TESTS += prog_eae_stall

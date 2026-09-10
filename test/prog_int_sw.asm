@@ -184,14 +184,18 @@ ISR3        MOVE    DATA, R2
 
 ;
 ; Test 7 : INT immediately after INCRB, with an ISR that changes the bank.
-; Checks the bank-change flush still holds across an interrupt.
+; Checks the bank-change flush still holds across an interrupt, in both
+; directions: the INT must read its target out of the bank INCRB just switched
+; to, and the instruction right after the RTI must read the bank the restored
+; R14 puts back. Both reads are unpadded, so a missing flush is visible.
 ;
 
 TEST_7      MOVE    DATA, R8        ; Prepare data before INT
             MOVE    0x7000, @R8
             MOVE    0x0000, R14     ; Prepare register bank
             MOVE    0xFF00, R8      ; Mask for register bank
-            MOVE    FAIL7, R0       ; Bank 0 decoy: a wrong-bank read halts
+            MOVE    FAIL7, R0       ; Bank 0 decoy, for both reads below: it
+                                    ; halts the INT and fails the CMP in TEST_7A
             INCRB
             MOVE    ISR7, R0        ; Prepare banked register
             DECRB
@@ -200,12 +204,18 @@ TEST_7      MOVE    DATA, R8        ; Prepare data before INT
             NOP
             INCRB
             INT     R0              ; Use banked register
+            MOVE    R0, R9          ; No padding: must read the bank the RTI
+                                    ; restored, i.e. bank 1 and not the decoy
             AND     R14, R8         ; Isolate register bank
             CMP     0x0100, R8      ; Verify register bank unaltered by the ISR
             RBRA    TEST_7A, Z
             HALT
 
-TEST_7A     MOVE    DATA, R8
+TEST_7A     CMP     ISR7, R9        ; The read above saw bank 1. R14 alone does
+            RBRA    TEST_7B, Z      ; not prove this: it is read through the
+            HALT                    ; forwarding path, not the register file.
+
+TEST_7B     MOVE    DATA, R8
             MOVE    0x7001, R9      ; Expected value
             CMP     R9, @R8
             RBRA    EXIT, Z
