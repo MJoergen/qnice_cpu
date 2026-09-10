@@ -418,6 +418,16 @@ cpu_main.i_cpu_main.f_fetch_uses_bank
 @28
 cpu_main.i_cpu_main.f_gp_regs
 @28
+cpu_main.i_cpu_main.f_int_beat
+@28
+cpu_main.i_cpu_main.f_int_imm
+@28
+cpu_main.i_cpu_main.f_int_modes
+@28
+cpu_main.i_cpu_main.f_int_retires
+@28
+cpu_main.i_cpu_main.f_irq_active
+@28
 cpu_main.i_cpu_main.f_mem_dst_oustanding
 @28
 cpu_main.i_cpu_main.f_mem_dst_request
@@ -436,6 +446,8 @@ cpu_main.i_cpu_main.f_move_modes
 @28
 cpu_main.i_cpu_main.f_move_reg_reg
 @28
+cpu_main.i_cpu_main.f_nested_int
+@28
 cpu_main.i_cpu_main.f_operand_modes
 @28
 cpu_main.i_cpu_main.f_prep_uses_bank
@@ -443,6 +455,10 @@ cpu_main.i_cpu_main.f_prep_uses_bank
 cpu_main.i_cpu_main.f_push_pending
 @22
 cpu_main.i_cpu_main.f_r14_next[15:0]
+@28
+cpu_main.i_cpu_main.f_rti_retires
+@22
+cpu_main.i_cpu_main.f_saved_r14[15:0]
 @1000200
 -formal
 [pattern_trace] 1

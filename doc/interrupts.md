@@ -605,6 +605,39 @@ where it should be.
 Not happy path, but both need deciding and testing: rogue `RTI` and rogue `INT`.
 The reference halts on both.
 
+### Formal verification
+
+The `.asm` above covers the software half; the properties in
+[formal/cpu_main.psl](../formal/cpu_main.psl) cover it a second way, and reach
+cases the test program cannot. See the "Software interrupts" section there.
+
+The state an interrupt saves is invisible to software by design, and it is
+invisible to the proof too: a `vunit` bound to `cpu_main` cannot see inside the
+WRITE instance. So the properties are stated against a shadow model built from
+the instruction encoding and the retire pulse alone, which is what makes them a
+requirement rather than a transcription — the round trip is checked against a
+return address computed from the `INT`'s own encoding, cycles earlier and
+independently of anything `write.vhd` latched.
+
+Two things there are worth knowing before changing any of it.
+
+* **Both rogue cases are asserted as "must not redirect", not as "must halt".**
+  That is the part of the specified behaviour which holds both today, where they
+  retire as no-ops, and after a halt is implemented. It also pins the hazard
+  that matters most: `irq_r15` has no reset, so a rogue `RTI` that redirected
+  would jump into an uninitialised latch.
+* **The nested-`INT` property has to be asserted separately.** It does not
+  follow from the round trip: `p_irq` latches the saved pair on entry only, so a
+  design that wrongly nested would still return to the outer address correctly
+  and the round-trip property would pass. A mutation found this; the note above
+  `f_int_no_nest_reg` records it.
+
+The register-bank flush across an `RTI` — case 7 above, in the other direction —
+needs no property of its own. `RTI` restores `R14` through the ordinary register
+port, which is exactly what `f_flush_on_bank_change` and `f_hold_on_bank_change`
+already trigger on, so what that path needed was reachability rather than a new
+assertion: `c_rti_bank_change`.
+
 ## Task plan
 
 ### Phase 0 — de-risk

@@ -784,6 +784,217 @@ vunit i_cpu_main(cpu_main(synthesis))
       |-> {mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '0'};
 
 
+   ------------------------------------------------------
+   -- SOFTWARE INTERRUPTS: INT AND RTI
+   ------------------------------------------------------
+   --
+   -- The state an interrupt saves -- irq_active, irq_r14, irq_r15 in write.vhd
+   -- -- is deliberately invisible to software, and it is invisible here too: a
+   -- vunit bound to cpu_main cannot reach inside the WRITE instance. That is a
+   -- good thing rather than an obstacle. It forces the shadow model below,
+   -- which is built from the INSTRUCTION ENCODING and the retire pulse alone,
+   -- and every property is then stated against the shadow. If write.vhd's own
+   -- state machine diverges from it -- entering when it should not, latching
+   -- the wrong word, dropping the return address -- the properties fail
+   -- without any of them mentioning a signal in that file.
+   --
+   -- What is NOT claimed: that an INT is ever taken, or that an entered
+   -- service routine ever returns. Both are liveness, and out of reach for BMC
+   -- for the same reason set out above f_mov_r_r_read. The covers at the end
+   -- carry the reachability half.
+
+   signal f_int_retires : std_logic;
+   signal f_rti_retires : std_logic;
+
+   f_int_retires <= '1' when rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                             prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                             prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INT else '0';
+
+   f_rti_retires <= '1' when rst_i = '0' and prep2wr_valid = '1' and inst_done_o = '1' and
+                             prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                             prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_RTI else '0';
+
+   -- The return address, i.e. the address of the instruction after the INT.
+   -- Derived from the encoding rather than from prep2wr_stage.src_imm/dst_imm,
+   -- which are DECODE's own conclusions and part of what is under test. CTRL
+   -- has no source operand, so the only two-word form is the immediate
+   -- destination @R15++ -- "INT <addr>", which the assembler emits as 0xE0BE.
+   signal f_int_imm      : std_logic;
+   signal f_int_ret_addr : std_logic_vector(15 downto 0);
+
+   f_int_imm <= '1' when prep2wr_stage.inst(5 downto 2) = 15 and
+                         prep2wr_stage.inst(1 downto 0) = work.cpu_constants.C_MODE_POST else '0';
+
+   f_int_ret_addr <= prep2wr_stage.addr + 2 when f_int_imm = '1' else
+                     prep2wr_stage.addr + 1;
+
+   -- THE SHADOW. Interrupts do not nest, so an INT retiring while already
+   -- inside a service routine must leave the saved pair alone -- that is what
+   -- makes f_rti_return below a check on the outer return address surviving a
+   -- rogue INT, and not merely on the most recent one.
+   signal f_irq_active : std_logic;
+   signal f_saved_r14  : std_logic_vector(15 downto 0);
+   signal f_saved_r15  : std_logic_vector(15 downto 0);
+   signal f_saved_2w   : std_logic;
+   signal f_nested_int : std_logic;
+
+   p_irq_shadow : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if f_int_retires = '1' and f_irq_active = '0' then
+            f_irq_active <= '1';
+            f_saved_r14  <= prep2wr_stage.r14;
+            f_saved_r15  <= f_int_ret_addr;
+            f_saved_2w   <= f_int_imm;
+         end if;
+
+         if f_int_retires = '1' and f_irq_active = '1' then
+            f_nested_int <= '1';
+         end if;
+
+         if f_rti_retires = '1' and f_irq_active = '1' then
+            f_irq_active <= '0';
+            f_nested_int <= '0';
+         end if;
+
+         if rst_i = '1' then
+            f_irq_active <= '0';
+            f_nested_int <= '0';
+         end if;
+      end if;
+   end process p_irq_shadow;
+
+   -- An INT whose destination is the anyconst register and mode. R14 and R15
+   -- are excluded for the same reason f_gp_regs excludes them everywhere else:
+   -- R15 as a destination is the immediate form, which has its own property
+   -- below, and R14 doubles as the Status Register.
+   signal f_int_beat  : std_logic;
+   signal f_int_modes : std_logic;
+
+   f_int_beat <= '1' when rst_i = '0' and prep2wr_valid = '1' and
+                          prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                          prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_INT and
+                          prep2wr_stage.inst(5 downto 2) = c_dst_reg and
+                          prep2wr_stage.inst(1 downto 0) = c_dst_mode and
+                          c_dst_reg /= 14 and c_dst_reg /= 15 else '0';
+
+   f_int_modes <= f_int_beat and inst_done_o;
+
+   -- (1) WHERE THE INT GOES. The service routine's address is the DESTINATION
+   -- operand -- the one field of the instruction word that CTRL otherwise
+   -- ignores. Three properties because the value comes from three different
+   -- places: the register file, memory, and the instruction stream.
+   --
+   -- Entering is a control transfer, so fetch_valid_o is part of the claim in
+   -- each: it is both the redirect to FETCH and the pipeline flush, and the
+   -- instructions already fetched behind the INT must not run.
+   f_int_redirect_reg : assert always
+      {f_int_modes = '1' and f_irq_active = '0' and
+       c_dst_mode = work.cpu_constants.C_MODE_REG}
+      |-> {fetch_valid_o = '1' and fetch_addr_o = c_dst_val};
+
+   f_int_redirect_mem : assert always
+      {f_int_modes = '1' and f_irq_active = '0' and
+       c_dst_mode /= work.cpu_constants.C_MODE_REG}
+      |-> {fetch_valid_o = '1' and fetch_addr_o = c_mem_dst_val};
+
+   f_int_redirect_imm : assert always
+      {f_int_retires = '1' and f_irq_active = '0' and f_int_imm = '1'}
+      |-> {fetch_valid_o = '1' and fetch_addr_o = prep2wr_stage.immediate};
+
+   -- (2) THE POINTER MODES STILL BEHAVE LIKE POINTER MODES. f_mem_dst_ptr and
+   -- f_mem_dst_addr above are both qualified by f_operand_modes, which excludes
+   -- CTRL wholesale because JMP and CTRL re-purpose the operand fields. INT is
+   -- the one CTRL instruction that does not, so it needs these stated again.
+   f_int_dst_addr : assert always
+      {f_int_beat = '1' and
+       c_dst_mode /= work.cpu_constants.C_MODE_REG and
+       prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_DST) = '1'}
+      |-> {mem_req_valid_o = '1' and
+           mem_req_op_o(work.cpu_constants.C_MEM_READ_DST) = '1' and
+           mem_req_addr_o = f_dst_mem_addr};
+
+   f_int_dst_ptr : assert always
+      {f_int_beat = '1' and prep2wr_ready = '1' and
+       prep2wr_stage.microcode(work.cpu_constants.C_REG_MOD_DST) = '1' and
+       (c_dst_mode = work.cpu_constants.C_MODE_POST or
+        c_dst_mode = work.cpu_constants.C_MODE_PRE)}
+      |-> {reg_we_o = '1' and reg_addr_o = c_dst_reg and reg_val_o = f_dst_ptr_val};
+
+   -- (3) AN INT IS INVISIBLE APART FROM THAT. R14 and R15 are saved into
+   -- latches software cannot see, so the INT itself must leave the
+   -- architectural Status Register exactly as it found it -- alu_flags has no
+   -- case for CTRL, so what goes back is the input with bit 0 forced -- and
+   -- must write no general-purpose register at all in the mode that has no
+   -- pointer to write back.
+   f_int_keeps_sr : assert always
+      {f_int_modes = '1' and f_irq_active = '0'}
+      |-> {reg_r14_we_o = '1' and reg_r14_o = (prep2wr_stage.r14 or X"0001")};
+
+   f_int_no_reg_write : assert always
+      {f_int_modes = '1' and f_irq_active = '0' and
+       c_dst_mode = work.cpu_constants.C_MODE_REG}
+      |-> {reg_we_o = '0'};
+
+   -- (4) THE ROUND TRIP, and the reason this section exists. An RTI must send
+   -- FETCH back to the instruction after the INT that entered -- the address
+   -- the shadow computed from that INT's own encoding, cycles earlier and
+   -- independently of anything write.vhd latched.
+   f_rti_return : assert always
+      {f_rti_retires = '1' and f_irq_active = '1'}
+      |-> {fetch_valid_o = '1' and fetch_addr_o = f_saved_r15};
+
+   -- ...and it must put back the Status Register that INT saved, through the
+   -- ORDINARY register port. Both write ports fire on this cycle -- reg_r14_we_o
+   -- is just inst_done_o, so every retiring instruction asserts it -- and
+   -- registers.vhd resolves that in favour of the ordinary one. Writing the
+   -- restore to the Status Register port instead would be silently overridden
+   -- by the SR the service routine left behind, which is the whole point.
+   f_rti_restore_r14 : assert always
+      {f_rti_retires = '1' and f_irq_active = '1'}
+      |-> {reg_we_o = '1' and reg_addr_o = 14 and reg_val_o = f_saved_r14};
+
+   -- (5) INTERRUPTS DO NOT NEST. An INT retiring inside a service routine is
+   -- the other rogue case, and it must not transfer control -- doc/interrupts.md
+   -- specifies a halt, and "does not jump anywhere" is the part of that which
+   -- holds both today and afterwards, exactly as for the rogue RTI below.
+   --
+   -- This one has to be asserted rather than left to f_rti_return, and the
+   -- distinction is worth recording because a mutation found it. p_irq latches
+   -- the saved pair on ENTRY only, so a design that wrongly nested would still
+   -- leave the outer return address intact and still return to it correctly:
+   -- the round-trip property passes, and the only visible damage is the
+   -- redirect itself. Nothing else in this file forbids it.
+   --
+   -- Restricted to the destination forms that cannot raise fetch_valid_o for
+   -- an unrelated reason: register mode writes back no pointer, and the
+   -- immediate form is not a memory operand at all, so neither can reach the
+   -- R15-write or ptr_sr terms of that signal.
+   f_int_no_nest_reg : assert always
+      {f_int_modes = '1' and f_irq_active = '1' and
+       c_dst_mode = work.cpu_constants.C_MODE_REG}
+      |-> {fetch_valid_o = '0'};
+
+   f_int_no_nest_imm : assert always
+      {f_int_retires = '1' and f_irq_active = '1' and f_int_imm = '1'}
+      |-> {fetch_valid_o = '0'};
+
+   -- (6) A ROGUE RTI MUST NOT REDIRECT. irq_r15 has no reset, so an RTI
+   -- outside a service routine that redirected would send FETCH to whatever
+   -- the latch happens to hold -- an X in simulation, a stale return address
+   -- in hardware. doc/interrupts.md specifies a halt here; what is asserted is
+   -- the part that holds today and will still hold then, namely that it does
+   -- not jump anywhere.
+   --
+   -- Restricted to the encoding the assembler actually emits, 0xE040. A formal
+   -- trace can present any bit pattern in the low six bits, and those make RTI
+   -- a pointer-modifying instruction whose flush is governed by the properties
+   -- further up; that is a decode question, not an interrupt one.
+   f_rti_rogue_no_redirect : assert always
+      {f_rti_retires = '1' and f_irq_active = '0' and
+       prep2wr_stage.inst(5 downto 0) = "000000"}
+      |-> {fetch_valid_o = '0'};
+
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
@@ -1088,6 +1299,59 @@ vunit i_cpu_main(cpu_main(synthesis))
                                  mem_req_valid_o = '1' and
                                  mem_req_op_o(work.cpu_constants.C_MEM_WRITE) = '1' and
                                  fetch_valid_o = '0'};
+
+   -- Non-vacuity of the software-interrupt properties.
+   --
+   -- The round-trip covers are single-state rather than sequences, and that is
+   -- not a shortcut: f_irq_active is set by exactly one thing, an INT retiring
+   -- outside a service routine, so "an RTI retiring with f_irq_active high"
+   -- cannot be witnessed without an INT earlier in the same trace. The witness
+   -- IS the round trip.
+   c_int_reg : cover {f_int_modes = '1' and f_irq_active = '0' and
+                      c_dst_mode = work.cpu_constants.C_MODE_REG};
+   c_int_mem : cover {f_int_modes = '1' and f_irq_active = '0' and
+                      c_dst_mode /= work.cpu_constants.C_MODE_REG};
+   c_int_imm : cover {f_int_retires = '1' and f_irq_active = '0' and f_int_imm = '1'};
+
+   -- The pointer modes, which is what test/prog_int_sw.asm TEST_1D and TEST_1E
+   -- cover in simulation.
+   c_int_ptr : cover {f_int_beat = '1' and prep2wr_ready = '1' and
+                      prep2wr_stage.microcode(work.cpu_constants.C_REG_MOD_DST) = '1' and
+                      (c_dst_mode = work.cpu_constants.C_MODE_POST or
+                       c_dst_mode = work.cpu_constants.C_MODE_PRE)};
+
+   c_rti_return : cover {f_rti_retires = '1' and f_irq_active = '1'};
+
+   -- Both return-address computations, and this pair is load-bearing in the
+   -- same way c_addc_carry_0/1 are. f_int_ret_addr is addr+2 for the two-word
+   -- "INT <addr>" and addr+1 for every other form; if only one of them were
+   -- ever reachable at an RTI, a design that always returned to the same offset
+   -- would satisfy f_rti_return. c_int_imm covers the two-word form ENTERING,
+   -- which is not the same claim.
+   c_rti_return_1word : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_2w = '0'};
+   c_rti_return_2word : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_2w = '1'};
+
+   -- The RTI whose restored Status Register moves the register bank, i.e. the
+   -- scenario test/prog_int_sw.asm TEST_7 pins in simulation. This is the
+   -- cover that gives f_flush_on_bank_change and f_hold_on_bank_change teeth
+   -- over RTI: those properties trigger on "an ordinary write to R14 that
+   -- changes the upper byte", which is exactly what the restore is, so they
+   -- already cover the return path -- but only if it is reachable.
+   c_rti_bank_change : cover {f_rti_retires = '1' and f_irq_active = '1' and
+                              f_saved_r14(15 downto 8) /= prep2wr_stage.r14(15 downto 8)};
+
+   -- Interrupts do not nest, and the second of these is the one that matters:
+   -- an RTI returning correctly AFTER a rogue INT was refused. The shadow
+   -- leaves f_saved_r15 alone on a nested INT, so if the design latched a new
+   -- return address there, f_rti_return fails on this trace and nowhere else.
+   c_int_nested       : cover {f_int_retires = '1' and f_irq_active = '1'};
+   c_int_nested_reg   : cover {f_int_modes = '1' and f_irq_active = '1' and
+                               c_dst_mode = work.cpu_constants.C_MODE_REG};
+   c_int_nested_imm   : cover {f_int_retires = '1' and f_irq_active = '1' and f_int_imm = '1'};
+   c_rti_after_nested : cover {f_rti_retires = '1' and f_irq_active = '1' and f_nested_int = '1'};
+
+   c_rti_rogue : cover {f_rti_retires = '1' and f_irq_active = '0' and
+                        prep2wr_stage.inst(5 downto 0) = "000000"};
 
 
    ----------------------------------------------
