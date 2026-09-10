@@ -130,18 +130,24 @@ begin
          when C_OPCODE_AND  => res_other <= "0" & (dst_data_i and src_data_i);
          when C_OPCODE_OR   => res_other <= "0" & (dst_data_i or src_data_i);
          when C_OPCODE_XOR  => res_other <= "0" & (dst_data_i xor src_data_i);
-         -- The four arms below all fall through to res_other's default of
-         -- "0" & src_data_i. They used to be marked TBD; they are not
+         -- The three "null" arms below all fall through to res_other's default
+         -- of "0" & src_data_i. They used to be marked TBD; they are not
          -- unfinished. Each was checked by forcing res_other to a different
          -- value in that arm alone and re-running the whole test suite:
          --
          --   CMP  -- don't care. The microcode issues neither REG_WRITE nor
          --           MEM_WRITE for a CMP, so res_data is never consumed. Only
          --           the flags matter, and those come from alu_flags.
-         --   CTRL -- don't care, for the same reason: entry 0 of the microcode
-         --           ROM writes nothing. INCRB/DECRB reach R14 through
-         --           alu_flags, and HALT writes nothing at all. Exception is the
-         --           "INT <addr>" instruction, which uses the destination field.
+         --   CTRL -- LOAD-BEARING, for "INT <addr>" alone. WRITE takes the
+         --           service routine's address off alu_res_val (see p_irq_sw
+         --           in write.vhd), and INT carries it in the DESTINATION
+         --           field, so this arm has to select dst_data_i rather than
+         --           the default's src_data_i. It stays a don't-care for the
+         --           rest of the opcode -- HALT/RTI/INCRB/DECRB take entry 0
+         --           of the microcode ROM, which writes nothing, and INCRB and
+         --           DECRB reach R14 through alu_flags instead. Only INT is
+         --           given C_READ_DST by decode.vhd, so dst_data_i is only
+         --           meaningful here for INT in the first place.
          --   JMP  -- LOAD-BEARING. Do not give this arm a value of its own.
          --           DECODE rewrites a JMP's microcode to carry REG_WRITE with
          --           res_reg = R15 (see the C_OPCODE_JMP special case in

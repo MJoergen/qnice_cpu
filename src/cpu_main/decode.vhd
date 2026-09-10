@@ -61,11 +61,13 @@ architecture synthesis of decode is
       C_OPCODE_JMP  => '0',
       others        => '1');
 
-   -- Note: The "INT <addr>" control instruction uses the destination field.
+   -- CTRL is '0' here for the whole opcode and refined by is_int below: only
+   -- "INT <addr>" reads the destination field. See reads_from_dst.
    constant C_READS_FROM_DST : std_logic_vector(15 downto 0) := (
       C_OPCODE_MOVE => '0',
       C_OPCODE_SWAP => '0',
       C_OPCODE_NOT  => '0',
+      C_OPCODE_CTRL => '0',
       C_OPCODE_JMP  => '0',
       others        => '1');
 
@@ -90,6 +92,7 @@ architecture synthesis of decode is
    signal uses_bank   : std_logic; -- The instruction at this stage's input
    signal uses_bank_d : std_logic; -- The instruction in the output register
    signal is_crb      : std_logic; -- Is the instruction at the input INCRB/DECRB?
+   signal is_int      : std_logic; -- Is the instruction at the input INT?
    signal is_sub      : std_logic; -- Is the instruction at the input ASUB/RSUB?
    signal ptr_sr      : std_logic; -- Does it auto-modify a pointer through R14/R15?
    signal src_auto    : std_logic; -- Source mode is @R++ or @--R
@@ -148,7 +151,22 @@ begin
                     '0';
 -- vsg_on whitespace_100
 
-   reads_from_dst <= C_READS_FROM_DST (to_integer(ic_data_i(R_OPCODE)));
+   -- Is this an "INT <addr>"? The one CTRL instruction with a destination
+   -- operand, hence the one that can consume a banked value.
+   is_int <= '1' when ic_data_i(R_OPCODE) = C_OPCODE_CTRL and
+                      ic_data_i(R_CTRL_CMD) = C_CTRL_INT else
+             '0';
+
+   -- CTRL is the one opcode whose use of the destination field is not uniform
+   -- across the opcode: "INT <addr>" takes its target from there, while
+   -- HALT/RTI/INCRB/DECRB ignore it entirely -- and they all encode it as R0
+   -- in register mode, which is a BANKED register. So giving the whole opcode
+   -- a '1' in C_READS_FROM_DST puts INCRB/DECRB into uses_bank, and a bank
+   -- switch immediately followed by another one then costs a pipeline flush
+   -- that it does not need (test/prog_hazard.asm H18; +22 cycles over that
+   -- program). Refine it here instead. is_int is '0' for every other opcode,
+   -- so the "or" is exact rather than merely safe.
+   reads_from_dst <= C_READS_FROM_DST (to_integer(ic_data_i(R_OPCODE))) or is_int;
    writes_to_dst  <= C_WRITES_TO_DST  (to_integer(ic_data_i(R_OPCODE)));
    src_memory     <= '0' when (ic_data_i(R_SRC_MODE) = C_MODE_REG or immediate_src = '1') else has_src_operand;
    dst_memory     <= '0' when (ic_data_i(R_DST_MODE) = C_MODE_REG or immediate_dst = '1') else has_dst_operand;
