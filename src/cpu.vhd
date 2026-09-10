@@ -36,6 +36,11 @@ entity cpu is
       wbd_ack_i   : in  std_logic;
       wbd_data_i  : in  std_logic_vector(15 downto 0);
 
+      -- From external device
+      irq_valid_i : in  std_logic;
+      irq_ready_o : out std_logic;
+      irq_addr_i  : in  std_logic_vector(15 downto 0);
+
       inst_done_o : out std_logic;
 
       -- Asserted from the moment a HALT instruction retires until the next reset
@@ -293,6 +298,9 @@ begin
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i,
+         irq_valid_i     => irq_valid_i,
+         irq_ready_o     => irq_ready_o,
+         irq_addr_i      => irq_addr_i,
          ic_valid_i      => icache2decode_valid_gated,
          ic_ready_o      => icache2decode_ready,
          ic_double_i     => icache2decode_double_valid,

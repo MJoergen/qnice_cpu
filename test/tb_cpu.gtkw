@@ -1,23 +1,24 @@
 [*]
-[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
-[*] Mon Sep  7 09:48:25 2026
+[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
+[*] Thu Sep 10 09:31:51 2026
 [*]
-[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/test/tb_cpu_prog_eae.ghw"
-[dumpfile_mtime] "Mon Sep  7 09:45:34 2026"
-[dumpfile_size] 823657
-[savefile] "/home/mike/git/MJoergen/qnice_cpu/test/tb_cpu.gtkw"
-[timestart] 301900000
-[size] 1853 1132
+[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/test/tb_cpu_prog_int_sw.ghw"
+[dumpfile_mtime] "Thu Sep 10 08:21:53 2026"
+[dumpfile_size] 999130
+[savefile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/test/tb_cpu.gtkw"
+[timestart] 3373500000
+[size] 1853 1127
 [pos] 27 14
-*-25.143370 395100000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-24.478569 3434700000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_cpu.
 [treeopen] top.tb_cpu.i_system.
+[treeopen] top.tb_cpu.i_system.i_cpu.
 [treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.
 [treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.
-[treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_prepare.
+[treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.
+[treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.
 [treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.
-[treeopen] top.tb_cpu.i_system.i_eae.
 [sst_width] 367
 [signals_width] 404
 [sst_expanded] 1
@@ -152,9 +153,30 @@ top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_rd_en_o
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_src_addr_o[3:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_src_addr_o[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_src_addr_o[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_src_addr_o[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_src_addr_o[0]
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_dst_addr_o[3:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_dst_addr_o[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_dst_addr_o[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_dst_addr_o[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.reg_dst_addr_o[0]
 @c00200
--prep_stage_o
+-seq_stage_o
+@22
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[35:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[35] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[34] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[33] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[32] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[31] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[30] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[29] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[28] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[27] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[26] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[25] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[24] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[23] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[22] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[21] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[20] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[19] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[18] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[17] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[16] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.microcodes[0]
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.addr[0]
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.inst[0]
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.immediate[0]
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_addr[3:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_addr[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_addr[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_addr[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_addr[0]
+@28
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_mode[1:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_mode[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_mode[0]
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.src_imm
+@22
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_addr[3:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_addr[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_addr[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_addr[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_addr[0]
+@28
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_mode[1:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_mode[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_mode[0]
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.dst_imm
+@22
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.res_reg[3:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.res_reg[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.res_reg[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.res_reg[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.res_reg[0]
+@28
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.is_crb
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.is_sub
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.ptr_sr
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.early_jmp
 @1401200
--prep_stage_o
+-seq_stage_o
 -DECODE
 @c00200
 -PREPARE
@@ -254,7 +276,7 @@ top.tb_cpu.i_system.i_cpu.i_memory.wb_ack_i
 #{top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[15:0]} top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[15] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[14] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[13] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[12] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[11] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[10] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[9] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[8] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[7] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[6] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[5] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[4] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[3] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[2] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[1] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[0]
 @1401200
 -memory
-@c00200
+@800200
 -WRITE
 @28
 [color] 2
@@ -264,6 +286,7 @@ top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_ready_o
 @c00200
 -prep_stage_i
 @22
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[11:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.microcode[0]
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.addr[0]
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.inst[0]
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.prep_stage_i.immediate[0]
@@ -299,7 +322,7 @@ top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.mem_req_ready_i
 top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_we_o
 @22
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[0]
-@28
+@29
 [color] 2
 top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_we_o
 @22
@@ -316,19 +339,14 @@ top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.update_reg
 @22
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_val[0]
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[0]
-@1401200
--WRITE
 @28
-top.tb_cpu.i_system.i_eae.clk_i
-top.tb_cpu.i_system.i_eae.rst_i
-top.tb_cpu.i_system.i_eae.cyc_i
-top.tb_cpu.i_system.i_eae.stb_i
-top.tb_cpu.i_system.i_eae.stall_o
-top.tb_cpu.i_system.i_eae.we_i
-top.tb_cpu.i_system.i_eae.ack_o
-#{top.tb_cpu.i_system.i_eae.addr_i[2:0]} top.tb_cpu.i_system.i_eae.addr_i[2] top.tb_cpu.i_system.i_eae.addr_i[1] top.tb_cpu.i_system.i_eae.addr_i[0]
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_active
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_active_reg
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_rogue
+top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_valid
 @22
-#{top.tb_cpu.i_system.i_eae.wr_data_i[15:0]} top.tb_cpu.i_system.i_eae.wr_data_i[15] top.tb_cpu.i_system.i_eae.wr_data_i[14] top.tb_cpu.i_system.i_eae.wr_data_i[13] top.tb_cpu.i_system.i_eae.wr_data_i[12] top.tb_cpu.i_system.i_eae.wr_data_i[11] top.tb_cpu.i_system.i_eae.wr_data_i[10] top.tb_cpu.i_system.i_eae.wr_data_i[9] top.tb_cpu.i_system.i_eae.wr_data_i[8] top.tb_cpu.i_system.i_eae.wr_data_i[7] top.tb_cpu.i_system.i_eae.wr_data_i[6] top.tb_cpu.i_system.i_eae.wr_data_i[5] top.tb_cpu.i_system.i_eae.wr_data_i[4] top.tb_cpu.i_system.i_eae.wr_data_i[3] top.tb_cpu.i_system.i_eae.wr_data_i[2] top.tb_cpu.i_system.i_eae.wr_data_i[1] top.tb_cpu.i_system.i_eae.wr_data_i[0]
-#{top.tb_cpu.i_system.i_eae.rd_data_o[15:0]} top.tb_cpu.i_system.i_eae.rd_data_o[15] top.tb_cpu.i_system.i_eae.rd_data_o[14] top.tb_cpu.i_system.i_eae.rd_data_o[13] top.tb_cpu.i_system.i_eae.rd_data_o[12] top.tb_cpu.i_system.i_eae.rd_data_o[11] top.tb_cpu.i_system.i_eae.rd_data_o[10] top.tb_cpu.i_system.i_eae.rd_data_o[9] top.tb_cpu.i_system.i_eae.rd_data_o[8] top.tb_cpu.i_system.i_eae.rd_data_o[7] top.tb_cpu.i_system.i_eae.rd_data_o[6] top.tb_cpu.i_system.i_eae.rd_data_o[5] top.tb_cpu.i_system.i_eae.rd_data_o[4] top.tb_cpu.i_system.i_eae.rd_data_o[3] top.tb_cpu.i_system.i_eae.rd_data_o[2] top.tb_cpu.i_system.i_eae.rd_data_o[1] top.tb_cpu.i_system.i_eae.rd_data_o[0]
+#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[0]
+@1000200
+-WRITE
 [pattern_trace] 1
 [pattern_trace] 0

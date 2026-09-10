@@ -570,7 +570,7 @@ rather than last.
 
 ## Test cases
 
-Written as self-checking `.asm` in the existing style: a status word to `0x1FFF`
+Written as self-checking `.asm` in the existing style: a status word to `0x7FFF`
 just before the final `HALT`, with every failed sub-test branching to its own
 `HALT`. See [test/README.md](../test/README.md).
 

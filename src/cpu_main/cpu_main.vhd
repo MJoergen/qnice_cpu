@@ -23,6 +23,11 @@ entity cpu_main is
       clk_i           : in  std_logic;
       rst_i           : in  std_logic;
 
+      -- From external device
+      irq_valid_i     : in  std_logic;
+      irq_ready_o     : out std_logic;
+      irq_addr_i      : in  std_logic_vector(15 downto 0);
+
       -- From ICACHE
       ic_valid_i      : in  std_logic;
       ic_ready_o      : out std_logic;
@@ -201,6 +206,9 @@ begin
       port map (
          clk_i           => clk_i,
          rst_i           => rst_i,
+         irq_valid_i     => irq_valid_i,
+         irq_ready_o     => irq_ready_o,
+         irq_addr_i      => irq_addr_i,
          prep_valid_i    => prep2wr_valid,
          prep_ready_o    => prep2wr_ready,
          prep_stage_i    => prep2wr_stage,

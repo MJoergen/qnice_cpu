@@ -106,6 +106,9 @@ begin
          wbd_dat_o   => wbd_data_wr,
          wbd_ack_i   => wbd_ack,
          wbd_data_i  => wbd_data_rd,
+         irq_valid_i => '0',                 -- TBD
+         irq_ready_o => open,                -- TBD
+         irq_addr_i  => (others => '0'),     -- TBD
          halt_o      => halt
       ); -- i_cpu
 

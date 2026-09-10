@@ -16,6 +16,11 @@ entity write is
       clk_i           : in  std_logic;
       rst_i           : in  std_logic;
 
+      -- From external device
+      irq_valid_i     : in  std_logic;
+      irq_ready_o     : out std_logic;
+      irq_addr_i      : in  std_logic_vector(15 downto 0);
+
       -- From PREPARE
       prep_valid_i    : in  std_logic;
       prep_ready_o    : out std_logic;
@@ -44,7 +49,7 @@ entity write is
       inst_done_o     : out std_logic;
 
       -- Asserted for one clock cycle when a HALT instruction retires.
-      halt_o          : out std_logic                        -- combinational
+      halt_o          : out std_logic                         -- combinational
    );
 end entity write;
 
@@ -68,8 +73,79 @@ architecture synthesis of write is
    signal smc_push_delta : std_logic_vector(15 downto 0);
    signal smc_push_hit   : std_logic;
 
+   -- Interrupt support, combinational signals
+   signal irq_active_s   : std_logic;                         -- Are we entering an interrupt service routine?
+   signal irq_rogue_s    : std_logic;                         -- Halt the CPU when a rogue interrupt occurs
+   signal irq_sw_addr_s  : std_logic_vector(15 downto 0);     -- New value for PC
+   signal irq_sw_valid_s : std_logic;                         -- irq_sw_addr_s is valid
+   -- Interrupt support, state information (registered)
+   signal irq_active     : std_logic;                         -- State bit: Are we in an interrupt service routine?
+   signal irq_r14        : std_logic_vector(15 downto 0);     -- Stored value of R14
+   signal irq_r15        : std_logic_vector(15 downto 0);     -- Stored value of R15
 
 begin
+
+   -- Handle software interrupt request.
+   -- This is a combinational process
+   -- The irq_sw_valid_s is pulsed when entering and/or leaving an interrupt service routine.
+   -- It controls updating R14 (in p_reg), R15 (in fetch_addr_o and fetch_valid_o), as
+   -- well as storing the old values of R14 and R15 (in p_irq).
+   p_irq_sw : process (all)
+   begin
+      -- Set defaults, to avoid latches
+      irq_active_s   <= irq_active; -- irq_active is the registered copy of irq_active_s
+      irq_rogue_s    <= '0';        -- TODO: Not currently used
+      irq_sw_addr_s  <= (others => '0');
+      irq_sw_valid_s <= '0';
+
+      if inst_done_o = '1' and irq_active = '0' then
+         if prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INT then
+            -- Entering an interrupt service routine.
+            irq_active_s   <= '1';
+            -- Jump to destination
+            irq_sw_addr_s  <= alu_res_val;
+            irq_sw_valid_s <= '1';
+         end if;
+
+         if prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_RTI then
+            irq_rogue_s <= '1';
+         end if;
+      end if;
+
+      if inst_done_o = '1' and irq_active = '1' then
+         if prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INT then
+            irq_rogue_s <= '1';
+         end if;
+
+         if prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_RTI then
+            -- Leaving an interrupt service routine.
+            irq_active_s   <= '0';
+            -- Return to previous location
+            irq_sw_addr_s  <= irq_r15;
+            irq_sw_valid_s <= '1';
+         end if;
+      end if;
+
+      if rst_i = '1' then
+         irq_active_s   <= '0';
+         irq_rogue_s    <= '0';
+         irq_sw_valid_s <= '0';
+      end if;
+   end process p_irq_sw;
+
+   p_irq : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         -- Store new interrupt state
+         irq_active <= irq_active_s;
+         -- Store R14 and R15 when accepting the interrupt request
+         if irq_sw_valid_s = '1' then
+            irq_r14 <= prep_stage_i.r14;
+            irq_r15 <= next_pc;
+         end if;
+      end if;
+   end process p_irq;
+
 
    prep_ready_o <= mem_req_ready_i when or(mem_req_op_o) = '1' else '1';
 
@@ -148,6 +224,8 @@ begin
 
             assert not (prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
                         prep_stage_i.inst(R_CTRL_CMD) /= C_CTRL_HALT and
+                        prep_stage_i.inst(R_CTRL_CMD) /= C_CTRL_INT and
+                        prep_stage_i.inst(R_CTRL_CMD) /= C_CTRL_RTI and
                         prep_stage_i.inst(R_CTRL_CMD) /= C_CTRL_INCRB and
                         prep_stage_i.inst(R_CTRL_CMD) /= C_CTRL_DECRB)
                report "UNIMPLEMENTED instruction at address 0x" &
@@ -217,6 +295,13 @@ begin
          end if;
       end if;
 
+      -- Restore R14 when returning from interrupt
+      if irq_sw_valid_s = '1' and irq_active = '1' then
+         reg_addr_o <= to_stdlogicvector(C_REG_SR, 4);
+         reg_val_o  <= irq_r14;
+         reg_we_o   <= '1';
+      end if;
+
       if rst_i = '1' then
          reg_addr_o <= to_stdlogicvector(C_REG_PC, 4);
          reg_val_o  <= (others => '0');
@@ -233,7 +318,8 @@ begin
    wr_r15 <= and(reg_addr_o) and reg_we_o;
 
 
-   fetch_addr_o <= reg_val_o when wr_r15 = '1' else
+   fetch_addr_o <= irq_sw_addr_s when irq_sw_valid_s = '1' else
+                   reg_val_o when wr_r15 = '1' else
                    next_pc;
 
 
@@ -608,6 +694,7 @@ begin
    fetch_valid_o <= (reg_we_o and and(reg_addr_o(3 downto 1)) and not wr_early
                      and prep_stage_i.microcode(C_LAST)) or
                     rst_i or
+                    irq_sw_valid_s or
                     (inst_done_o and prep_stage_i.ptr_sr) or
                     (bank_switch_o and bank_stale_i) or
                     (inst_done_o and prep_stage_i.microcode(C_MEM_WRITE) and smc_hit) or

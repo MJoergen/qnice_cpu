@@ -61,11 +61,11 @@ architecture synthesis of decode is
       C_OPCODE_JMP  => '0',
       others        => '1');
 
+   -- Note: The "INT <addr>" control instruction uses the destination field.
    constant C_READS_FROM_DST : std_logic_vector(15 downto 0) := (
       C_OPCODE_MOVE => '0',
       C_OPCODE_SWAP => '0',
       C_OPCODE_NOT  => '0',
-      C_OPCODE_CTRL => '0',
       C_OPCODE_JMP  => '0',
       others        => '1');
 

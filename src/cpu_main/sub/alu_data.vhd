@@ -140,7 +140,8 @@ begin
          --           the flags matter, and those come from alu_flags.
          --   CTRL -- don't care, for the same reason: entry 0 of the microcode
          --           ROM writes nothing. INCRB/DECRB reach R14 through
-         --           alu_flags, and HALT writes nothing at all.
+         --           alu_flags, and HALT writes nothing at all. Exception is the
+         --           "INT <addr>" instruction, which uses the destination field.
          --   JMP  -- LOAD-BEARING. Do not give this arm a value of its own.
          --           DECODE rewrites a JMP's microcode to carry REG_WRITE with
          --           res_reg = R15 (see the C_OPCODE_JMP special case in
@@ -160,7 +161,7 @@ begin
          --           proves only that nothing exercises 0xD.
          when C_OPCODE_CMP  => null;
          when C_OPCODE_RES  => null;
-         when C_OPCODE_CTRL => null;
+         when C_OPCODE_CTRL => res_other <= "0" & dst_data_i;
          when C_OPCODE_JMP  => null;
          when others    => null;
       end case;
