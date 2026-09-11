@@ -2,8 +2,11 @@
 -- This module is only meant to be used in simulation. It will
 -- not be used during synthesis.
 --
+-- irq_addr_o is only valid when irq_valid_o is asserted. It is deliberately
+-- scrambled when irq_valid_o is de-asserted.
+--
 -- Register Map:
--- 0xBF00 : Countdown number of clock cycles until interrupt is asserted After count-down,
+-- 0xBF00 : Countdown number of clock cycles until interrupt is asserted. After count-down,
 --          interrupt line remains asserted until accepted, and is then released. Counter
 --          reads back as zero.
 -- 0xBF01 : Address of interrupt service routine. Initialized to zero, which happens to be
@@ -53,21 +56,15 @@ architecture simulation of interrupt is
 
 begin
 
-   p_checks : process (all)
+   p_checks : process (clk_i)
    begin
       if rising_edge(clk_i) then
          irq_ready_d <= irq_ready_i;
 
-         if irq_valid_o = '0' then
-            assert irq_ready_i = '0'
-               report "ERROR: Stray irq_ready_i"
-                  severity failure;
-         end if;
-
          if irq_ready_d = '1' then
             assert irq_ready_i = '0'
                report "ERROR: Duplicate irq_ready_i"
-                  severity failure;
+               severity failure;
          end if;
       end if;
    end process p_checks;
@@ -80,16 +77,20 @@ begin
          if irq_ready_i = '1' then
             assert irq_valid_o = '1'
                report "ERROR: Stray irq_ready_i"
-                  severity failure;
+               severity failure;
+            end if;
+
             irq_accept  <= irq_accept + 1;
             irq_valid_o <= '0';
-            irq_addr_o  <= (others => '0');
+            irq_addr_o  <= (others => '1'); -- Deliberately scramble address after accept
          end if;
 
          -- Count-down interrupt timer.
          -- CPU writes are further down in this process, and therefore
          -- overrule anything here.
-         if irq_timer > 0 then
+         -- NOTE: To avoid race conditions, the counter only decrements while
+         -- irq_valid_o is 0.
+         if irq_timer > 0 and irq_valid_o = '0' then
             irq_timer <= irq_timer - 1;
             if irq_timer = 1 then
                -- Counter transitioning from 1 to 0 asserts the interrupt line.

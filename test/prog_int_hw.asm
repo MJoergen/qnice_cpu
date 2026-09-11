@@ -6,7 +6,7 @@
 ; in doc/interrupts.md.
 ;
 ; Register Map for Interrupt Generator (copied verbatim from test/interrupt.vhd):
-; 0xBF00 : Countdown number of clock cycles until interrupt is asserted After count-down,
+; 0xBF00 : Countdown number of clock cycles until interrupt is asserted. After count-down,
 ;          interrupt line remains asserted until accepted, and is then released. Counter
 ;          reads back as zero.
 ; 0xBF01 : Address of interrupt service routine. Initialized to zero, which happens to be
@@ -25,6 +25,7 @@
 INT_COUNT            .EQU    0xBF00
 INT_ADDR             .EQU    0xBF01
 INT_STAT             .EQU    0xBF02
+INT_ACCEPT           .EQU    0xBF03
 
 EAE_REG_OPERAND_0    .EQU    0xFF18
 EAE_REG_OPERAND_1    .EQU    0xFF19
@@ -239,6 +240,7 @@ TEST6       MOVE    INT_ADDR, R0
 TEST6A      MOVE    INT_ADDR, R0
             MOVE    INT_COUNT, R1
             MOVE    INT_STAT, R2
+            MOVE    DATA, R3
             MOVE    DATA1, R8
             MOVE    DATA2, R9
             MOVE    ISR6A, @R0              ; Set ISR address
@@ -325,23 +327,25 @@ L_6B_2      CMP     0x0002, @R3             ; Verify ISR was entered
 
             MOVE    R14, R9                 ; Store register bank
             MOVE    R0, R10                 ; Store old value
-            NOT     R0, R0                  ; Clobber R0 with wrong value
             ADD     0x0600, R14             ; Change register bank
+            NOT     R10, R0                 ; Clobber R0 with wrong value
             MOVE    INT_COUNT, R1
             MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
             MOVE    R9, R14                 ; Revert register bank
             CMP     R10, R0                 ; Verify register bank reverted correctly
+            RBRA    ERR6B, !Z
             CMP     0x0003, @R3             ; Verify ISR was entered
             RBRA    ERR6B, !Z
 
             MOVE    R14, R9                 ; Store register bank
             MOVE    R0, R10                 ; Store old value
-            NOT     R0, R0                  ; Clobber R0 with wrong value
             ADD     0x0500, R14             ; Change register bank
+            NOT     R0, R0                  ; Clobber R0 with wrong value
             MOVE    INT_COUNT, R1
             MOVE    0x0002, @R1             ; Request interrupt in two clock cycles
             MOVE    R9, R14                 ; Revert register bank
             CMP     R10, R0                 ; Verify register bank reverted correctly
+            RBRA    ERR6B, !Z
             CMP     0x0004, @R3             ; Verify ISR was entered
             RBRA    ERR6B, !Z
 
@@ -395,7 +399,7 @@ TEST7       MOVE    0xF000, R14             ; Clobbered register bank
             CMP     INT_COUNT, R1           ; Verify banked register is correct
             RBRA    ERR7, !Z
 
-            RBRA    SUCCESS, 1              ; End of Test 7.
+            RBRA    TOTAL, 1               ; End of Test 7.
 
 ISR7        MOVE    0xF000, R14             ; Clobber the register bank
             MOVE    R14, R0                 ; Write to banked register
@@ -405,12 +409,27 @@ ISR7        MOVE    0xF000, R14             ; Clobber the register bank
 
 ERR7        HALT
 
+TOTAL       MOVE    INT_ACCEPT, R0          ; Verify total number of interrupts
+                                            ; acccepted by CPU
+            CMP     10, @R0
+            RBRA    SUCCESS, Z
+            HALT
+
 ;
 ; Success. All test cases have passed. Write 0 to the test status register at 0x7FFF.
 ;
 SUCCESS     MOVE    0x7FFF, R0
             MOVE    0x0000, @R0
+; Final test: Fire an interrupt after the halt
+            MOVE    INT_ADDR, R0
+            MOVE    INT_COUNT, R1
+            MOVE    INT_STAT, R2
+            MOVE    ISR_HALT, @R0           ; Set ISR address
+            MOVE    0x0005, @R1             ; Request interrupt in a few clock cycles
             HALT
+            HALT
+ISR_HALT    RBRA    ISR_HALT, 1
+
 
 DATA        .DW     0x0000
 DATA1       .DW     0x0000
