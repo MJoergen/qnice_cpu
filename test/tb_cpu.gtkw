@@ -1,19 +1,20 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Thu Sep 10 09:31:51 2026
+[*] Fri Sep 11 11:38:28 2026
 [*]
-[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/test/tb_cpu_prog_int_sw.ghw"
-[dumpfile_mtime] "Thu Sep 10 08:21:53 2026"
-[dumpfile_size] 999130
+[dumpfile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/test/tb_cpu_prog_int_hw.ghw"
+[dumpfile_mtime] "Fri Sep 11 11:37:23 2026"
+[dumpfile_size] 845027
 [savefile] "/home/mfj/git/PRIVATE/MJoergen/qnice_cpu/test/tb_cpu.gtkw"
-[timestart] 3373500000
+[timestart] 0
 [size] 1853 1127
 [pos] 27 14
-*-24.478569 3434700000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-27.730932 3434700000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] top.
 [treeopen] top.tb_cpu.
 [treeopen] top.tb_cpu.i_system.
-[treeopen] top.tb_cpu.i_system.i_cpu.
+[treeopen] top.tb_cpu.i_system.gen_sim.
+[treeopen] top.tb_cpu.i_system.gen_sim.i_interrupt.
 [treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.
 [treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.
 [treeopen] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_decode.seq_stage_o.
@@ -276,7 +277,7 @@ top.tb_cpu.i_system.i_cpu.i_memory.wb_ack_i
 #{top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[15:0]} top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[15] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[14] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[13] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[12] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[11] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[10] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[9] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[8] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[7] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[6] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[5] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[4] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[3] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[2] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[1] top.tb_cpu.i_system.i_cpu.i_memory.wb_data_i[0]
 @1401200
 -memory
-@800200
+@c00200
 -WRITE
 @28
 [color] 2
@@ -322,7 +323,7 @@ top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.mem_req_ready_i
 top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_we_o
 @22
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_r14_o[0]
-@29
+@28
 [color] 2
 top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.reg_we_o
 @22
@@ -341,12 +342,32 @@ top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.update_reg
 #{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.alu_res_flags[0]
 @28
 top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_active
-top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_active_reg
-top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_rogue
-top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_valid
-@22
-#{top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[15:0]} top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[15] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[14] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[13] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[12] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[11] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[10] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[9] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[8] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[7] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[6] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[5] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[4] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[3] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[2] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[1] top.tb_cpu.i_system.i_cpu.i_cpu_main.i_write.irq_sw_addr[0]
-@1000200
+@1401200
 -WRITE
+@800200
+-interrupt
+@28
+top.tb_cpu.i_system.gen_sim.i_interrupt.clk_i
+top.tb_cpu.i_system.gen_sim.i_interrupt.rst_i
+top.tb_cpu.i_system.gen_sim.i_interrupt.cyc_i
+top.tb_cpu.i_system.gen_sim.i_interrupt.stb_i
+top.tb_cpu.i_system.gen_sim.i_interrupt.stall_o
+#{top.tb_cpu.i_system.gen_sim.i_interrupt.addr_i[2:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.addr_i[2] top.tb_cpu.i_system.gen_sim.i_interrupt.addr_i[1] top.tb_cpu.i_system.gen_sim.i_interrupt.addr_i[0]
+top.tb_cpu.i_system.gen_sim.i_interrupt.we_i
+@22
+#{top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[15:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[15] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[14] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[13] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[12] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[11] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[10] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[9] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[8] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[7] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[6] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[5] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[4] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[3] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[2] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[1] top.tb_cpu.i_system.gen_sim.i_interrupt.wr_data_i[0]
+@28
+top.tb_cpu.i_system.gen_sim.i_interrupt.ack_o
+@22
+#{top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[15:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[15] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[14] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[13] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[12] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[11] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[10] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[9] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[8] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[7] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[6] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[5] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[4] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[3] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[2] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[1] top.tb_cpu.i_system.gen_sim.i_interrupt.rd_data_o[0]
+@28
+top.tb_cpu.i_system.gen_sim.i_interrupt.irq_valid_o
+top.tb_cpu.i_system.gen_sim.i_interrupt.irq_ready_i
+@22
+#{top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[15:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[15] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[14] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[13] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[12] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[11] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[10] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[9] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[8] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[7] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[6] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[5] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[4] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[3] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[2] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[1] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr_o[0]
+#{top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[15:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[15] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[14] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[13] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[12] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[11] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[10] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[9] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[8] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[7] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[6] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[5] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[4] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[3] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[2] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[1] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_timer[0]
+#{top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[15:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[15] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[14] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[13] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[12] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[11] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[10] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[9] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[8] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[7] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[6] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[5] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[4] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[3] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[2] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[1] top.tb_cpu.i_system.gen_sim.i_interrupt.irq_addr[0]
+@1000200
+-interrupt
 [pattern_trace] 1
 [pattern_trace] 0

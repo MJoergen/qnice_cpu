@@ -6,10 +6,10 @@ library ieee;
 -- Instruction Memory and Data Memory interfaces.
 --
 -- With G_SIMULATION, an EAE (Extended Arithmetic Element) and an Interrupt
--- Generator are additionally
--- addressable in the upper half of the data address space, 0x8000-0xFFFF, and
--- a multiplexer splits the data bus between the two. Neither is synthesised;
--- the comment above that generate says why it matters that they are not.
+-- Generator are additionally addressable in the upper half of the data address
+-- space, 0x8000-0xFFFF, and a multiplexer splits the data bus between the two.
+-- Neither is synthesised; the comment above that generate says why it matters
+-- that they are not.
 
 entity system is
    generic (
@@ -154,10 +154,12 @@ begin
       ); -- i_wb_dp_mem
 
 
-   -- The upper half of the data address space, 0x8000-0xFFFF, holds the EAE,
-   -- and the Interrupt Generator, and they exist only in simulation -- it is there to give
-   -- prog_mandel_perf.asm a multiplier, i.e. to make one test program's
-   -- instruction mix realistic. Nothing in a bitstream ever addresses it.
+   -- The upper half of the data address space, 0x8000-0xFFFF, holds the EAE and
+   -- the Interrupt Generator, and they exist only in simulation -- they are
+   -- there to give prog_mandel_perf.asm a multiplier, i.e. to make one test
+   -- program's instruction mix realistic, and to test the hardware interrupt
+   -- feature in prog_int_hw.asm. Nothing in a bitstream ever addresses this
+   -- address space.
    --
    -- So the multiplexer in front of it is simulation-only too, and NOT because
    -- it is untidy to synthesise dead logic. It costs real timing margin, in two
@@ -315,19 +317,19 @@ begin
          -- INT (Interupt generator)
          i_interrupt : entity work.interrupt
             port map (
-               clk_i       => clk_i,
-               rst_i       => not rstn_i,
-               cyc_i       => wbd_cyc_int,
-               stb_i       => wbd_stb_int,
-               stall_o     => wbd_stall_int,
-               addr_i      => wbd_addr_int(2 downto 0),
-               we_i        => wbd_we_int,
-               wr_data_i   => wbd_data_wr_int,
-               ack_o       => wbd_ack_int,
-               rd_data_o   => wbd_data_rd_int,
-               irq_valid_o => irq_valid,
-               irq_ready_i => irq_ready,
-               irq_addr_o  => irq_addr
+               clk_i        => clk_i,
+               rst_i        => not rstn_i,
+               wb_cyc_i     => wbd_cyc_int,
+               wb_stb_i     => wbd_stb_int,
+               wb_stall_o   => wbd_stall_int,
+               wb_addr_i    => wbd_addr_int(2 downto 0),
+               wb_we_i      => wbd_we_int,
+               wb_wr_data_i => wbd_data_wr_int,
+               wb_ack_o     => wbd_ack_int,
+               wb_rd_data_o => wbd_data_rd_int,
+               irq_valid_o  => irq_valid,
+               irq_ready_i  => irq_ready,
+               irq_addr_o   => irq_addr
             ); -- i_interrupt
 
    else generate

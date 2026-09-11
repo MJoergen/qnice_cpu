@@ -157,6 +157,7 @@ help:
 	@echo "  make crosscheck     : Diff every program against the reference emulator"
 	@echo "  make crosscheck_rtl : Diff every program against the upstream RTL CPU"
 	@echo "  make check          : Run one test program headless"
+	@echo "  make run            : Run one test program headless, without waveform tracing."
 	@echo "  make golden         : Regenerate the test/*.{writes,stats}.golden files"
 	@echo "  make system.bit     : Run synthesis using Vivado"
 	@echo "  make utilization    : Refresh the utilization numbers in doc/README.md (needs Vivado)"
