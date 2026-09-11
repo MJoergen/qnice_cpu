@@ -68,6 +68,7 @@ entity wb_mux is
       s_data_i   : in  std_logic_vector(G_DATA_SIZE - 1 downto 0);
       s_ack_o    : out std_logic;
       s_data_o   : out std_logic_vector(G_DATA_SIZE - 1 downto 0);
+      s_sel_i    : in  std_logic;
 
       -- WISHBONE master 0: lower half of the address space
       m0_cyc_o   : out std_logic;
@@ -97,7 +98,6 @@ architecture synthesis of wb_mux is
 
    type t_data_array is array (natural range <>) of std_logic_vector(G_DATA_SIZE - 1 downto 0);
 
-   signal sel        : std_logic;
    signal mux_stall  : std_logic;
    signal req_accept : std_logic;
 
@@ -124,26 +124,24 @@ begin
    -- Request path: pure combinational fan-out
    ------------------------------------------------------------
 
-   sel <= s_addr_i(G_ADDR_SIZE - 1);
-
    -- Off a register, never off an ACK. See the header.
    mux_stall <= '1' when order_fill = G_MAX_OUTSTANDING else
                  '0';
 
-   s_stall_o <= (mux_stall or m1_stall_i) when sel = '1' else
+   s_stall_o <= (mux_stall or m1_stall_i) when s_sel_i = '1' else
                  (mux_stall or m0_stall_i);
 
-   req_accept <= s_cyc_i and s_stb_i and not (mux_stall or m1_stall_i) when sel = '1' else
+   req_accept <= s_cyc_i and s_stb_i and not (mux_stall or m1_stall_i) when s_sel_i = '1' else
                  s_cyc_i and s_stb_i and not (mux_stall or m0_stall_i);
 
    m0_cyc_o  <= s_cyc_i;
-   m0_stb_o  <= s_cyc_i and s_stb_i and not sel and not mux_stall;
+   m0_stb_o  <= s_cyc_i and s_stb_i and not s_sel_i and not mux_stall;
    m0_we_o   <= s_we_i;
    m0_addr_o <= s_addr_i;
    m0_data_o <= s_data_i;
 
    m1_cyc_o  <= s_cyc_i;
-   m1_stb_o  <= s_cyc_i and s_stb_i and sel and not mux_stall;
+   m1_stb_o  <= s_cyc_i and s_stb_i and s_sel_i and not mux_stall;
    m1_we_o   <= s_we_i;
    m1_addr_o <= s_addr_i;
    m1_data_o <= s_data_i;
@@ -234,7 +232,7 @@ begin
          -- 3. Record where a newly accepted request went. mux_stall guarantees
          --    there is room.
          if req_accept = '1' then
-            order_v(fill_v) := sel;
+            order_v(fill_v) := s_sel_i;
             fill_v          := fill_v + 1;
          end if;
 

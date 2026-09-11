@@ -2,11 +2,11 @@
 -- Only relevant in simulation.
 --
 -- Register Map
--- 0xFF00 : Countdown number of clock cycles until interrupt is asserted
--- 0xFF01 : Address of interrupt service routine
--- 0xFF02 : Bit 0 indicates whether interrupt is currently asserted (useful for
+-- 0xBF00 : Countdown number of clock cycles until interrupt is asserted
+-- 0xBF01 : Address of interrupt service routine
+-- 0xBF02 : Bit 0 indicates whether interrupt is currently asserted (useful for
 --          reading while inside an ISR).
--- Writing a zero to 0xFF00 deliberately clears irq_valid_o.
+-- Writing a zero to 0xBF00 deliberately clears irq_valid_o.
 
 library ieee;
    use ieee.std_logic_1164.all;

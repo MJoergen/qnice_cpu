@@ -5,7 +5,8 @@ library ieee;
 -- with a test program read from the file G_ROM, and is accessible via both the
 -- Instruction Memory and Data Memory interfaces.
 --
--- With G_DEVICE, a special-purpose device is additionally
+-- With G_SIMULATION, an EAE (Extended Arithmetic Element) and an Interrupt
+-- Generator are additionally
 -- addressable in the upper half of the data address space, 0x8000-0xFFFF, and
 -- a multiplexer splits the data bus between the two. Neither is synthesised;
 -- the comment above that generate says why it matters that they are not.
@@ -30,10 +31,9 @@ entity system is
       -- Simulation only: disassemble each retiring instruction to the console.
       -- Passed straight through to WRITE, see src/cpu_main/write.vhd.
       G_DEBUG               : boolean  := false;
-      -- Selects additional device. Supported values are: "" (used in
-      -- synthesis), "EAE" for Extended Arithmetic Element, and "INT" for
-      -- Interrupt Generator.
-      G_DEVICE              : string  := ""
+      -- True in the testbench, false in synthesis, and it is not merely a
+      -- switch for simulation-only conveniences: see the generate below.
+      G_SIMULATION          : boolean  := false
    );
    port (
       clk_i  : in  std_logic;
@@ -155,7 +155,7 @@ begin
 
 
    -- The upper half of the data address space, 0x8000-0xFFFF, holds the EAE,
-   -- and the EAE exists only in simulation -- it is there to give
+   -- and the Interrupt Generator, and they exist only in simulation -- it is there to give
    -- prog_mandel_perf.asm a multiplier, i.e. to make one test program's
    -- instruction mix realistic. Nothing in a bitstream ever addresses it.
    --
@@ -178,7 +178,7 @@ begin
    -- effect would survive a leaner multiplexer: any slave that can stall costs
    -- it.
 
-   gen_sim : if G_DEVICE /= "" generate
+   gen_sim : if G_SIMULATION generate
 
       signal wbd_cyc_dev     : std_logic;
       signal wbd_stb_dev     : std_logic;
@@ -189,9 +189,27 @@ begin
       signal wbd_ack_dev     : std_logic;
       signal wbd_data_rd_dev : std_logic_vector(15 downto 0);
 
+      signal wbd_cyc_eae     : std_logic;
+      signal wbd_stb_eae     : std_logic;
+      signal wbd_stall_eae   : std_logic;
+      signal wbd_we_eae      : std_logic;
+      signal wbd_addr_eae    : std_logic_vector(15 downto 0);
+      signal wbd_data_wr_eae : std_logic_vector(15 downto 0);
+      signal wbd_ack_eae     : std_logic;
+      signal wbd_data_rd_eae : std_logic_vector(15 downto 0);
+
+      signal wbd_cyc_int     : std_logic;
+      signal wbd_stb_int     : std_logic;
+      signal wbd_stall_int   : std_logic;
+      signal wbd_we_int      : std_logic;
+      signal wbd_addr_int    : std_logic_vector(15 downto 0);
+      signal wbd_data_wr_int : std_logic_vector(15 downto 0);
+      signal wbd_ack_int     : std_logic;
+      signal wbd_data_rd_int : std_logic_vector(15 downto 0);
+
    begin
 
-      -- Split the data bus at 0x8000: RAM below, dev above. Note this is a real
+      -- Split the address bus at 0x8000: RAM below, dev above. Note this is a real
       -- multiplexer and not just an address decode -- the two slaves have
       -- different, and configurable, latencies, and a pipelined WISHBONE master
       -- can only pair responses with requests by position. See wb_mux.vhd.
@@ -212,6 +230,7 @@ begin
             s_data_i   => wbd_data_wr,
             s_ack_o    => wbd_ack,
             s_data_o   => wbd_data_rd,
+            s_sel_i    => wbd_addr(15),
             --
             m0_cyc_o   => wbd_cyc_mem,
             m0_stb_o   => wbd_stb_mem,
@@ -232,7 +251,49 @@ begin
             m1_data_i  => wbd_data_rd_dev
          ); -- i_wb_mux
 
-      gen_dev : if G_DEVICE = "EAE" generate
+      -- Split the address bus at 0xC000: INT below, EAE above. Note this is a real
+      -- multiplexer and not just an address decode -- the two slaves have
+      -- different, and configurable, latencies, and a pipelined WISHBONE master
+      -- can only pair responses with requests by position. See wb_mux.vhd.
+      i_wb_mux_dev : entity work.wb_mux
+         generic map (
+            G_ADDR_SIZE       => 16,
+            G_DATA_SIZE       => 16,
+            G_MAX_OUTSTANDING => 2
+         )
+         port map (
+            clk_i      => clk_i,
+            rst_i      => not rstn_i,
+            s_cyc_i    => wbd_cyc_dev,
+            s_stb_i    => wbd_stb_dev,
+            s_stall_o  => wbd_stall_dev,
+            s_we_i     => wbd_we_dev,
+            s_addr_i   => wbd_addr_dev,
+            s_data_i   => wbd_data_wr_dev,
+            s_ack_o    => wbd_ack_dev,
+            s_data_o   => wbd_data_rd_dev,
+            s_sel_i    => wbd_addr(14),
+            --
+            m0_cyc_o   => wbd_cyc_int,
+            m0_stb_o   => wbd_stb_int,
+            m0_stall_i => wbd_stall_int,
+            m0_we_o    => wbd_we_int,
+            m0_addr_o  => wbd_addr_int,
+            m0_data_o  => wbd_data_wr_int,
+            m0_ack_i   => wbd_ack_int,
+            m0_data_i  => wbd_data_rd_int,
+            --
+            m1_cyc_o   => wbd_cyc_eae,
+            m1_stb_o   => wbd_stb_eae,
+            m1_stall_i => wbd_stall_eae,
+            m1_we_o    => wbd_we_eae,
+            m1_addr_o  => wbd_addr_eae,
+            m1_data_o  => wbd_data_wr_eae,
+            m1_ack_i   => wbd_ack_eae,
+            m1_data_i  => wbd_data_rd_eae
+         ); -- i_wb_mux_dev
+
+
          -- EAE (Extended Arithmetic Element)
          i_eae : entity work.eae
             generic map (
@@ -241,35 +302,33 @@ begin
             port map (
                clk_i     => clk_i,
                rst_i     => not rstn_i,
-               cyc_i     => wbd_cyc_dev,
-               stb_i     => wbd_stb_dev,
-               stall_o   => wbd_stall_dev,
-               addr_i    => wbd_addr_dev(2 downto 0),
-               we_i      => wbd_we_dev,
-               wr_data_i => wbd_data_wr_dev,
-               ack_o     => wbd_ack_dev,
-               rd_data_o => wbd_data_rd_dev
+               cyc_i     => wbd_cyc_eae,
+               stb_i     => wbd_stb_eae,
+               stall_o   => wbd_stall_eae,
+               addr_i    => wbd_addr_eae(2 downto 0),
+               we_i      => wbd_we_eae,
+               wr_data_i => wbd_data_wr_eae,
+               ack_o     => wbd_ack_eae,
+               rd_data_o => wbd_data_rd_eae
             ); -- i_eae
-      elsif G_DEVICE = "INT" generate
+
          -- INT (Interupt generator)
          i_interrupt : entity work.interrupt
             port map (
                clk_i       => clk_i,
                rst_i       => not rstn_i,
-               cyc_i       => wbd_cyc_dev,
-               stb_i       => wbd_stb_dev,
-               stall_o     => wbd_stall_dev,
-               addr_i      => wbd_addr_dev(2 downto 0),
-               we_i        => wbd_we_dev,
-               wr_data_i   => wbd_data_wr_dev,
-               ack_o       => wbd_ack_dev,
-               rd_data_o   => wbd_data_rd_dev,
+               cyc_i       => wbd_cyc_int,
+               stb_i       => wbd_stb_int,
+               stall_o     => wbd_stall_int,
+               addr_i      => wbd_addr_int(2 downto 0),
+               we_i        => wbd_we_int,
+               wr_data_i   => wbd_data_wr_int,
+               ack_o       => wbd_ack_int,
+               rd_data_o   => wbd_data_rd_int,
                irq_valid_o => irq_valid,
                irq_ready_i => irq_ready,
                irq_addr_o  => irq_addr
             ); -- i_interrupt
-      end generate gen_dev;
-
 
    else generate
 

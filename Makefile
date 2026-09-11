@@ -143,8 +143,6 @@ SAVE          = test/$(TB).gtkw
 
 TOP = system
 
-DEVICE = EAE
-
 ################################################
 ## Help
 ################################################
@@ -193,8 +191,7 @@ GHDL_RUN = ghdl -r --std=08 $(TB) \
 	   -gG_B_STALL_DELAY=$(B_STALL_DELAY) \
 	   -gG_A_ACK_DELAY=$(A_ACK_DELAY) \
 	   -gG_B_ACK_DELAY=$(B_ACK_DELAY) \
-	   -gG_DEBUG=$(DEBUG) \
-	   -gG_DEVICE=$(DEVICE)
+	   -gG_DEBUG=$(DEBUG)
 
 .PHONY: build
 build: $(SOURCES) $(TEST_SOURCES)

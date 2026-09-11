@@ -6,9 +6,9 @@
 ; in doc/interrupts.md.
 ;
 ; Register Map for Interrupt Generator
-; 0xFF00 : Countdown number of clock cycles until interrupt is asserted
-; 0xFF01 : Address of interrupt service routine
-; 0xFF02 : Bit 0 indicates whether interrupt is currently asserted (useful for
+; 0xBF00 : Countdown number of clock cycles until interrupt is asserted
+; 0xBF01 : Address of interrupt service routine
+; 0xBF02 : Bit 0 indicates whether interrupt is currently asserted (useful for
 ;          reading while inside an ISR).
 ;
 
@@ -16,9 +16,9 @@
                                     ; no-operation, because it affects the flags
                                     ; (specifically N and Z).
 
-#define INT_COUNT 0xFF00
-#define INT_ADDR  0xFF01
-#define INT_STAT  0xFF02
+#define INT_COUNT 0xBF00
+#define INT_ADDR  0xBF01
+#define INT_STAT  0xBF02
 
 ; The test may be run separately by the following command:
 ; "make run TEST=prog_int_hw"
@@ -54,7 +54,7 @@ TEST4       MOVE    INT_ADDR, R8
             MOVE    INT_STAT, R10
             MOVE    DATA, R11
             MOVE    0x0000, @R11
-            CMP     0x0000, @R10
+            CMP     0x0000, @R10    ; Verify interrupt is not asserted
             RBRA    ERR4, !Z
             MOVE    ISR4, @R8
             MOVE    0x0001, @R9     ; Request interrupt in one clock cycle
@@ -63,15 +63,15 @@ TEST4       MOVE    INT_ADDR, R8
             NOP
             NOP
             NOP
-            CMP     0x0000, @R10
+            CMP     0x0000, @R10    ; Verify interrupt is not asserted
             RBRA    ERR4, !Z
-            CMP     0x0001, @R11
+            CMP     0x0001, @R11    ; Verify ISR has actually been entered
             RBRA    ERR4, !Z
             RBRA    TEST5, 1
 
-ISR4        CMP     0x0001, @R10
+ISR4        CMP     0x0000, @R10    ; Verify interrupt is not asserted any more
             RBRA    ERR4, !Z
-            ADD     0x0001, @R11
+            ADD     0x0001, @R11    ; Indicate ISR has been entered
             RTI
 
 ERR4        HALT
