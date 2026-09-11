@@ -88,9 +88,6 @@ begin
 
 
    -- Instantiate the QNICE CPU.
-   -- The three irq_* ports are tied off: hardware interrupts are not
-   -- implemented, and this system has no interrupt-generating device.
-   -- See src/interrupt/README.md.
    i_cpu : entity work.cpu
       generic map (
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
@@ -274,7 +271,7 @@ begin
             s_data_i   => wbd_data_wr_dev,
             s_ack_o    => wbd_ack_dev,
             s_data_o   => wbd_data_rd_dev,
-            s_sel_i    => wbd_addr(14),
+            s_sel_i    => wbd_addr_dev(14),
             --
             m0_cyc_o   => wbd_cyc_int,
             m0_stb_o   => wbd_stb_int,
@@ -314,7 +311,7 @@ begin
                rd_data_o => wbd_data_rd_eae
             ); -- i_eae
 
-         -- INT (Interupt generator)
+         -- INT (Interrupt Generator)
          i_interrupt : entity work.interrupt
             port map (
                clk_i        => clk_i,

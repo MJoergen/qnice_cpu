@@ -116,7 +116,7 @@ pipeline flush, since a branch retiring can discard an already-accepted `HALT` â
 
 ### Linting
 
-`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 29
+`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 30
 VHDL files with the repo's `vsg.yml`, which maps CODING_STYLE.md onto VSG's rule set. CI runs it
 too, in its own workflow [.github/workflows/lint.yml](.github/workflows/lint.yml), from a **pinned**
 vsg release â€” the pin is load-bearing, because VSG adds and re-scopes rules between releases and

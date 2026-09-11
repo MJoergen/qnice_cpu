@@ -1,17 +1,16 @@
--- This acks as a programmable interrupt generator.
+-- This acts as a programmable interrupt generator.
 -- This module is only meant to be used in simulation. It will
 -- not be used during synthesis.
 --
 -- Register Map:
 -- 0xBF00 : Countdown number of clock cycles until interrupt is asserted After count-down,
 --          interrupt line remains asserted until accepted, and is then released. Counter
---          reads back as zero. Note: Writing zero to this register while interrupt is
---          asserted will forcefully de-assert the interrupt line. This last feature is
---          violating AXI protocol.
+--          reads back as zero.
 -- 0xBF01 : Address of interrupt service routine. Initialized to zero, which happens to be
 --          the same as the CPU reset address.
 -- 0xBF02 : Bit 0 indicates whether interrupt is currently asserted (can only ever read
 --          non-zero when inside an ISR)
+-- 0xBF03 : Number of accepted interrupt requests
 
 library ieee;
    use ieee.std_logic_1164.all;
@@ -39,16 +38,39 @@ entity interrupt is
    );
 end entity interrupt;
 
-architecture rtl of interrupt is
+architecture simulation of interrupt is
 
-   constant C_INT_COUNT : std_logic_vector(2 downto 0) := "000";
-   constant C_INT_ADDR  : std_logic_vector(2 downto 0) := "001";
-   constant C_INT_STAT  : std_logic_vector(2 downto 0) := "010";
+   constant C_INT_COUNT  : std_logic_vector(2 downto 0) := "000";
+   constant C_INT_ADDR   : std_logic_vector(2 downto 0) := "001";
+   constant C_INT_STAT   : std_logic_vector(2 downto 0) := "010";
+   constant C_INT_ACCEPT : std_logic_vector(2 downto 0) := "011";
 
-   signal irq_timer : std_logic_vector(15 downto 0) := (others => '0');
-   signal irq_addr  : std_logic_vector(15 downto 0) := (others => '0');
+   signal irq_timer  : std_logic_vector(15 downto 0) := (others => '0');
+   signal irq_addr   : std_logic_vector(15 downto 0) := (others => '0');
+   signal irq_accept : std_logic_vector(15 downto 0) := (others => '0');
+
+   signal irq_ready_d : std_logic := '0';
 
 begin
+
+   p_checks : process (all)
+   begin
+      if rising_edge(clk_i) then
+         irq_ready_d <= irq_ready_i;
+
+         if irq_valid_o = '0' then
+            assert irq_ready_i = '0'
+               report "ERROR: Stray irq_ready_i"
+                  severity failure;
+         end if;
+
+         if irq_ready_d = '1' then
+            assert irq_ready_i = '0'
+               report "ERROR: Duplicate irq_ready_i"
+                  severity failure;
+         end if;
+      end if;
+   end process p_checks;
 
    wb_stall_o <= '0';
 
@@ -56,7 +78,12 @@ begin
    begin
       if rising_edge(clk_i) then
          if irq_ready_i = '1' then
+            assert irq_valid_o = '1'
+               report "ERROR: Stray irq_ready_i"
+                  severity failure;
+            irq_accept  <= irq_accept + 1;
             irq_valid_o <= '0';
+            irq_addr_o  <= (others => '0');
          end if;
 
          -- Count-down interrupt timer.
@@ -81,11 +108,6 @@ begin
 
                   when C_INT_COUNT =>
                      irq_timer <= wb_wr_data_i;
-                     -- Writing a zero to INT_COUNT will de-assert any pending interrupts.
-                     -- This is an AXI protocol violation.
-                     if wb_wr_data_i = 0 then
-                        irq_valid_o <= '0';
-                     end if;
 
                   when C_INT_ADDR =>
                      irq_addr <= wb_wr_data_i;
@@ -105,6 +127,9 @@ begin
                   when C_INT_STAT =>
                      wb_rd_data_o(0) <= irq_valid_o;
 
+                  when C_INT_ACCEPT =>
+                     wb_rd_data_o <= irq_accept;
+
                   when others =>
                      null;
                end case;
@@ -112,12 +137,15 @@ begin
          end if;
 
          if rst_i = '1' then
+            wb_ack_o    <= '0';
             irq_valid_o <= '0';
             irq_addr_o  <= (others => '0');
             irq_timer   <= (others => '0');
+            irq_addr    <= (others => '0');
+            irq_accept  <= (others => '0');
          end if;
       end if;
    end process p_irq;
 
-end architecture rtl;
+end architecture simulation;
 
