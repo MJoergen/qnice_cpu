@@ -199,7 +199,6 @@ TEST6       MOVE    INT_ADDR, R0
             MOVE    ISR6, @R0               ; Set ISR address
             MOVE    0x0000, R8              ; Unbanked accumulator
             MOVE    0x0001, R9              ; Unbanked increment
-            MOVE    0x0002, R10             ; Unbanked expected value
             MOVE    0x0002, @R1             ; Request interrupt in two clock cycles
             ADD     R9, R8
             ADD     R9, R8                  ; ISR should enter **after** this instruction.
@@ -211,7 +210,6 @@ TEST6       MOVE    INT_ADDR, R0
 
             MOVE    0x0000, R8              ; Unbanked accumulator
             MOVE    0x0001, R9              ; Unbanked increment
-            MOVE    0x0001, R10             ; Unbanked expected value
             MOVE    0x0002, @R1             ; Request interrupt in two clock cycles
             ADD     0x0001, R8              ; ISR should enter **after** this instruction.
             ADD     0x0001, R8
@@ -223,7 +221,6 @@ TEST6       MOVE    INT_ADDR, R0
 
             MOVE    0x0000, R8              ; Unbanked accumulator
             MOVE    0x0001, R9              ; Unbanked increment
-            MOVE    0x0002, R10             ; Unbanked expected value
             MOVE    0x0003, @R1             ; Request interrupt in two clock cycles
             ADD     0x0001, R8
             ADD     0x0001, R8              ; ISR should enter **after** this instruction.
@@ -244,86 +241,69 @@ TEST6A      MOVE    INT_ADDR, R0
             MOVE    DATA1, R8
             MOVE    DATA2, R9
             MOVE    ISR6A, @R0              ; Set ISR address
-            MOVE    0x0000, @R8             ; Accumulator in memory
             MOVE    0x0001, @R9             ; Increment in memory
-            MOVE    0x0001, R10             ; Expected value
-            MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
+            MOVE    0x0008, R10
+TEST6A_LOOP MOVE    0x0000, @R8             ; Clear accumulator in memory
+            MOVE    0x0000, @R3             ; Clear interrupt counter
+            MOVE    R10, @R1                ; Request interrupt in some clock cycles
             ADD     @R9, @R8                ; Three micro-op instruction
             ADD     @R9, @R8
-            CMP     0x0002, @R8
-            RBRA    ERR6A, !Z
-            CMP     0x0004, @R3             ; Check ISR has been entered
-            RBRA    ERR6A, !Z
-
-            MOVE    0x0000, @R8             ; Accumulator in memory
-            MOVE    0x0001, @R9             ; Increment in memory
-            MOVE    0x0001, R10             ; Expected value
-            MOVE    0x0002, @R1             ; Request interrupt in two clock cycles
-            ADD     @R9, @R8                ; Three micro-op instruction
             ADD     @R9, @R8
-            CMP     0x0002, @R8
-            RBRA    ERR6A, !Z
-            CMP     0x0005, @R3             ; Check ISR has been entered
-            RBRA    ERR6A, !Z
-
-            MOVE    0x0000, @R8             ; Accumulator in memory
-            MOVE    0x0001, @R9             ; Increment in memory
-            MOVE    0x0001, R10             ; Expected value
-            MOVE    0x0003, @R1             ; Request interrupt in three clock cycles
-            ADD     @R9, @R8                ; Three micro-op instruction
             ADD     @R9, @R8
-            CMP     0x0002, @R8
-            RBRA    ERR6A, !Z
-            CMP     0x0006, @R3             ; Check ISR has been entered
-            RBRA    ERR6A, !Z
-
-            MOVE    0x0000, @R8             ; Accumulator in memory
-            MOVE    0x0001, @R9             ; Increment in memory
-            MOVE    0x0002, R10             ; Expected value
-            MOVE    0x0004, @R1             ; Request interrupt in four clock cycles
-            ADD     @R9, @R8                ; Three micro-op instruction
             ADD     @R9, @R8
-            CMP     0x0002, @R8
+            CMP     0x0005, @R8
             RBRA    ERR6A, !Z
-            CMP     0x0007, @R3             ; Check ISR has been entered
+            CMP     0x0001, @R3             ; Check ISR has been entered
             RBRA    ERR6A, !Z
+            SUB     0x0001, R10             ; Repeat with a shorter delay
+            RBRA    TEST6A_LOOP, !Z
 
+;
+; Test 6B : Interrupt instruction with a large memory latency (EAE).
+;
 ; The read from EAE is interrupted, and the ISR performs another read from EAE.
 ; Both read values are checked.
-            MOVE    EAE_REG_OPERAND_0, R8   ; EAE operand
-            MOVE    10, @R8++               ; Set first operand
-            MOVE    20, @R8++               ; Set second operand
-            MOVE    EAE_REG_RESULT_LO, R8   ; EAE result address
+TEST6B      MOVE    INT_ADDR, R0
+            MOVE    INT_COUNT, R1
+            MOVE    INT_STAT, R2
+            MOVE    DATA, R3
             MOVE    EAE_CSR_MULU, R9        ; EAE command value
             MOVE    EAE_REG_CSR, R11        ; EAE command address
-            MOVE    200, R10                ; Expected value
-            MOVE    0x0002, @R1             ; Request interrupt in two clock cycles
+            MOVE    0x0008, R12             ; Number of loops
+TEST6B_LOOP MOVE    0x0000, @R3             ; Clear interrupt counter
+            MOVE    EAE_REG_OPERAND_0, R8   ; EAE operand
+            MOVE    1, @R8++                ; Set first operand
+            MOVE    R12, @R8++              ; Set second operand
+            MOVE    EAE_REG_RESULT_LO, R8   ; EAE result address
+            MOVE    R12, @R1                ; Request interrupt in a few clock cycles
             MOVE    R9, @R11                ; Start EAE operation
             MOVE    @R8, R11                ; Read result - this instruction will stall
-            CMP     R10, R11                ; Check result of read
-            RBRA    ERR6A, !Z
-            CMP     0x0008, @R3             ; Check ISR has been entered
-            RBRA    ERR6A, !Z
+            CMP     R12, R11                ; Check result of read
+            RBRA    ERR6B, !Z
+            CMP     0x0001, @R3             ; Check ISR has been entered
+            RBRA    ERR6B, !Z
+            SUB     0x0001, R12
+            RBRA    TEST6B_LOOP, !Z
 
 ;
-; Test 6B : Interrupt instruction during a pipeline flush: Taken branch and write-to-R14.
+; Test 6C : Interrupt instruction during a pipeline flush: Taken branch and write-to-R14.
 ;
-TEST6B      MOVE    0x8000, R14             ; Set register bank
+TEST6C      MOVE    0x8000, R14             ; Set register bank
             MOVE    INT_ADDR, R0
             MOVE    INT_COUNT, R1
             MOVE    INT_STAT, R2
             MOVE    DATA, R3
             MOVE    0x0000, @R3             ; Incremented by entry into ISR
-            MOVE    ISR6B, @R0              ; Set ISR address
+            MOVE    ISR6C, @R0              ; Set ISR address
             MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
-            ABRA    L_6B_1, 1
-L_6B_1      CMP     0x0001, @R3             ; Verify ISR was entered
-            RBRA    ERR6B, !Z
+            ABRA    L_6C_1, 1
+L_6C_1      CMP     0x0001, @R3             ; Verify ISR was entered
+            RBRA    ERR6C, !Z
 
             MOVE    0x0002, @R1             ; Request interrupt in two clock cycles
-            ABRA    L_6B_2, 1
-L_6B_2      CMP     0x0002, @R3             ; Verify ISR was entered
-            RBRA    ERR6B, !Z
+            ABRA    L_6C_2, 1
+L_6C_2      CMP     0x0002, @R3             ; Verify ISR was entered
+            RBRA    ERR6C, !Z
 
             MOVE    R14, R9                 ; Store register bank
             MOVE    R0, R10                 ; Store old value
@@ -333,9 +313,9 @@ L_6B_2      CMP     0x0002, @R3             ; Verify ISR was entered
             MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
             MOVE    R9, R14                 ; Revert register bank
             CMP     R10, R0                 ; Verify register bank reverted correctly
-            RBRA    ERR6B, !Z
+            RBRA    ERR6C, !Z
             CMP     0x0003, @R3             ; Verify ISR was entered
-            RBRA    ERR6B, !Z
+            RBRA    ERR6C, !Z
 
             MOVE    R14, R9                 ; Store register bank
             MOVE    R0, R10                 ; Store old value
@@ -345,31 +325,37 @@ L_6B_2      CMP     0x0002, @R3             ; Verify ISR was entered
             MOVE    0x0002, @R1             ; Request interrupt in two clock cycles
             MOVE    R9, R14                 ; Revert register bank
             CMP     R10, R0                 ; Verify register bank reverted correctly
-            RBRA    ERR6B, !Z
+            RBRA    ERR6C, !Z
             CMP     0x0004, @R3             ; Verify ISR was entered
-            RBRA    ERR6B, !Z
+            RBRA    ERR6C, !Z
 
             RBRA    TEST7, 1                ; End of Test 6.
 
-ISR6        CMP     R10, R8                 ; Expect this number of ADD statements to have executed.
-            RBRA    ERR6, !Z
+ISR6        MOVE    SCRATCH, R3
+            MOVE    R8, @R3                 ; Write accumulator to scratch memory
             MOVE    DATA, R3
             ADD     0x0001, @R3             ; Indicate ISR has been entered
             RTI
 
-ISR6A       CMP     R10, @R8                ; Verify expected value
-            RBRA    ERR6A, !Z
+ISR6A       MOVE    DATA, R3
+            ADD     0x0001, @R3             ; Indicate ISR has been entered
+            RTI
+
+ISR6B       MOVE    @R8, R10                ; Read result from EAE
+            CMP     R12, R10
+            RBRA    ERR6B, !Z
             MOVE    DATA, R3
             ADD     0x0001, @R3             ; Indicate ISR has been entered
             RTI
 
-ISR6B       MOVE    DATA, R3
+ISR6C       MOVE    DATA, R3
             ADD     0x0001, @R3             ; Indicate ISR has been entered
             RTI
 
 ERR6        HALT
 ERR6A       HALT
 ERR6B       HALT
+ERR6C       HALT
 
 ;
 ; Test 7 : Check restoring of R14 after a hardware interrupt.
@@ -411,7 +397,7 @@ ERR7        HALT
 
 TOTAL       MOVE    INT_ACCEPT, R0          ; Verify total number of interrupts
                                             ; acccepted by CPU
-            CMP     10, @R0
+            CMP     16, @R0
             RBRA    SUCCESS, Z
             HALT
 
@@ -434,6 +420,7 @@ ISR_HALT    RBRA    ISR_HALT, 1
 DATA        .DW     0x0000
 DATA1       .DW     0x0000
 DATA2       .DW     0x0000
+SCRATCH     .DW     0x0000
 
 STACK_BOT   .BLOCK  5
             .DW     0xDEAD                  ; Sentinel values, should never be written to

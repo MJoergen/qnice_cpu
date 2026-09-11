@@ -78,7 +78,6 @@ begin
             assert irq_valid_o = '1'
                report "ERROR: Stray irq_ready_i"
                severity failure;
-            end if;
 
             irq_accept  <= irq_accept + 1;
             irq_valid_o <= '0';
