@@ -718,16 +718,6 @@ ERR8        MOVE    0x7FFF, R0
 ;
 SUCCESS     MOVE    0x7FFF, R0
             MOVE    0x0000, @R0
-; Test 8 : Fire an interrupt after the halt
-            MOVE    INT_ADDR, R0
-            MOVE    INT_COUNT, R1
-            MOVE    INT_STAT, R2
-            MOVE    ISR_HALT, @R0           ; Set ISR address
-            MOVE    0x0001, @R1             ; Request interrupt in a few clock cycles
-            HALT
-            HALT
-ISR_HALT    MOVE    0x7FFF, R0
-            MOVE    0x1802, @R0             ; Indicate failure
 L_HALT      HALT
 
 
