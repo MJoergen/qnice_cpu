@@ -37,9 +37,10 @@
 ;   TEST6A : 8
 ;   TEST6B : 5
 ;   TEST6C : 4
+;   TEST6D : 1
 ;   TEST7  : 1
-;   TOTAL  : 25
-TOTAL_ACCEPT         .EQU    25
+;   TOTAL  : 26
+TOTAL_ACCEPT         .EQU    26
 
 INT_COUNT            .EQU    0xBF00
 INT_ADDR             .EQU    0xBF01
@@ -383,34 +384,36 @@ TEST6D      MOVE    0x8000, R14             ; Set register bank
 
             RBRA    TEST7, 1                ; End of Test 6.
 
-ISR6        MOVE    SCRATCH, R3
-            MOVE    R8, @R3                 ; Write accumulator to scratch memory
-            MOVE    DATA, R3
-            ADD     0x0001, @R3             ; Indicate ISR has been entered
+; The ISRs below all use R7, which is otherwise unused, so as not to clobber any
+; registers by mistake.
+ISR6        MOVE    SCRATCH, R7
+            MOVE    R8, @R7                 ; Write accumulator to scratch memory
+            MOVE    DATA, R7
+            ADD     0x0001, @R7             ; Indicate ISR has been entered
             RTI
 
-ISR6A       MOVE    SCRATCH, R3
-            MOVE    @R8, @R3                ; Write accumulator to scratch memory
-            MOVE    DATA, R3
-            ADD     0x0001, @R3             ; Indicate ISR has been entered
+ISR6A       MOVE    SCRATCH, R7
+            MOVE    @R8, @R7                ; Write accumulator to scratch memory
+            MOVE    DATA, R7
+            ADD     0x0001, @R7             ; Indicate ISR has been entered
             RTI
 
-ISR6B       MOVE    SCRATCH, R3
-            MOVE    R12, @R3                ; Write operand to scratch memory
-            MOVE    DATA, R3
-            ADD     0x0001, @R3             ; Indicate ISR has been entered
+ISR6B       MOVE    SCRATCH, R7
+            MOVE    @R8, @R7                ; Write EAE result to scratch memory
+            MOVE    DATA, R7
+            ADD     0x0001, @R7             ; Indicate ISR has been entered
             RTI
 
-ISR6C       MOVE    DATA, R3
-            ADD     0x0001, @R3             ; Indicate ISR has been entered
+ISR6C       MOVE    DATA, R7
+            ADD     0x0001, @R7             ; Indicate ISR has been entered
             RTI
 
-ISR6D       MOVE    DATA, R3
-            ADD     0x0001, @R3             ; Indicate hardware ISR has been entered
+ISR6D       MOVE    DATA, R7
+            ADD     0x0001, @R7             ; Indicate hardware ISR has been entered
             RTI
 
-ISR6D_INT   MOVE    DATA1, R3
-            ADD     0x0001, @R3             ; Indicate software ISR has been entered
+ISR6D_INT   MOVE    DATA1, R7
+            ADD     0x0001, @R7             ; Indicate software ISR has been entered
             RTI
 
 ERR6        HALT
@@ -436,7 +439,8 @@ TEST7       MOVE    0xF000, R14             ; Clobbered register bank
             NOP
             NOP
             MOVE    R14, R10
-            CMP     0x40FF, R10             ; Verify Register Bank is restored correctly
+            CMP     0x40F7, R10             ; Verify Register Bank is restored correctly
+                                            ; Note: The Zero flag is cleared by the NOP instructions
             RBRA    ERR7, !Z
             CMP     INT_ADDR, R0            ; Verify banked register is correct
             RBRA    ERR7, !Z

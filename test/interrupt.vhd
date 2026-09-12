@@ -1,17 +1,16 @@
 -- This acts as a programmable interrupt generator.
--- 
+--
 -- THEORY OF OPERATION
--- This module is only meant to be used in simulation. It will
+-- This module counts down idle clock cycles (i.e. when no interrupt is
+-- currently signaled) and fires an interrupt when counter reaches zero.
+-- irq_addr_o is only valid when irq_valid_o is asserted. It is deliberately
+-- scrambled when irq_valid_o is de-asserted.
+-- Note: This module is only meant to be used in simulation. It will
 -- not be used during synthesis.
 --
 -- INTERFACE CONTRACTS
 -- irq_ready_i may only be pulsed for one clock cycle, and may only be asserted
 -- when irq_valid_o is. This is *stricter* than AXI style handshaking.
--- If irq_valid_o is held high continuously, then irq_ready_i should (at most)
--- toggle between high and low.
---
--- irq_addr_o is only valid when irq_valid_o is asserted. It is deliberately
--- scrambled when irq_valid_o is de-asserted.
 --
 -- Register Map:
 -- 0xBF00 : Countdown number of idle clock cycles until interrupt is asserted. After count-down,
