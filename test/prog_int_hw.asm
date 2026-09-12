@@ -9,7 +9,7 @@
 ;   Test 6B : Interrupt instruction with a large memory latency (EAE).
 ;   Test 6C : Interrupt instruction during a pipeline flush: Taken branch and write-to-R14.
 ;   Test 7  : Check restoring of R14 after a hardware interrupt.
-;   Test 8  : Fire an interrupt after the halt
+;   Test 8  : Check total accepted interrupts, and fire an interrupt after the halt
 ;
 ; Register Map for Interrupt Generator (copied verbatim from test/interrupt.vhd):
 ; 0xBF00 : Countdown number of idle clock cycles until interrupt is asserted. After count-down,
@@ -463,8 +463,8 @@ TEST6E      MOVE    0x8000, R14             ; Set register bank
             MOVE    INT_ADDR, R0
             MOVE    INT_COUNT, R1
             MOVE    INT_STAT, R2
-            MOVE    DATA, R3
-            MOVE    DATA1, R4
+            MOVE    DATA_6E1, R3
+            MOVE    DATA_6E2, R4
             MOVE    0x0000, @R3             ; Incremented by entry into ISR
             MOVE    ISR6E, @R0              ; Set ISR address for interrupt
             MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
@@ -474,10 +474,10 @@ TEST6E      MOVE    0x8000, R14             ; Set register bank
             CMP     @R3++, @R4++
             CMP     @R3++, @R4++
             SUB     0x0005, R3
-            CMP     DATA, R3
+            CMP     DATA_6E1, R3
             RBRA    ERR6E2, !Z
             SUB     0x0005, R4
-            CMP     DATA, R4
+            CMP     DATA_6E2, R4
             RBRA    ERR6E3, !Z
             CMP     0x0001, @R3             ; Verify hardware ISR was entered
             RBRA    ERR6E1, !Z
@@ -516,7 +516,6 @@ TEST6G      MOVE    INT_ADDR, R0
 
             MOVE    0x0008, R10             ; Loop count
 TEST6G_LOOP MOVE    0x0000, R8              ; Unbanked accumulator
-            MOVE    0x0001, R9              ; Unbanked increment
             MOVE    0x0000, @R3             ; Incremented by entry into ISR
             MOVE    R10, @R1                ; Request interrupt in a few clock cycles
             ADD     0x0001, R8
@@ -566,7 +565,9 @@ ISR6D_INT   MOVE    DATA1, R7
             ADD     0x0001, @R7             ; Indicate software ISR has been entered
             RTI
 
-ISR6E       MOVE    DATA, R7
+ISR6E       MOVE    SCRATCH, R7
+            MOVE    R3, @R7                 ; Write pointer to scratch memory
+            MOVE    DATA, R7
             ADD     0x0001, @R7             ; Indicate hardware ISR has been entered
             RTI
 
@@ -585,12 +586,6 @@ ERR61       MOVE    0x7FFF, R0
             HALT
 ERR62       MOVE    0x7FFF, R0
             MOVE    0x1602, @R0             ; Indicate failure
-            HALT
-ERR63       MOVE    0x7FFF, R0
-            MOVE    0x1603, @R0             ; Indicate failure
-            HALT
-ERR64       MOVE    0x7FFF, R0
-            MOVE    0x1604, @R0             ; Indicate failure
             HALT
 
 ERR6A1      MOVE    0x7FFF, R0
@@ -737,6 +732,8 @@ L_HALT      HALT
 DATA        .DW     0x0000
 DATA1       .DW     0x0000
 DATA2       .DW     0x0000
+DATA_6E1    .BLOCK  5
+DATA_6E2    .BLOCK  5
 SCRATCH     .DW     0x0000                  ; The purpose is to log writes to this
                                             ; location into the file prog_int_hw.writes.golden
 
