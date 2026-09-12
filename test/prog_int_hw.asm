@@ -21,8 +21,9 @@
 ;          non-zero when inside an ISR).
 ; 0xBF03 : Number of accepted interrupt requests
 ;
-; Upon failure, the status code has the following encoding 0x1abc, where
-; A=Test case, B=test subcase, C=test check
+; The complexity of this test program invites the decision to have multiple
+; failure codes, Upon failure, the status code has the following encoding
+; 0x1abc, where A=Test case, B=test subcase, C=test check
 
 #define NOP MOVE R8, R8                     ; Note: this is strictly not a
                                             ; no-operation, because it affects the flags
@@ -37,14 +38,16 @@
 ;   TEST4  : 1
 ;   TEST5  : 2
 ;   TEST6  : 4
-;   TEST61 : 8
 ;   TEST6A : 8
 ;   TEST6B : 5
 ;   TEST6C : 4
 ;   TEST6D : 1
+;   TEST6E : 1
+;   TEST6F : 1
+;   TEST6G : 8
 ;   TEST7  : 1
-;   TOTAL  : 34
-TOTAL_ACCEPT         .EQU    34
+;   TOTAL  : 36
+TOTAL_ACCEPT         .EQU    36
 
 INT_COUNT            .EQU    0xBF00
 INT_ADDR             .EQU    0xBF01
@@ -312,30 +315,6 @@ TEST6_LOOP  MOVE    0x0000, R8              ; Unbanked accumulator
             SUB     0x0001, R10
             RBRA    TEST6_LOOP, !Z
 
-TEST61      MOVE    INT_ADDR, R0
-            MOVE    INT_COUNT, R1
-            MOVE    INT_STAT, R2
-            MOVE    DATA, R3
-            MOVE    ISR6, @R0               ; Set ISR address
-
-; Sweep over two-word instructions (ADD 0x0001, R8)
-            MOVE    0x0008, R10             ; Loop count
-TEST61_LOOP MOVE    0x0000, R8              ; Unbanked accumulator
-            MOVE    0x0001, R9              ; Unbanked increment
-            MOVE    0x0000, @R3             ; Incremented by entry into ISR
-            MOVE    R10, @R1                ; Request interrupt in a few clock cycles
-            ADD     0x0001, R8
-            ADD     0x0001, R8              ; ISR should enter somewhere around here
-            ADD     0x0001, R8
-            ADD     0x0001, R8
-            ADD     0x0001, R8
-            CMP     0x0005, R8
-            RBRA    ERR63, !Z
-            CMP     0x0001, @R3             ; Check ISR has been entered
-            RBRA    ERR64, !Z
-            SUB     0x0001, R10
-            RBRA    TEST61_LOOP, !Z
-
 ;
 ; Test 6A : Interrupt instruction with multiple micro-ops.
 ;
@@ -486,8 +465,7 @@ TEST6E      MOVE    0x8000, R14             ; Set register bank
             MOVE    INT_STAT, R2
             MOVE    DATA, R3
             MOVE    DATA1, R4
-            MOVE    0x0000, @R3             ; Incremented by entry into hardware ISR
-            MOVE    0x0000, @R4             ; Incremented by entry into software ISR
+            MOVE    0x0000, @R3             ; Incremented by entry into ISR
             MOVE    ISR6E, @R0              ; Set ISR address for interrupt
             MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
             CMP     @R3++, @R4++
@@ -495,14 +473,14 @@ TEST6E      MOVE    0x8000, R14             ; Set register bank
             CMP     @R3++, @R4++
             CMP     @R3++, @R4++
             CMP     @R3++, @R4++
+            SUB     0x0005, R3
+            CMP     DATA, R3
+            RBRA    ERR6E2, !Z
+            SUB     0x0005, R4
+            CMP     DATA, R4
+            RBRA    ERR6E3, !Z
             CMP     0x0001, @R3             ; Verify hardware ISR was entered
             RBRA    ERR6E1, !Z
-            SUB     DATA, R3
-            CMP     0x0005, R3
-            RBRA    ERR6E2, !Z
-            SUB     DATA1, R3
-            CMP     0x0005, R3
-            RBRA    ERR6E3, !Z
 
 ;
 ; Test 6F : Interrupt instruction during a self-modifying flush
@@ -526,6 +504,32 @@ L_6F        NOP                             ; This instruction gets overwritten 
             NOP
             CMP     0x0001, @R3             ; Verify hardware ISR was entered
             RBRA    ERR6F1, !Z
+
+;
+; Test 6G : Sweep over two-word instructions (ADD 0x0001, R8)
+;
+TEST6G      MOVE    INT_ADDR, R0
+            MOVE    INT_COUNT, R1
+            MOVE    INT_STAT, R2
+            MOVE    DATA, R3
+            MOVE    ISR6G, @R0              ; Set ISR address
+
+            MOVE    0x0008, R10             ; Loop count
+TEST6G_LOOP MOVE    0x0000, R8              ; Unbanked accumulator
+            MOVE    0x0001, R9              ; Unbanked increment
+            MOVE    0x0000, @R3             ; Incremented by entry into ISR
+            MOVE    R10, @R1                ; Request interrupt in a few clock cycles
+            ADD     0x0001, R8
+            ADD     0x0001, R8              ; ISR should enter somewhere around here
+            ADD     0x0001, R8
+            ADD     0x0001, R8
+            ADD     0x0001, R8
+            CMP     0x0005, R8
+            RBRA    ERR6G1, !Z
+            CMP     0x0001, @R3             ; Check ISR has been entered
+            RBRA    ERR6G2, !Z
+            SUB     0x0001, R10
+            RBRA    TEST6G_LOOP, !Z
 
             RBRA    TEST7, 1                ; End of Test 6.
 
@@ -570,6 +574,12 @@ ISR6F       MOVE    DATA, R7
             ADD     0x0001, @R7             ; Indicate hardware ISR has been entered
             RTI
 
+ISR6G       MOVE    SCRATCH, R7
+            MOVE    R8, @R7                 ; Write accumulator to scratch memory
+            MOVE    DATA, R7
+            ADD     0x0001, @R7             ; Indicate ISR has been entered
+            RTI
+
 ERR61       MOVE    0x7FFF, R0
             MOVE    0x1601, @R0             ; Indicate failure
             HALT
@@ -589,24 +599,12 @@ ERR6A1      MOVE    0x7FFF, R0
 ERR6A2      MOVE    0x7FFF, R0
             MOVE    0x1612, @R0             ; Indicate failure
             HALT
-ERR6A3      MOVE    0x7FFF, R0
-            MOVE    0x1613, @R0             ; Indicate failure
-            HALT
-ERR6A4      MOVE    0x7FFF, R0
-            MOVE    0x1614, @R0             ; Indicate failure
-            HALT
 
 ERR6B1      MOVE    0x7FFF, R0
             MOVE    0x1621, @R0             ; Indicate failure
             HALT
 ERR6B2      MOVE    0x7FFF, R0
             MOVE    0x1622, @R0             ; Indicate failure
-            HALT
-ERR6B3      MOVE    0x7FFF, R0
-            MOVE    0x1623, @R0             ; Indicate failure
-            HALT
-ERR6B4      MOVE    0x7FFF, R0
-            MOVE    0x1624, @R0             ; Indicate failure
             HALT
 
 ERR6C1      MOVE    0x7FFF, R0
@@ -647,6 +645,13 @@ ERR6E3      MOVE    0x7FFF, R0
 
 ERR6F1      MOVE    0x7FFF, R0
             MOVE    0x1661, @R0             ; Indicate failure
+            HALT
+
+ERR6G1      MOVE    0x7FFF, R0
+            MOVE    0x1671, @R0             ; Indicate failure
+            HALT
+ERR6G2      MOVE    0x7FFF, R0
+            MOVE    0x1672, @R0             ; Indicate failure
             HALT
 
 ;
@@ -707,8 +712,8 @@ TOTAL       MOVE    INT_ACCEPT, R0          ; Verify total number of interrupts
             CMP     TOTAL_ACCEPT, @R0
             RBRA    SUCCESS, Z
 
-ERR7A       MOVE    0x7FFF, R0
-            MOVE    0x1711, @R0             ; Indicate failure
+ERR8        MOVE    0x7FFF, R0
+            MOVE    0x1801, @R0             ; Indicate failure
             HALT
 
 ;
@@ -725,7 +730,7 @@ SUCCESS     MOVE    0x7FFF, R0
             HALT
             HALT
 ISR_HALT    MOVE    0x7FFF, R0
-            MOVE    0x1801, @R0             ; Indicate failure
+            MOVE    0x1802, @R0             ; Indicate failure
 L_HALT      HALT
 
 
