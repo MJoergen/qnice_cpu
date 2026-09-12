@@ -293,7 +293,7 @@ begin
          ); -- i_wb_mux_dev
 
 
-         -- EAE (Extended Arithmetic Element)
+      -- EAE (Extended Arithmetic Element)
       i_eae : entity work.eae
          generic map (
             G_DELAY => 3
@@ -311,7 +311,7 @@ begin
             rd_data_o => wbd_data_rd_eae
          ); -- i_eae
 
-         -- INT (Interrupt Generator)
+      -- INT (Interrupt Generator)
       i_interrupt : entity work.interrupt
          port map (
             clk_i        => clk_i,

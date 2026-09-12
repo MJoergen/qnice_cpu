@@ -331,7 +331,7 @@ Change one of the pair and change the other.
 `eae.vhd` is the QNICE-FPGA project's Extended Arithmetic Element — a 16x16
 multiply/divide device — adapted from upstream to a Wishbone slave interface.
 `system.vhd` gives it the **upper half of the data address space,
-`0x8000`-`0xFFFF`**, and it decodes only `wbd_addr(2 downto 0)`, so its five
+`0xC000`-`0xFFFF`**, and it decodes only `wbd_addr(2 downto 0)`, so its five
 registers alias every 8 words throughout that half. The programs address it at
 `0xFF18`-`0xFF1C`, the same addresses upstream QNICE-FPGA uses.
 
@@ -485,9 +485,9 @@ section.
 ## The data bus multiplexer
 
 `wb_mux.vhd` splits the data bus on the top address bit, RAM below `0x8000` and
-EAE above. It is a multiplexer rather than a plain address decode because the
-two slaves have different latencies, and either can be slowed further from the
-Makefile.
+INT and EAE above. It is a multiplexer rather than a plain address decode
+because the two slaves have different latencies, and either can be slowed
+further from the Makefile.
 
 A pipelined Wishbone ACK is a bare pulse, so a master with requests in flight
 pairs them with responses by position, and needs its slave to acknowledge in
@@ -738,8 +738,8 @@ at `HALT` the two are not describing the same object.
 
 The window is `0x0000`-`0x7FFF` because that is the common ground. Above
 `0x8000` the emulator decodes memory-mapped I/O and both `system.vhd` and
-`tb_upstream.vhd` put the EAE, so the two sides are not describing the same
-thing.
+`tb_upstream.vhd` put the INT and the EAE, so the two sides are not describing
+the same thing.
 
 The QNICE-side final image needs no RTL change here: it is the assembler's own
 `.out` file — the initial memory image, in the same `0xADDR 0xVALUE` format the

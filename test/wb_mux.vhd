@@ -1,6 +1,6 @@
 -- A generic pipelined WISHBONE multiplexer: one master, two slaves, selected
--- by the most significant address bit. Slave 0 serves the lower half of the
--- address space, slave 1 the upper half.
+-- by the extra signal s_sel_i. Slave 0 is served when s_sel_i is 0, slave 1
+-- when it is 1.
 --
 -- The point of this module is that IT RESTORES RESPONSE ORDER. Pipelined
 -- WISHBONE ACKs carry no identifying information -- a bare pulse -- so a master
