@@ -463,9 +463,10 @@ TEST6E      MOVE    0x8000, R14             ; Set register bank
             MOVE    INT_ADDR, R0
             MOVE    INT_COUNT, R1
             MOVE    INT_STAT, R2
+            MOVE    DATA, R3
+            MOVE    0x0000, @R3             ; Incremented by entry into ISR
             MOVE    DATA_6E1, R3
             MOVE    DATA_6E2, R4
-            MOVE    0x0000, @R3             ; Incremented by entry into ISR
             MOVE    ISR6E, @R0              ; Set ISR address for interrupt
             MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
             CMP     @R3++, @R4++
@@ -479,6 +480,7 @@ TEST6E      MOVE    0x8000, R14             ; Set register bank
             SUB     0x0005, R4
             CMP     DATA_6E2, R4
             RBRA    ERR6E3, !Z
+            MOVE    DATA, R3
             CMP     0x0001, @R3             ; Verify hardware ISR was entered
             RBRA    ERR6E1, !Z
 

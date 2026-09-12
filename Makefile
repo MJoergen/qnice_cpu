@@ -61,6 +61,17 @@ TEST_SOURCES += test/system.vhd
 UPSTREAM_TB    = test/tb_upstream.vhd
 UPSTREAM_PATCH = test/upstream.patch
 
+# This repository's own modules that the upstream testbench instantiates, and
+# which therefore have to be analysed into the upstream work library as well as
+# the ordinary one. Today just the Interrupt Generator: prog_int_hw.asm needs an
+# interrupt source, and both sides of the differential test are given the SAME
+# one, so that a divergence between the two CPUs cannot turn out to be a
+# divergence between two interrupt generators. test/tb_upstream.vhd's header
+# has the whole argument, and the two adapters it costs. These files are in
+# TEST_SOURCES above as well, which is what "make lint" and "make test" see;
+# this names them again for the other library.
+UPSTREAM_LOCAL = test/interrupt.vhd
+
 TEST ?= prog
 REGISTER_BANK_WIDTH ?= 8
 
@@ -416,14 +427,15 @@ UPSTREAM_SOURCES += $(UPSTREAM_DIR)/EAE.vhd
 # repository, it touches one file, and every reason for it is written in the
 # patch's own header. "patch" fails the build if it no longer applies, which is
 # what should happen when the pinned commit moves.
-$(UPSTREAM_STAMP): $(UPSTREAM_TB) $(UPSTREAM_PATCH) Makefile
+$(UPSTREAM_STAMP): $(UPSTREAM_TB) $(UPSTREAM_LOCAL) $(UPSTREAM_PATCH) Makefile
 	@mkdir -p $(CROSSCHECK_DIR)
 	rm -rf $(UPSTREAM_DIR) $(UPSTREAM_WORK)
 	git -C $(QNICE_FPGA) archive $(QNICE_REF) \
 	   $(patsubst $(CROSSCHECK_DIR)/%,%,$(UPSTREAM_SOURCES)) | tar -x -C $(CROSSCHECK_DIR)
 	patch -p1 -d $(CROSSCHECK_DIR) < $(UPSTREAM_PATCH)
 	@mkdir -p $(UPSTREAM_WORK)
-	ghdl -a --std=08 -fsynopsys --workdir=$(UPSTREAM_WORK) $(UPSTREAM_SOURCES) $(UPSTREAM_TB)
+	ghdl -a --std=08 -fsynopsys --workdir=$(UPSTREAM_WORK) $(UPSTREAM_SOURCES) \
+	   $(UPSTREAM_LOCAL) $(UPSTREAM_TB)
 	touch $@
 
 # Narrow the scope the ordinary make way, by overriding TESTS:

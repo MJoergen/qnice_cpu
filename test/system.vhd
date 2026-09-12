@@ -294,40 +294,40 @@ begin
 
 
          -- EAE (Extended Arithmetic Element)
-         i_eae : entity work.eae
-            generic map (
-               G_DELAY => 3
-            )
-            port map (
-               clk_i     => clk_i,
-               rst_i     => not rstn_i,
-               cyc_i     => wbd_cyc_eae,
-               stb_i     => wbd_stb_eae,
-               stall_o   => wbd_stall_eae,
-               addr_i    => wbd_addr_eae(2 downto 0),
-               we_i      => wbd_we_eae,
-               wr_data_i => wbd_data_wr_eae,
-               ack_o     => wbd_ack_eae,
-               rd_data_o => wbd_data_rd_eae
-            ); -- i_eae
+      i_eae : entity work.eae
+         generic map (
+            G_DELAY => 3
+         )
+         port map (
+            clk_i     => clk_i,
+            rst_i     => not rstn_i,
+            cyc_i     => wbd_cyc_eae,
+            stb_i     => wbd_stb_eae,
+            stall_o   => wbd_stall_eae,
+            addr_i    => wbd_addr_eae(2 downto 0),
+            we_i      => wbd_we_eae,
+            wr_data_i => wbd_data_wr_eae,
+            ack_o     => wbd_ack_eae,
+            rd_data_o => wbd_data_rd_eae
+         ); -- i_eae
 
          -- INT (Interrupt Generator)
-         i_interrupt : entity work.interrupt
-            port map (
-               clk_i        => clk_i,
-               rst_i        => not rstn_i,
-               wb_cyc_i     => wbd_cyc_int,
-               wb_stb_i     => wbd_stb_int,
-               wb_stall_o   => wbd_stall_int,
-               wb_addr_i    => wbd_addr_int(2 downto 0),
-               wb_we_i      => wbd_we_int,
-               wb_wr_data_i => wbd_data_wr_int,
-               wb_ack_o     => wbd_ack_int,
-               wb_rd_data_o => wbd_data_rd_int,
-               irq_valid_o  => irq_valid,
-               irq_ready_i  => irq_ready,
-               irq_addr_o   => irq_addr
-            ); -- i_interrupt
+      i_interrupt : entity work.interrupt
+         port map (
+            clk_i        => clk_i,
+            rst_i        => not rstn_i,
+            wb_cyc_i     => wbd_cyc_int,
+            wb_stb_i     => wbd_stb_int,
+            wb_stall_o   => wbd_stall_int,
+            wb_addr_i    => wbd_addr_int(2 downto 0),
+            wb_we_i      => wbd_we_int,
+            wb_wr_data_i => wbd_data_wr_int,
+            wb_ack_o     => wbd_ack_int,
+            wb_rd_data_o => wbd_data_rd_int,
+            irq_valid_o  => irq_valid,
+            irq_ready_i  => irq_ready,
+            irq_addr_o   => irq_addr
+         ); -- i_interrupt
 
    else generate
 
