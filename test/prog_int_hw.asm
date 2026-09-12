@@ -4,9 +4,15 @@
 ;
 ; This program specifically tests items: 4, 5, and 6 in the "Test cases" list
 ; in doc/interrupts.md.
+; Extra tests not mentioned in doc/interrupts.md are:
+;   Test 6A : Interrupt instruction with multiple micro-ops.
+;   Test 6B : Interrupt instruction with a large memory latency (EAE).
+;   Test 6C : Interrupt instruction during a pipeline flush: Taken branch and write-to-R14.
+;   Test 7  : Check restoring of R14 after a hardware interrupt.
+;   Test 8  : Fire an interrupt after the halt
 ;
 ; Register Map for Interrupt Generator (copied verbatim from test/interrupt.vhd):
-; 0xBF00 : Countdown number of clock cycles until interrupt is asserted. After count-down,
+; 0xBF00 : Countdown number of idle clock cycles until interrupt is asserted. After count-down,
 ;          interrupt line remains asserted until accepted, and is then released. Counter
 ;          reads back as zero.
 ; 0xBF01 : Address of interrupt service routine. Initialized to zero, which happens to be
@@ -21,6 +27,19 @@
                                             ; However, it does use a non-banked register,
                                             ; which is important in some special cases in
                                             ; handling of pipeline flushing.
+
+; This number has to be hand calculated any time this file is updated.
+; It counts the total number of times the CPU has accepted an interrupt.
+; The current calculation is:
+;   TEST4  : 1
+;   TEST5  : 2
+;   TEST6  : 4
+;   TEST6A : 8
+;   TEST6B : 5
+;   TEST6C : 4
+;   TEST7  : 1
+;   TOTAL  : 25
+TOTAL_ACCEPT         .EQU    25
 
 INT_COUNT            .EQU    0xBF00
 INT_ADDR             .EQU    0xBF01
@@ -259,9 +278,9 @@ TEST6B      MOVE    INT_ADDR, R0
             MOVE    INT_STAT, R2
             MOVE    DATA, R3
             MOVE    EAE_CSR_MULU, R9        ; EAE command value
-            MOVE    EAE_REG_CSR, R11        ; EAE command address
             MOVE    0x0005, R12             ; Number of loops
 TEST6B_LOOP MOVE    0x0000, @R3             ; Clear interrupt counter
+            MOVE    EAE_REG_CSR, R11        ; EAE command address
             MOVE    EAE_REG_OPERAND_0, R8   ; EAE operand
             MOVE    1, @R8++                ; Set first operand
             MOVE    R12, @R8++              ; Set second operand
@@ -326,7 +345,7 @@ L_6C_2      NOP
             MOVE    R14, R9                 ; Store register bank
             MOVE    R0, R10                 ; Store old value
             ADD     0x0500, R14             ; Change register bank
-            NOT     R0, R0                  ; Clobber R0 with wrong value
+            NOT     R10, R0                 ; Clobber new R0 with wrong value
             MOVE    INT_COUNT, R1
             MOVE    0x0002, @R1             ; Request interrupt in two clock cycles
             MOVE    R9, R14                 ; Revert register bank; flushes pipeline
@@ -338,6 +357,29 @@ L_6C_2      NOP
             RBRA    ERR6C, !Z
             CMP     0x0004, @R3             ; Verify ISR was entered
             RBRA    ERR6C, !Z
+
+;
+; Test 6D : Interrupt instruction during an INT
+;
+TEST6D      MOVE    0x8000, R14             ; Set register bank
+            MOVE    INT_ADDR, R0
+            MOVE    INT_COUNT, R1
+            MOVE    INT_STAT, R2
+            MOVE    DATA, R3
+            MOVE    DATA1, R4
+            MOVE    0x0000, @R3             ; Incremented by entry into hardware ISR
+            MOVE    0x0000, @R4             ; Incremented by entry into software ISR
+            MOVE    ISR6D, @R0              ; Set ISR address for hardware interrupt
+            MOVE    ISR6D_INT, R5           ; Set ISR address for software interrupt
+            MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
+            INT     R5
+            NOP
+            NOP
+            NOP
+            CMP     0x0001, @R3             ; Verify hardware ISR was entered
+            RBRA    ERR6D, !Z
+            CMP     0x0001, @R4             ; Verify software ISR was entered
+            RBRA    ERR6D, !Z
 
             RBRA    TEST7, 1                ; End of Test 6.
 
@@ -353,9 +395,8 @@ ISR6A       MOVE    SCRATCH, R3
             ADD     0x0001, @R3             ; Indicate ISR has been entered
             RTI
 
-ISR6B       MOVE    @R8, R10                ; Read result from EAE
-            CMP     R12, R10
-            RBRA    ERR6B, !Z
+ISR6B       MOVE    SCRATCH, R3
+            MOVE    R12, @R3                ; Write operand to scratch memory
             MOVE    DATA, R3
             ADD     0x0001, @R3             ; Indicate ISR has been entered
             RTI
@@ -364,17 +405,26 @@ ISR6C       MOVE    DATA, R3
             ADD     0x0001, @R3             ; Indicate ISR has been entered
             RTI
 
+ISR6D       MOVE    DATA, R3
+            ADD     0x0001, @R3             ; Indicate hardware ISR has been entered
+            RTI
+
+ISR6D_INT   MOVE    DATA1, R3
+            ADD     0x0001, @R3             ; Indicate software ISR has been entered
+            RTI
+
 ERR6        HALT
 ERR6A       HALT
 ERR6B       HALT
 ERR6C       HALT
+ERR6D       HALT
 
 ;
 ; Test 7 : Check restoring of R14 after a hardware interrupt.
 ;
 TEST7       MOVE    0xF000, R14             ; Clobbered register bank
             NOT     INT_ADDR, R0            ; Deliberately write the wrong value
-            MOVE    0x4000, R14             ; Set the new register bank
+            MOVE    0x40FF, R14             ; Set the new register bank
             MOVE    INT_ADDR, R0
             MOVE    INT_COUNT, R1
             MOVE    INT_STAT, R2
@@ -382,16 +432,12 @@ TEST7       MOVE    0xF000, R14             ; Clobbered register bank
             MOVE    0x0000, @R3             ; Incremented by entry into ISR
             MOVE    ISR7, @R0               ; Set ISR address
             MOVE    0x0001, @R1             ; Request interrupt in one clock cycle
-
             NOP
             NOP
             NOP
-
             MOVE    R14, R10
-            AND     0xFF00, R10
-            CMP     0x4000, R10             ; Verify Register Bank is restored correctly
+            CMP     0x40FF, R10             ; Verify Register Bank is restored correctly
             RBRA    ERR7, !Z
-
             CMP     INT_ADDR, R0            ; Verify banked register is correct
             RBRA    ERR7, !Z
             CMP     INT_COUNT, R1           ; Verify banked register is correct
@@ -409,7 +455,7 @@ ERR7        HALT
 
 TOTAL       MOVE    INT_ACCEPT, R0          ; Verify total number of interrupts
                                             ; acccepted by CPU
-            CMP     16, @R0
+            CMP     TOTAL_ACCEPT, @R0
             RBRA    SUCCESS, Z
             HALT
 
@@ -418,21 +464,24 @@ TOTAL       MOVE    INT_ACCEPT, R0          ; Verify total number of interrupts
 ;
 SUCCESS     MOVE    0x7FFF, R0
             MOVE    0x0000, @R0
-; Final test: Fire an interrupt after the halt
+; Test 8 : Fire an interrupt after the halt
             MOVE    INT_ADDR, R0
             MOVE    INT_COUNT, R1
             MOVE    INT_STAT, R2
             MOVE    ISR_HALT, @R0           ; Set ISR address
-            MOVE    0x0005, @R1             ; Request interrupt in a few clock cycles
+            MOVE    0x0001, @R1             ; Request interrupt in a few clock cycles
             HALT
             HALT
-ISR_HALT    RBRA    ISR_HALT, 1
+ISR_HALT    MOVE    0x7FFF, R0
+            MOVE    0x1111, @R0             ; Indicate failure
+            HALT
 
 
 DATA        .DW     0x0000
 DATA1       .DW     0x0000
 DATA2       .DW     0x0000
-SCRATCH     .DW     0x0000
+SCRATCH     .DW     0x0000                  ; The purpose is to log writes to this
+                                            ; location into the file prog_int_hw.writes.golden
 
 STACK_BOT   .BLOCK  5
             .DW     0xDEAD                  ; Sentinel values, should never be written to

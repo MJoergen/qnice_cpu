@@ -1,12 +1,20 @@
 -- This acts as a programmable interrupt generator.
+-- 
+-- THEORY OF OPERATION
 -- This module is only meant to be used in simulation. It will
 -- not be used during synthesis.
+--
+-- INTERFACE CONTRACTS
+-- irq_ready_i may only be pulsed for one clock cycle, and may only be asserted
+-- when irq_valid_o is. This is *stricter* than AXI style handshaking.
+-- If irq_valid_o is held high continuously, then irq_ready_i should (at most)
+-- toggle between high and low.
 --
 -- irq_addr_o is only valid when irq_valid_o is asserted. It is deliberately
 -- scrambled when irq_valid_o is de-asserted.
 --
 -- Register Map:
--- 0xBF00 : Countdown number of clock cycles until interrupt is asserted. After count-down,
+-- 0xBF00 : Countdown number of idle clock cycles until interrupt is asserted. After count-down,
 --          interrupt line remains asserted until accepted, and is then released. Counter
 --          reads back as zero.
 -- 0xBF01 : Address of interrupt service routine. Initialized to zero, which happens to be
@@ -14,6 +22,10 @@
 -- 0xBF02 : Bit 0 indicates whether interrupt is currently asserted (can only ever read
 --          non-zero when inside an ISR)
 -- 0xBF03 : Number of accepted interrupt requests
+
+-- RESET
+-- Synchronous, active high.
+
 
 library ieee;
    use ieee.std_logic_1164.all;
@@ -34,7 +46,7 @@ entity interrupt is
       wb_ack_o     : out std_logic;
       wb_rd_data_o : out std_logic_vector(15 downto 0);
 
-      -- Interrupt port on CPU
+      -- Interrupt port on CPU; AXI-like
       irq_valid_o  : out std_logic;
       irq_ready_i  : in  std_logic;
       irq_addr_o   : out std_logic_vector(15 downto 0)
