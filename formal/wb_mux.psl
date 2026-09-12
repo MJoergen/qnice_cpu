@@ -49,12 +49,12 @@ vunit i_wb_mux(wb_mux(synthesis))
    p_env : process (clk_i)
    begin
       if rising_edge(clk_i) then
-         if f_accept = '1' and s_addr_i(G_ADDR_SIZE - 1) = '0' then
+         if f_accept = '1' and s_sel_i = '0' then
             f_out0     <= f_out0 + 1;
             f_req_tgl0 <= not f_req_tgl0;
          end if;
 
-         if f_accept = '1' and s_addr_i(G_ADDR_SIZE - 1) = '1' then
+         if f_accept = '1' and s_sel_i = '1' then
             f_out1     <= f_out1 + 1;
             f_req_tgl1 <= not f_req_tgl1;
          end if;
@@ -69,11 +69,11 @@ vunit i_wb_mux(wb_mux(synthesis))
             f_rsp_tgl1 <= not f_rsp_tgl1;
          end if;
 
-         if f_accept = '1' and m0_ack_i = '1' and s_addr_i(G_ADDR_SIZE - 1) = '0' then
+         if f_accept = '1' and m0_ack_i = '1' and s_sel_i = '0' then
             f_out0 <= f_out0;
          end if;
 
-         if f_accept = '1' and m1_ack_i = '1' and s_addr_i(G_ADDR_SIZE - 1) = '1' then
+         if f_accept = '1' and m1_ack_i = '1' and s_sel_i = '1' then
             f_out1 <= f_out1;
          end if;
 
@@ -111,7 +111,7 @@ vunit i_wb_mux(wb_mux(synthesis))
          end if;
 
          if f_accept = '1' and fill_v < G_MAX_OUTSTANDING then
-            if s_addr_i(G_ADDR_SIZE - 1) = '0' then
+            if s_sel_i = '0' then
                shadow_v(fill_v) := '0' & f_req_tgl0;
             else
                shadow_v(fill_v) := '1' & f_req_tgl1;
@@ -144,7 +144,8 @@ vunit i_wb_mux(wb_mux(synthesis))
    -- masters (FETCH, MEMORY) provide it.
    f_s_stable : assume always {s_stb_i = '1' and s_stall_o = '1' and rst_i = '0'} |=>
       {rst_i = '1' or s_cyc_i = '0' or (stable(s_stb_i) and stable(s_addr_i) and
-                                        stable(s_we_i) and stable(s_data_i))};
+                                        stable(s_we_i) and stable(s_data_i) and
+                                        stable(s_sel_i))};
 
    -- WISHBONE SLAVES: no acknowledge that was not asked for. Without this a
    -- slave could invent responses and the buffers would legitimately overflow.
