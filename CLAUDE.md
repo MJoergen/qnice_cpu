@@ -149,7 +149,7 @@ not after.
 | [src/registers/CLAUDE.md](src/registers/CLAUDE.md) | writing PSL against write-before-read forwarding | a forwarding property without its escape clause fails BMC on something that is not a bug |
 | [src/sub/CLAUDE.md](src/sub/CLAUDE.md) | the six elastic-pipeline primitives (no README of their own) | buffers are combinational both ways, `two_stage_fifo`'s reset is asymmetric on purpose, `dp_ram` gets one address per port |
 | [src/memory/CLAUDE.md](src/memory/CLAUDE.md) | the op-type FIFO behind a bare Wishbone ACK | it requires in-order ACKs, and `mreq_accept` must read registered state only |
-| [test/CLAUDE.md](test/CLAUDE.md) | differential testing, the EAE, the slow-memory model, the bus multiplexer | `make test_slow` is what gives `wb_mux` teeth; the mux is kept out of the bitstream for measured timing reasons |
+| [test/CLAUDE.md](test/CLAUDE.md) | differential testing, the EAE, the Interrupt Generator, the slow-memory model, and the bus multiplexers | `make test_slow` is what gives `wb_mux` teeth; the muxes are kept out of the bitstream for measured timing reasons; the interrupt programs are written ahead of the CPU feature and are not in `TESTS` |
 | [formal/CLAUDE.md](formal/CLAUDE.md) | the `.psl`/`.sby`/`.gtkw` triplet, the stamp files, CI | all thirteen DUTs pass; anything commented out of `DUTS` to narrow scope goes back |
 | [hw/CLAUDE.md](hw/CLAUDE.md) | Yosys synthesis, utilization numbers, the 7.45 ns constraint | `make synth` elaborates `cpu` and not `system` by necessity; timing is routing-dominated, so unrelated edits move it |
 
@@ -210,7 +210,9 @@ handled in DECODE.
   [doc/interrupts.md](doc/interrupts.md), and its `timing.tex` is in the Makefile's `TIMINGS`, so
   `make diagrams` renders it like any other. Read it as a specification, not as a description of
   something that exists; the diagram is to be redrawn against a real simulation once the module
-  runs.
+  runs. The *other* side of that port does exist already: in simulation `test/system.vhd` wires
+  the CPU's `irq_*` ports to `test/interrupt.vhd`, a program-controlled interrupt source (task T1),
+  see [Simulated peripherals: the Interrupt Generator](test/CLAUDE.md#simulated-peripherals-the-interrupt-generator).
 - `src/sub/` — reusable elastic-pipeline building blocks, see
   [Elastic pipeline building blocks](src/sub/CLAUDE.md).
 - `src/cpu.vhd` — top-level entity tying FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN together.
@@ -219,13 +221,19 @@ handled in DECODE.
   from a failing one. `test/tb_upstream.vhd`, `test/upstream.patch` and `test/crosscheck.py`
   belong to the differential tests instead — see
   [Differential testing against upstream](test/CLAUDE.md#differential-testing-against-upstream). `test/eae.vhd` is a simulation-only arithmetic peripheral,
-  `test/wb_dp_mem.vhd` the memory model whose latency generics drive `make test_slow`, and
-  `test/wb_mux.vhd` the order-restoring data bus multiplexer between them,
-  and `test/prog_mandel_stats.asm` the instrumented build of
+  `test/interrupt.vhd` a simulation-only programmable interrupt source,
+  `test/wb_dp_mem.vhd` the memory model whose latency generics drive `make test_slow`,
+  `test/wb_mux.vhd` the order-restoring data bus multiplexer, instantiated twice to split the bus
+  between those three, and `test/prog_mandel_stats.asm` the instrumented build of
   `test/prog_mandel_perf.asm` — see
   [Simulated peripherals: the EAE](test/CLAUDE.md#simulated-peripherals-the-eae),
-  [Simulating a slow memory](test/CLAUDE.md#simulating-a-slow-memory) and
+  [Simulated peripherals: the Interrupt Generator](test/CLAUDE.md#simulated-peripherals-the-interrupt-generator),
+  [Simulating a slow memory](test/CLAUDE.md#simulating-a-slow-memory), and
   [The data bus multiplexer](test/CLAUDE.md#the-data-bus-multiplexer).
+  `test/prog_int_hw.asm` and `test/prog_int_halt.asm` are the hardware-interrupt programs, written
+  ahead of the feature and deliberately **not** in `TESTS`: `make check TEST=prog_int_hw` fails
+  today, and that is expected, not a regression. `prog_int_halt` passes today, but only because
+  nothing takes the interrupt it arms.
   One of the programs, `test/prog_waveform.asm`, is not really a test: it
   is the program the pipeline timing diagram in
   [src/cpu_main/README.md](src/cpu_main/README.md#waveforms) was read off, and it is in `TESTS`
