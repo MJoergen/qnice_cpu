@@ -698,12 +698,8 @@ assertion: `c_rti_bank_change`.
   as the edge cases I added, and the rogue RTI and rogue INT. Basically, I want
   all the test cases written up front for careful review.
 
-  DECISION: those programs cannot pass until Phase 2 lands, so they go in a new
-  `TESTS_PENDING` variable in the Makefile that `make test` does **not** run.
-  Without it every Phase 1 and Phase 2 commit turns CI red, and a red CI that is
-  expected to be red stops being a signal. A program moves from `TESTS_PENDING`
-  to `TESTS` on the commit that makes it pass, which gives each step below a
-  crisp definition of done: name the programs that graduate.
+  DECISION: those programs cannot pass until Phase 2 lands, so they are
+  deliberately missing from `TESTS`.
 
 * **T2. `src/interrupt/interrupt.vhd`.** The request-side adapter:
   `irq_valid_i`/`irq_addr_i` in, `irq_ready_o` out, `pending_o`/`addr_o` to
@@ -794,9 +790,7 @@ assertion: `c_rti_bank_change`.
   indirect modes need a memory read first. Rogue `INT` halts.
 
   DECISION: Make it so that test cases 1, 2, and 3 above (in the happy path) can
-  be verified as working by this point in the development process. They graduate
-  from `TESTS_PENDING` to `TESTS` on this commit — they need only `INT R0` and
-  `RTI`, so they do not depend on T6 or T7.
+  be verified as working by this point in the development process.
 
 * **T6. Hardware interrupt entry.** Commit at `inst_done_o`, taking `next_pc` as
   the return address, and redirect in that same cycle to `addr_o`, with
@@ -814,7 +808,6 @@ assertion: `c_rti_bank_change`.
   directly rather than as an upper bound — but re-measure at T12 regardless, as
   T0 already says.
 
-  Graduates test cases 4, 5, and 7 from `TESTS_PENDING`.
 * **T7. Top-level ports.** `irq_valid_i`, `irq_ready_o`, and `irq_addr_i` on
   [cpu.vhd](../src/cpu.vhd) and `system.vhd`. Active high, no `_n` suffixes; the
   daisy chain, if a system wants one, is the adaptation layer's business.
@@ -822,9 +815,9 @@ assertion: `c_rti_bank_change`.
 ### Phase 3 — close it out
 
 * **T8. Graduate the last test programs.** Writing them moved to T1; what is
-  left here is emptying `TESTS_PENDING` — every program in it must now be in
-  `TESTS` and passing, including the two rogue cases. Regenerate the golden
-  files and read the diff carefully. **Done when** `TESTS_PENDING` is empty.
+  left here is adding every program to `TESTS` and make sure they are passing,
+  including the two rogue cases. Regenerate the golden
+  files and read the diff carefully. **Done when** all tests pass.
 
 * **T9. Formal.** Extend [cpu_main.psl](../formal/cpu_main.psl): no `irq_ready_o`
   while an ISR is active; interrupt entry happens only on `inst_done_o` (moved

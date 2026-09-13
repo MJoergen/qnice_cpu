@@ -352,7 +352,7 @@ top.tb_cpu.i_system.gen_sim.i_interrupt.rst_i
 top.tb_cpu.i_system.gen_sim.i_interrupt.wb_cyc_i
 top.tb_cpu.i_system.gen_sim.i_interrupt.wb_stb_i
 top.tb_cpu.i_system.gen_sim.i_interrupt.wb_stall_o
-#{top.tb_cpu.i_system.gen_sim.i_interrupt.wn_addr_i[2:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.wn_addr_i[2] top.tb_cpu.i_system.gen_sim.i_interrupt.wn_addr_i[1] top.tb_cpu.i_system.gen_sim.i_interrupt.wn_addr_i[0]
+#{top.tb_cpu.i_system.gen_sim.i_interrupt.wb_addr_i[2:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.wb_addr_i[2] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_addr_i[1] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_addr_i[0]
 top.tb_cpu.i_system.gen_sim.i_interrupt.wb_we_i
 @22
 #{top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[15:0]} top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[15] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[14] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[13] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[12] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[11] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[10] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[9] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[8] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[7] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[6] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[5] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[4] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[3] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[2] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[1] top.tb_cpu.i_system.gen_sim.i_interrupt.wb_wr_data_i[0]

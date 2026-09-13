@@ -8,7 +8,7 @@ library ieee;
 -- With G_SIMULATION, an EAE (Extended Arithmetic Element) and an INT (Interrupt
 -- Generator) are additionally addressable in the upper half of the data address
 -- space, 0x8000-0xBFFF for the INT and 0xC000-0xFFFF for the EAE. Two
--- multiplexers split the data bus between the two.  None of this is
+-- multiplexers split the data bus between the two. None of this is
 -- synthesised; the comment above that generate says why it matters that they
 -- are not.
 

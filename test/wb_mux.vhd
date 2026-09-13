@@ -70,7 +70,7 @@ entity wb_mux is
       s_data_o   : out std_logic_vector(G_DATA_SIZE - 1 downto 0);
       s_sel_i    : in  std_logic;
 
-      -- WISHBONE master 0: When s_sel_i is 0
+      -- WISHBONE master 0: when s_sel_i is 0
       m0_cyc_o   : out std_logic;
       m0_stb_o   : out std_logic;
       m0_stall_i : in  std_logic;
@@ -80,7 +80,7 @@ entity wb_mux is
       m0_ack_i   : in  std_logic;
       m0_data_i  : in  std_logic_vector(G_DATA_SIZE - 1 downto 0);
 
-      -- WISHBONE master 1: When s_sel_i i 1
+      -- WISHBONE master 1: when s_sel_i is 1
       m1_cyc_o   : out std_logic;
       m1_stb_o   : out std_logic;
       m1_stall_i : in  std_logic;

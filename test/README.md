@@ -1,8 +1,9 @@
 # Test programs and how to tell whether they passed
 
 This directory holds the testbench (`tb_cpu.vhd`), the memory models it needs
-(`wb_dp_mem.vhd`, `wb_mux.vhd`, `system.vhd`), a simulation-only arithmetic
-peripheral (`eae.vhd`), the test-result monitor (`test_monitor.vhd`), the QNICE assembly
+(`wb_dp_mem.vhd`, `wb_mux.vhd`, `system.vhd`), two simulation-only peripherals
+(the arithmetic element `eae.vhd` and the interrupt source `interrupt.vhd`), the
+test-result monitor (`test_monitor.vhd`), the QNICE assembly
 programs run against the CPU, and a second testbench (`tb_upstream.vhd`) that
 runs those same programs on upstream's own CPU.
 
@@ -92,7 +93,8 @@ see `src/cpu_main/write.vhd`.
 Two details of the mechanism are worth knowing:
 
 * `0x7FFF` is the top word of the RAM half of the data address space (`0x0000`-
-  `0x7FFF`, the EAE holds the half above it), and no test program uses it. The
+  `0x7FFF`; the Interrupt Generator and the EAE hold the half above it), and no
+  test program uses it. The
   RAM is 8 kW and aliases throughout that half, so the write physically lands on
   the top word of the array. It is an ordinary RAM location, not a decoded I/O
   register — the monitor watches the bus, so the write itself is harmless.
@@ -133,7 +135,7 @@ a failing run still reports the value it computed.
 
 ## What each program covers
 
-`prog.asm` is the broad self-checking instruction suite; the other thirteen in
+`prog.asm` is the broad self-checking instruction suite; the other fourteen in
 `TESTS` are narrow. Its five groups divide the work: flags against branching,
 instructions against every flag combination, every addressing mode for `MOVE`
 and `SUB`, conditional branching against every addressing mode, and — group 5 —
@@ -144,9 +146,10 @@ opcode-blind and already covered by group 3, but the per-opcode
 `C_READS_FROM_DST` / `C_WRITES_TO_DST` tables in `decode.vhd` that choose the
 microcode entry. A wrong bit there is invisible with register operands and
 fatal with memory ones; the header of `prog.asm` records the fault injection
-that establishes it. Three further programs are deliberately outside `TESTS`:
-`prog_poll.asm` and `prog_poll_reg.asm` at the end of this section, and
-`prog_mandel_stats.asm` in the one after it. `prog_simple.asm` walks the addressing modes of
+that establishes it. Five further programs are deliberately outside `TESTS`:
+`prog_poll.asm` and `prog_poll_reg.asm` at the end of this section,
+`prog_mandel_stats.asm` in the one after it, and `prog_int_hw.asm` and
+`prog_int_halt.asm` in the one after that. `prog_simple.asm` walks the addressing modes of
 `MOVE`/`ADD`/`CMP` and the branch instructions. `prog_pipeline.asm` and
 `prog_interleave.asm` exist to exercise pipeline behaviour rather than
 instruction semantics — respectively a `@R7++, @R7++` hazard and the
@@ -330,17 +333,18 @@ Change one of the pair and change the other.
 
 `eae.vhd` is the QNICE-FPGA project's Extended Arithmetic Element — a 16x16
 multiply/divide device — adapted from upstream to a Wishbone slave interface.
-`system.vhd` gives it the **upper half of the data address space,
+`system.vhd` gives it the **top quarter of the data address space,
 `0xC000`-`0xFFFF`**, and it decodes only `wbd_addr(2 downto 0)`, so its five
-registers alias every 8 words throughout that half. The programs address it at
-`0xFF18`-`0xFF1C`, the same addresses upstream QNICE-FPGA uses.
+registers alias every 8 words throughout that quarter. The programs address it
+at `0xFF18`-`0xFF1C`, the same addresses upstream QNICE-FPGA uses.
 
-**It is simulation only**, and so is `wb_mux.vhd` in front of it: both sit in
-`system.vhd`'s `gen_sim : if G_SIMULATION generate`, whose `else generate` wires
-the data bus straight to the RAM. So in hardware there is one slave and the RAM
-aliases across the whole 64 kW data address space; nothing in the CPU addresses
-the EAE's half. Leaving the mux in the bitstream was tried and cost 0.21 ns of
-timing margin — see the next-but-one section.
+**It is simulation only**, and so are the Interrupt Generator next to it and
+both `wb_mux.vhd` instances in front of them: all of them sit in `system.vhd`'s
+`gen_sim : if G_SIMULATION generate`, whose `else generate` wires the data bus
+straight to the RAM. So in hardware there is one slave and the RAM aliases
+across the whole 64 kW data address space; nothing in the CPU addresses the
+upper half. Leaving the mux in the bitstream was tried and cost 0.21 ns of
+timing margin — see [The data bus multiplexer](#the-data-bus-multiplexer).
 
 It is here to make the suite less artificial. Every other program in this
 directory is written to corner some specific part of the CPU, which leaves the
@@ -450,6 +454,66 @@ Two programs cover the device itself:
   halves, either of which masks the bug on its own, so no program at this level
   can separate them.
 
+## The Interrupt Generator, and the programs that use it
+
+`interrupt.vhd` is a programmable interrupt source, written for this testbench
+ahead of the CPU feature it tests (task T1 of
+[doc/interrupts.md](../doc/interrupts.md)). On one side it is a Wishbone slave
+in the **second quarter of the data address space, `0x8000`-`0xBFFF`**,
+decoding only `wbd_addr(2 downto 0)` like the EAE; on the other it drives the
+CPU's three-signal request port, `irq_valid`/`irq_ready`/`irq_addr`, described
+in [src/interrupt/README.md](../src/interrupt/README.md). The programs address
+it at `0xBF00`-`0xBF03`:
+
+| Address  | Register |
+| -------- | -------- |
+| `0xBF00` | Countdown. Writing `n` asserts the request after `n` idle cycles, and the request then stays asserted until accepted. Reads back as zero once it has fired. |
+| `0xBF01` | The ISR address presented with the request. Resets to `0x0000`. |
+| `0xBF02` | Bit 0 is the request line itself, so it can only read `1` from inside an ISR. |
+| `0xBF03` | The number of requests accepted since reset. |
+
+That map is copied verbatim into the header of every program that uses it, so a
+change to the device means changing those copies too.
+
+The request is **triggered by the program, not by a free-running timer**. A
+timer would be just as deterministic, but it would land on a different
+instruction after any change to the pipeline, and churn the golden files on
+unrelated commits. The countdown keeps that determinism while letting a program
+place a request at a chosen cycle offset from the write, which is how the
+programs sweep a request across every point an instruction passes through.
+It only counts while no request is pending, so an expiry can neither re-assert
+a request in the cycle it is accepted nor merge silently into one that is held.
+
+The device also polices the CPU. Its side of the handshake is asserted, more
+strictly than AXI-stream requires — `irq_ready` must be a one-cycle pulse
+(`Duplicate irq_ready_i`), and only while the request stands
+(`Stray irq_ready_i`) — and both assertions are `severity failure`, so a CPU
+that breaks the contract kills the run rather than passing it. And `irq_addr`
+is deliberately **scrambled to all-ones** the cycle after an accept, so a CPU
+that captures the ISR address late jumps to `0xFFFF` instead of passing by
+luck.
+
+Two programs use it, and **neither is in `TESTS`** yet:
+
+* `prog_int_hw.asm` covers cases 4, 5, and 6 of the test list in
+  [doc/interrupts.md](../doc/interrupts.md#test-cases), plus edge cases that
+  list does not name: three-micro-op and two-word instructions, a slow EAE
+  operand, flushes from a taken branch, a bank change, and self-modifying code,
+  a request during a software `INT`, a post-increment walk, and `R14` restore.
+  Its failure codes are `0x1abc` — test, subcase, check — and its header maps
+  each test letter to what it covers. `TOTAL_ACCEPT` is **counted by hand**
+  from the tally above it, so a sweep that changes length has to update both.
+  It **fails today**, and must: `make run TEST=prog_int_hw` reports
+  `0x1402`, because nothing in the CPU accepts an interrupt yet.
+* `prog_int_halt.asm` arms a request immediately before the final `HALT` and
+  checks that it is **not** taken, reporting `0x1802` from the ISR if it is.
+  It passes today, but vacuously, for the same reason. It is a program of its
+  own because upstream's CPU answers it the other way, and legitimately so —
+  see [the RTL reference](#the-rtl-reference) below.
+
+Neither has golden files yet. Both belong in `TESTS` once the CPU implements
+hardware interrupts.
+
 ## Running against a slow memory
 
 `wb_dp_mem.vhd` can be made slow in the two independent ways a pipelined
@@ -477,17 +541,21 @@ when a request is stuck on `STB` against a *stalling* slave. Concretely:
 removing the model's "drop pending ACKs when `CYC` deasserts" guard leaves
 `make test` fully green while `make test_slow` fails on 7 of the 13 programs.
 
-Both slaves may be slowed independently, and to different values, without the
-CPU seeing anything out of order: `wb_mux.vhd` sits between them and the CPU
-and restores response order itself. That is not automatic — see the next
-section.
+Only the RAM is slowed this way; the EAE and the Interrupt Generator keep their
+fixed latencies. The data bus may therefore answer at a different speed from
+either device without the CPU seeing anything out of order: `wb_mux.vhd` sits
+between them and the CPU and restores response order itself. That is not
+automatic — see the next section.
 
 ## The data bus multiplexer
 
-`wb_mux.vhd` splits the data bus on the top address bit, RAM below `0x8000` and
-INT and EAE above. It is a multiplexer rather than a plain address decode
-because the two slaves have different latencies, and either can be slowed
-further from the Makefile.
+`wb_mux.vhd` splits a Wishbone bus between two slaves on a select input,
+`s_sel_i`, which whoever instantiates it derives from the address. `system.vhd`
+instantiates it twice: `i_wb_mux` selects on bit 15, RAM below `0x8000` and the
+two devices above, and `i_wb_mux_dev` behind it selects on bit 14, the
+Interrupt Generator below `0xC000` and the EAE above. It is a multiplexer
+rather than a plain address decode because the slaves have different
+latencies, and the RAM's can be changed from the Makefile.
 
 A pipelined Wishbone ACK is a bare pulse, so a master with requests in flight
 pairs them with responses by position, and needs its slave to acknowledge in
@@ -511,6 +579,11 @@ the sign instead of accidentally giving the right answer. It only bites under
 `make test_slow`: at the default delays both slaves answer in one cycle and
 nothing can reorder. Breaking the ordering logic leaves `make test` green and
 fails `test_slow`.
+
+That test exercises `i_wb_mux` only. The EAE and the Interrupt Generator both
+acknowledge one cycle after a request, and `make test_slow` does not slow
+either, so `i_wb_mux_dev` never has a response to reorder in any program. Its
+ordering logic is covered by the formal proof below, not by simulation.
 
 The module is also formally verified, in `formal/wb_mux.{psl,sby,gtkw}` — the
 only DUT there that is a testbench component rather than a CPU module, because
@@ -669,8 +742,8 @@ version" section of the [top-level README](../README.md) — into
 `test/crosscheck/`, which is generated and gitignored; the harness itself is
 [`crosscheck.py`](crosscheck.py), shared by the two.
 
-**Current status: against the emulator, 12 of the 14 programs in `TESTS` leave
-RAM bit-identical; against the RTL, 13 do.** In both cases that is all 32768
+**Current status: against the emulator, 13 of the 15 programs in `TESTS` leave
+RAM bit-identical; against the RTL, 14 do.** In both cases that is all 32768
 words of `0x0000`-`0x7FFF`, with a handful of excused words in `prog.asm` (four
 against the emulator, two against the RTL). The programs that differ are
 different ones in each case, which is the point of running both — see "Where
@@ -682,11 +755,39 @@ the references disagree with each other" below.
 where this repo's CPU is a four-stage pipeline — inside
 [`tb_upstream.vhd`](tb_upstream.vhd), which is ours. That file's header
 describes the system built around it: the smallest one these programs need,
-which is one writable 32 kW RAM over `0x0000`-`0x7FFF` and the EAE, and
-deliberately *not* upstream's `env1.vhd`, whose memory map puts ROM where every
-program here is linked. The RAM model is upstream's own `block_ram.vhd`
-(falling-edge access, chip enable, zero output while writing), because it is
-upstream's CPU that has to be satisfied by it.
+which is one writable 32 kW RAM over `0x0000`-`0x7FFF`, the EAE, and the
+Interrupt Generator, and deliberately *not* upstream's `env1.vhd`, whose memory
+map puts ROM where every program here is linked. The RAM model is upstream's
+own `block_ram.vhd` (falling-edge access, chip enable, zero output while
+writing), because it is upstream's CPU that has to be satisfied by it.
+
+The Interrupt Generator there is **the same `interrupt.vhd`** that `system.vhd`
+instantiates, so that a divergence between the two CPUs cannot turn out to be a
+divergence between two interrupt generators. The Makefile analyses it into
+upstream's library for that reason (`UPSTREAM_LOCAL`). Upstream's CPU speaks
+neither of the device's interfaces, so it costs two adapters, which that
+file's header argues in full. The device runs on an inverted clock, which makes
+it a falling-edge slave like the RAM model. And an adapter translates the
+request port into upstream's `INT_N`/`IGRANT_N` daisy chain, holding the ISR
+address it captured at the accept on the data bus for as long as the grant
+lasts. Every slave enable is gated on `IGRANT_N` high, which is upstream's own
+rule, and which is constantly true for a program that takes no interrupt.
+
+`prog_int_hw.asm` runs to a pass on upstream's CPU today, which makes that
+testbench an independent check on the test program while this CPU cannot run
+it yet. `make crosscheck_rtl TESTS=prog_int_hw` does not get that far, because
+it runs the program on this CPU first; the header of `tb_upstream.vhd` gives the
+`ghdl -r` command that runs the reference half alone.
+
+`prog_int_halt.asm` fails there, with `0x1802`, and that is a real difference
+between the two CPUs rather than a bug in either. Upstream's `cs_fetch` checks
+for a pending interrupt *before* it latches the fetched word as an instruction,
+so a request pending when the `HALT` is fetched is taken, and the `HALT` never
+executes. This CPU stops handing instructions to DECODE as soon as a `HALT` has
+been handed over (`p_halt_fetched` in `src/cpu.vhd`), so there an accepted
+`HALT` wins. Keeping that case in a program of its own is what lets
+`prog_int_hw.asm` compare word for word; `prog_int_halt` will need a
+`KNOWN_DIVERGENCE` entry against the RTL when it joins `TESTS`.
 
 The CPU, its ALU, its EAE and its constants are analysed exactly as they ship.
 One file is patched, [`upstream.patch`](upstream.patch), and every reason is in
@@ -832,4 +933,8 @@ source, and this CPU follows the emulator, which is what `prog_r15.asm` was
 written against.
 
 Two programs are compared against neither reference, both because they never
-halt by design: `prog_poll.asm` and `prog_poll_reg.asm`.
+halt by design: `prog_poll.asm` and `prog_poll_reg.asm`. The two interrupt
+programs are not compared yet either, being outside `TESTS`. When they join,
+`make crosscheck` will have nothing to compare them against: the emulator
+treats everything below `0xFF00` as RAM, so it has no device at `0xBF00` and
+never takes the interrupts they arm.
