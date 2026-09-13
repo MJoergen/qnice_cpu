@@ -73,7 +73,7 @@ begin
          irq_ready_d <= irq_ready_i;
 
          if irq_ready_d = '1' then
-            assert irq_ready_i = '0'
+            f_duplicate : assert irq_ready_i = '0'
                report "ERROR: Duplicate irq_ready_i"
                severity failure;
          end if;
@@ -86,7 +86,7 @@ begin
    begin
       if rising_edge(clk_i) then
          if irq_ready_i = '1' then
-            assert irq_valid_o = '1'
+            f_stray : assert irq_valid_o = '1'
                report "ERROR: Stray irq_ready_i"
                severity failure;
 

@@ -1,0 +1,59 @@
+-- Formal verification of test/interrupt.vhd.
+--
+
+vunit i_interrupt(interrupt(simulation))
+{
+
+   -- set all declarations to run on clk
+   default clock is rising_edge(clk_i);
+
+
+   -----------------------------
+   -- ASSUMPTIONS ABOUT INPUTS
+   -----------------------------
+
+   -- Require reset at startup.
+   f_reset : assume {rst_i};
+
+   -- WISHBONE MASTER (driving s_*): STB only within a bus cycle.
+   f_s_stb_cyc : assume always {wb_stb_i = '1'} |-> {wb_cyc_i = '1'};
+
+   -- WISHBONE MASTER: a stalled request may not change until it is accepted.
+   f_s_stable : assume always {wb_stb_i = '1' and wb_stall_o = '1' and rst_i = '0'} |=>
+      {rst_i = '1' or wb_cyc_i = '0' or (stable(wb_stb_i) and stable(wb_addr_i) and
+                                         stable(wb_we_i) and stable(wb_wr_data_i))};
+
+   -- AXI SLAVE: irq_ready_i is only asserted when irq_valid_o is.
+   -- The CPU is not allowed to accept interrupts that are not asserted.
+   f_stray : assume always {irq_valid_o = '0'} |-> {irq_ready_i = '0'};
+
+
+   --------------------------------------------
+   -- INTERNAL ASSERTIONS
+   --------------------------------------------
+
+
+   ------------------------------------------------
+   -- PROPERTIES OF THE MASTER INTERFACES
+   ------------------------------------------------
+
+   -- An interrupt request may not be revoked or changed.
+   f_irq_stable : assert always {irq_valid_o = '1' and irq_ready_i = '0' and rst_i = '0'} |=>
+      {stable(irq_valid_o) and stable(irq_addr_o)};
+
+
+   ------------------------------------------------
+   -- PROPERTIES OF THE SLAVE INTERFACE
+   ------------------------------------------------
+
+   -- Never acknowledge a request that was never made.
+   f_no_spurious_ack : assert always {wb_stb_i = '0'} |=> {wb_ack_o = '0'};
+
+
+   --------------------------------------------
+   -- COVER STATEMENTS TO VERIFY REACHABILITY
+   --------------------------------------------
+   f_int_acknowledge : cover {irq_valid_o = '1' and rst_i = '0'; irq_valid_o = '0'};
+
+}
+
