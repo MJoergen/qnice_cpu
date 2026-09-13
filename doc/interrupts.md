@@ -675,7 +675,7 @@ assertion: `c_rti_bank_change`.
 
 ### Phase 1 — infrastructure, no CPU changes
 
-* **T1. Interrupt source for the testbench.** A device that requests an
+* **T1. Interrupt source for the testbench. DONE.** A device that requests an
   interrupt when the program writes a magic address, wired into
   [test/system.vhd](../test/system.vhd). It speaks the three-signal interface
   directly — assert `irq_valid_i` with the ISR address on `irq_addr_i`, hold both

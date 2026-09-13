@@ -8,8 +8,12 @@
 ;   Test 6A : Interrupt instruction with multiple micro-ops.
 ;   Test 6B : Interrupt instruction with a large memory latency (EAE).
 ;   Test 6C : Interrupt instruction during a pipeline flush: Taken branch and write-to-R14.
+;   Test 6D : Interrupt instruction during an INT
+;   Test 6E : Interrupt instruction with pointer increment
+;   Test 6F : Interrupt instruction during a self-modifying flush
+;   Test 6G : Sweep over two-word instructions (ADD 0x0001, R8)
 ;   Test 7  : Check restoring of R14 after a hardware interrupt.
-;   Test 8  : Check total accepted interrupts, and fire an interrupt after the halt
+;   Test 8  : Check total accepted interrupts.
 ;
 ; Register Map for Interrupt Generator (copied verbatim from test/interrupt.vhd):
 ; 0xBF00 : Countdown number of idle clock cycles until interrupt is asserted. After count-down,

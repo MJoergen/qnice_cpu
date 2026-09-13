@@ -5,11 +5,12 @@ library ieee;
 -- with a test program read from the file G_ROM, and is accessible via both the
 -- Instruction Memory and Data Memory interfaces.
 --
--- With G_SIMULATION, an EAE (Extended Arithmetic Element) and an Interrupt
--- Generator are additionally addressable in the upper half of the data address
--- space, 0x8000-0xFFFF, and a multiplexer splits the data bus between the two.
--- Neither is synthesised; the comment above that generate says why it matters
--- that they are not.
+-- With G_SIMULATION, an EAE (Extended Arithmetic Element) and an INT (Interrupt
+-- Generator) are additionally addressable in the upper half of the data address
+-- space, 0x8000-0xBFFF for the INT and 0xC000-0xFFFF for the EAE. Two
+-- multiplexers split the data bus between the two.  None of this is
+-- synthesised; the comment above that generate says why it matters that they
+-- are not.
 
 entity system is
    generic (
