@@ -142,7 +142,7 @@ a failing run still reports the value it computed.
 
 ## What each program covers
 
-`prog.asm` is the broad self-checking instruction suite; the other fourteen in
+`prog.asm` is the broad self-checking instruction suite; the other twenty in
 `TESTS` are narrow. Its five groups divide the work: flags against branching,
 instructions against every flag combination, every addressing mode for `MOVE`
 and `SUB`, conditional branching against every addressing mode, and — group 5 —
@@ -153,10 +153,16 @@ opcode-blind and already covered by group 3, but the per-opcode
 `C_READS_FROM_DST` / `C_WRITES_TO_DST` tables in `decode.vhd` that choose the
 microcode entry. A wrong bit there is invisible with register operands and
 fatal with memory ones; the header of `prog.asm` records the fault injection
-that establishes it. Five further programs are deliberately outside `TESTS`:
-`prog_poll.asm` and `prog_poll_reg.asm` at the end of this section,
-`prog_mandel_stats.asm` in the one after it, and `prog_int_hw.asm` and
-`prog_int_halt.asm` in the one after that. `prog_simple.asm` walks the addressing modes of
+that establishes it. Three further programs are deliberately outside `TESTS`:
+`prog_poll.asm` and `prog_poll_reg.asm` at the end of this section, and
+`prog_mandel_stats.asm` in the one after it. The interrupt programs are all in
+`TESTS` but described elsewhere: `prog_int_sw.asm`, which checks `INT` and `RTI`
+against cases 1, 2, 3, 6, and 7 of
+[doc/interrupts.md](../doc/interrupts.md#test-cases), is self-describing in its
+header; `prog_int_hw.asm`, `prog_int_halt.asm`, and `prog_int_progress.asm` are
+in [The Interrupt Generator](#the-interrupt-generator-and-the-programs-that-use-it);
+and `prog_int_rogue_rti.asm` and `prog_int_rogue_int.asm` are in
+[A rogue RTI or INT halts the CPU](#a-rogue-rti-or-int-halts-the-cpu). `prog_simple.asm` walks the addressing modes of
 `MOVE`/`ADD`/`CMP` and the branch instructions. `prog_pipeline.asm` and
 `prog_interleave.asm` exist to exercise pipeline behaviour rather than
 instruction semantics — respectively a `@R7++, @R7++` hazard and the
@@ -511,9 +517,9 @@ is deliberately **scrambled to all-ones** the cycle after an accept, so a CPU
 that captures the ISR address late jumps to `0xFFFF` instead of passing by
 luck.
 
-Three programs use it, and all are in `TESTS`. `prog_int_waveform.asm`, the
+Four programs use it, and all are in `TESTS`. `prog_int_waveform.asm`, the
 program the interrupt timing diagram is read off, is described
-[above](#what-each-program-covers); the other two are the tests proper:
+[above](#what-each-program-covers); the other three are the tests proper:
 
 * `prog_int_hw.asm` covers cases 4, 5, and 6 of the test list in
   [doc/interrupts.md](../doc/interrupts.md#test-cases), plus edge cases that
@@ -535,6 +541,14 @@ program the interrupt timing diagram is read off, is described
   run; an instruction retiring after the `HALT` does (see the table above). It
   is a program of its own because upstream's CPU answers it the other way, and
   legitimately so — see [the RTL reference](#the-rtl-reference) below.
+* `prog_int_progress.asm` checks that the interrupted program makes progress:
+  a request pending at an `RTI` is taken only after exactly one instruction at
+  the return address has run. It raises the request the same way as
+  `prog_int_halt.asm`, returns onto a run of `ADD R7, R6`, and has the hardware
+  ISR record `R6`; `0x1B04` means no instruction ran, `0x1B05` more than one.
+  This is guarantee 6 of the contract in
+  [src/interrupt/README.md](../src/interrupt/README.md#the-contract), and
+  upstream's CPU does not meet it.
 
 ## Running against a slow memory
 
@@ -843,6 +857,13 @@ after a `HALT`, so the `HALT` wins. Keeping that case in a program of its own is
 what lets `prog_int_hw.asm` compare word for word; it is a `KNOWN_DIVERGENCE`
 against the RTL.
 
+`prog_int_progress.asm` fails there too, with `0x1B04`, for the general form of
+the same ordering: upstream's `RTI` returns to `cs_fetch`, which takes the
+pending request before the instruction at the return address runs, so nothing
+of the interrupted program runs between the two service routines. This CPU runs
+that instruction first, deliberately, so that back-to-back interrupts cannot
+starve the interrupted program. It is a `KNOWN_DIVERGENCE` against the RTL.
+
 The CPU, its ALU, its EAE and its constants are analysed exactly as they ship.
 One file is patched, [`upstream.patch`](upstream.patch), and every reason is in
 that patch's header: two changes make the register file simulate under GHDL at
@@ -990,13 +1011,18 @@ written against.
 `prog_int_halt.asm` — **whether a request pending at a `HALT` is taken**, on
 the RTL. See [the RTL reference](#the-rtl-reference) above.
 
-The three programs that use the Interrupt Generator are also
+`prog_int_progress.asm` — **whether a request pending at an `RTI` waits for one
+instruction at the return address**, on the RTL. See
+[the RTL reference](#the-rtl-reference) above.
+
+The four programs that use the Interrupt Generator are also
 `KNOWN_DIVERGENCE`s against the emulator, for a different kind of reason: not a
 disagreement, but a missing device. The emulator treats everything below
 `0xFF00` as RAM, so it has no Interrupt Generator at `0xBF00`, and the request
 never fires. `prog_int_hw.asm` reports `0x1403`, its first "ISR entered" check;
 `prog_int_halt.asm` reports `0x1803` from a wait that is bounded for this reason
-alone — unbounded, it ran the emulator into the harness timeout; and
+alone — unbounded, it ran the emulator into the harness timeout;
+`prog_int_progress.asm` reports `0x1B01` from the same bounded wait; and
 `prog_int_waveform.asm` halts at its "ISR1 ran once" check without writing a
 status word.
 

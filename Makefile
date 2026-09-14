@@ -112,6 +112,7 @@ TESTS += prog_subroutine
 TESTS += prog_int_sw
 TESTS += prog_int_hw
 TESTS += prog_int_halt
+TESTS += prog_int_progress
 TESTS += prog_int_rogue_rti
 TESTS += prog_int_rogue_int
 TESTS += prog_waveform

@@ -41,11 +41,12 @@ halted in — its `RDUMP` resolves `R0`-`R7` through the current bank and cannot
 other 255. The two banks are cross-checked before any register is, so a disagreement is reported as
 itself rather than as eight spurious diffs.
 
-**Running both is not redundancy, it is the point.** The four programs that fail for a disagreement
+**Running both is not redundancy, it is the point.** The five programs that fail for a disagreement
 are different in each direction, and every one of them is a place where the two upstream
 implementations disagree with *each other*, so a single reference would have made each look like a
-settled question (the three Interrupt Generator programs also fail on the emulator, but only
-because it has no Interrupt Generator; see below). `prog_int_halt` is the fourth, on the RTL, described below. The
+settled question (the four Interrupt Generator programs also fail on the emulator, but only
+because it has no Interrupt Generator; see below). `prog_int_halt` and `prog_int_progress` are the
+fourth and fifth, on the RTL, described below. The
 two EAE programs fail on the emulator (DIVS remainder sign; when the EAE recomputes) and pass on
 the RTL, which turns an argument from reading upstream's source into an end-to-end result.
 `prog_r15` fails on the RTL: upstream's `cs_decode` latches both operands at once, before the
@@ -93,20 +94,24 @@ address the cycle after an accept, precisely so that a late capture fails. Every
 RAM's included, is gated on `IGRANT_N` high, which is upstream's own rule (`mmio_mux.vhd`); for a
 program that takes no interrupt the term is constant, and no other program's result moved.
 
-**Taking an interrupt at a `HALT` is a known divergence, and it is why `prog_int_halt.asm` is a
-program of its own.** Upstream's `cs_fetch` tests `INT_N` *before* it latches the fetched word as an
-instruction, so an interrupt that is pending when the `HALT` comes up is taken and the `HALT` never
-executes: upstream ends that program with status `0x1802`, from inside the ISR. This CPU takes a
-request only at the boundary after a retiring instruction, and there is none after a `HALT`
-(`irq_is_irq_s` in `src/cpu_main/write.vhd`), so the `HALT` wins. It is a `KNOWN_DIVERGENCE` for
-`rtl`. Split out like this, `prog_int_hw.asm` compares word for word on upstream's CPU — but only
+**Taking a request pending at an `RTI` is a known divergence, and it is why `prog_int_progress.asm`
+and `prog_int_halt.asm` are programs of their own.** Upstream's `RTI` goes straight to `cs_fetch`,
+which tests `INT_N` *before* it latches the fetched word as an instruction, so a request pending at
+the `RTI` is taken before anything at the return address runs: upstream ends `prog_int_progress`
+with status `0x1B04`. This CPU runs the instruction at the return address first, **by decision**:
+it is guarantee 6 of the contract in `src/interrupt/README.md`, asserted as `f_irq_progress`, so
+that back-to-back requests cannot starve the interrupted program. `prog_int_halt` is the special
+case where that instruction is a `HALT`: upstream takes the interrupt and ends with `0x1802` from
+inside the ISR, and this CPU halts, since there is no boundary after a `HALT` (`irq_is_irq_s` in
+`src/cpu_main/write.vhd`). Both are `KNOWN_DIVERGENCE`s for `rtl`. Do not "fix" either by making
+this CPU match upstream. Split out like this, `prog_int_hw.asm` compares word for word on upstream's CPU — but only
 because it **clears `SCRATCH` and the ISRs' `R7` before passing**: both record where interrupts
 landed, which a pipeline and a multi-cycle FSM do not share, and without the `CLEANUP` block they
-differ. Against the emulator all three Interrupt Generator programs, `prog_int_waveform` included,
+differ. Against the emulator all four Interrupt Generator programs, `prog_int_waveform` included,
 are `KNOWN_DIVERGENCE`s for a duller reason:
 it has no device at `0xBF00`, which is plain RAM there, so no request ever fires. That is also why
-`prog_int_halt`'s wait for its request is bounded — unbounded, the emulator hit the harness
-timeout.
+`prog_int_halt`'s and `prog_int_progress`'s waits for their requests are bounded — unbounded, the
+emulator hit the harness timeout.
 
 The upstream CPU's cycle count is reported per program and checked against nothing — it is a
 multi-cycle FSM, so `prog.asm` costs it 22333 cycles against this CPU's 15581 and
@@ -247,7 +252,10 @@ length must update both. `test/prog_int_halt.asm` checks that an interrupt pendi
 off, and returns straight onto the `HALT`, because a countdown cannot place a request on a
 one-cycle window the same way under both `make test` and `make test_slow`. **Its verdict is not
 the status word**: that is written as `0x0000` before the `HALT`, and only the first write counts,
-so what fails the run is `test_monitor.vhd` seeing an instruction retire after the `HALT`. An
+so what fails the run is `test_monitor.vhd` seeing an instruction retire after the `HALT`.
+`test/prog_int_progress.asm` raises its request the same way, returns onto a run of `ADD R7, R6`,
+and has the hardware ISR record `R6`: exactly one instruction must have run (`0x1B04` if none,
+`0x1B05` if more). An
 earlier version of the program wrote its pass, armed a countdown, and halted; under
 `make test_slow` the CPU took the interrupt at the `HALT`, ran the ISR, and still passed. It is kept
 apart because upstream's CPU legitimately answers it the other way (see

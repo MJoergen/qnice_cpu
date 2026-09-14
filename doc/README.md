@@ -662,8 +662,13 @@ each other, and each decision taken between them — is recorded in
   branch.
 * **`RTI`** restores `R14` and `R15` and resumes there.
 * **Interrupts do not nest.** A hardware request waits while a service routine
-  runs; one still waiting at the `RTI` is taken after exactly one instruction at
-  the return address, so a device that never lets go cannot livelock the CPU.
+  runs.
+* **The interrupted program makes progress.** A request still waiting at the
+  `RTI` is taken only after the instruction at the return address has retired,
+  so a device that never lets go slows the interrupted program to one
+  instruction per service routine but cannot starve it. This is a requirement,
+  and upstream's CPU does not meet it; see
+  [the contract](../src/interrupt/README.md#the-contract), guarantee 6.
 * **A rogue `RTI`** — outside a service routine — and **a rogue `INT`** — inside
   one — halt the CPU, as they do upstream.
 * **Only `R14` and `R15` are saved.** A service routine must leave every other
@@ -724,8 +729,12 @@ the contract on each side are in
   interrupts, exactly as it already does for the two memory buses (upstream's
   `env1.vhd` is that layer for memory). What the layer has to do is in
   [src/interrupt/README.md](../src/interrupt/README.md#what-the-adaptation-layer-has-to-do).
-* **A request pending at a `HALT`.** Upstream's CPU takes the interrupt and never
-  executes the `HALT`; this CPU executes the `HALT`.
+* **The interrupted program makes progress.** Upstream's CPU takes a request
+  pending at an `RTI` before any instruction at the return address runs, so
+  back-to-back requests can starve the interrupted program; this CPU runs that
+  instruction first. The special case is **a request pending at a `HALT`**:
+  upstream takes the interrupt and never executes the `HALT`, this CPU executes
+  the `HALT`.
 * **Masking lands later.** Upstream masks interrupts with an external register
   (`vhdl/interrupt_controller.vhd`), and its unpipelined CPU cannot be
   interrupted after the instruction that writes it. Here that instruction
@@ -744,11 +753,13 @@ What the live interrupt logic did cost was placement: at 7.70 ns the design
 failed on its usual routing-dominated paths, and the clock constraint was relaxed
 to 7.80 ns to pay for it.
 
-Six test programs cover interrupts, all in `TESTS`: `prog_int_sw.asm` for `INT`
-and `RTI`; `prog_int_hw.asm`, `prog_int_halt.asm`, and `prog_int_waveform.asm`
-for hardware requests, through the Interrupt Generator `test/interrupt.vhd`; and `prog_int_rogue_rti.asm` and `prog_int_rogue_int.asm`
-for the rogue cases. All but `prog_int_halt.asm` compare word for word against
-upstream's RTL CPU (see [test/README.md](../test/README.md)). The formal
+Seven test programs cover interrupts, all in `TESTS`: `prog_int_sw.asm` for
+`INT` and `RTI`; `prog_int_hw.asm`, `prog_int_halt.asm`, `prog_int_progress.asm`,
+and `prog_int_waveform.asm` for hardware requests, through the Interrupt
+Generator `test/interrupt.vhd`; and `prog_int_rogue_rti.asm` and
+`prog_int_rogue_int.asm` for the rogue cases. All but `prog_int_halt.asm` and
+`prog_int_progress.asm` compare word for word against upstream's RTL CPU (see
+[test/README.md](../test/README.md)); those two differ by design. The formal
 properties in [formal/cpu_main.psl](../formal/cpu_main.psl) check entry, the
 round trip, the refusals, and the rogue halt against a shadow model, with the
 request port left entirely unconstrained.

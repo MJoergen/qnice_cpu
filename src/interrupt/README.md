@@ -80,12 +80,11 @@ drawn), which change on the edge that ends a cycle with a transfer or an `RTI`.
   request 2 is taken exactly as request 1 was: accepted, redirected to `002F`,
   and `0011` saved.
 
-Two things follow. **One instruction always runs between two service
-routines**, since the request is refused at the `RTI` and the next boundary is
-the instruction at the return address; a device that holds `irq_valid_i` high
-forever cannot livelock the CPU. And **a device may withdraw**: a request dropped
-before the cycle it would be taken in is simply never seen, because nothing
-remembers it.
+Two things follow. t=12 to t=17 are **guarantee 6 of
+[the contract](#the-contract)**: request 2 was pending throughout, yet `0010`, the
+instruction at the return address, retires before it is taken. And **a device
+may withdraw**: a request dropped before the cycle it would be taken in is simply
+never seen, because nothing remembers it.
 
 ## Ports
 
@@ -118,9 +117,10 @@ At the boundary after an instruction retires (`inst_done_o`), when
 
 * **a service routine is running** (`irq_active`). Interrupts do not nest. This
   includes the cycle an `RTI` retires in: `irq_active` clears on the edge that
-  ends it, so a request present then is taken at the next boundary, and **one
-  instruction always runs between two service routines**. A device that holds
-  `irq_valid_i` high forever cannot livelock the CPU.
+  ends it, so a request present then is taken at the next boundary, after the
+  instruction at the return address. That is not an accident of the
+  implementation but a requirement, guarantee 6 of
+  [the contract](#the-contract).
 * **the retiring instruction is a `HALT`** (`irq_is_irq_s`). After a `HALT`
   there is no next boundary; taking the request would restart a stopped CPU.
   `test/prog_int_halt.asm` is the test.
@@ -211,13 +211,22 @@ from the retire pulse, the request pin, and the instruction encoding:
 1. `irq_ready_o` only while `irq_valid_i` is high (`f_irq_ready_requested`).
 2. Only at an instruction boundary, and never in reset (`f_irq_ready_boundary`).
 3. Never while a service routine is running (`f_irq_ready_not_nested`), never at
-   a `HALT`, `INT`, or `RTI` (`f_irq_ready_not_ctrl`), and never after a rogue
+   a `HALT` or `INT` (`f_irq_ready_not_ctrl`), and never after a rogue
    instruction has halted the CPU (`f_halted_quiet`).
 4. Otherwise, the request is taken at the first boundary it is present at, and
    FETCH is redirected to that cycle's `irq_addr_i` (`f_irq_entry`).
 5. The `RTI` returns to the address execution would otherwise have continued at,
    and restores `R14` as the interrupted instruction left it (`f_rti_return`,
    `f_rti_restore_r14`).
+6. **The interrupted program makes progress.** A request is never taken at an
+   `RTI` (`f_irq_progress`), so after every service routine the instruction at
+   the return address retires before another request is accepted — even one that
+   was pending throughout. By 4 it is then taken at that very boundary
+   (`c_irq_after_rti` shows it). A device that requests again as soon as it is
+   serviced therefore slows the interrupted program to one instruction per
+   service routine, but cannot starve it. **Upstream's CPU does not do this**; see
+   [Where this diverges from upstream](#where-this-diverges-from-upstream).
+   `test/prog_int_progress.asm` is the test.
 
 `irq_ready_o` is one cycle wide as a consequence of 3: the cycle after an accept,
 `irq_active` is set.
@@ -257,10 +266,15 @@ its own accept and be taken a second time.
   emulator on `develop` save eight shadow registers, and `EXC` exchanges them;
   this CPU follows the ISA document's two latches, and has no `EXC`. See
   [doc/interrupts.md](../../doc/interrupts.md#the-decision-to-make-first-what-state-is-saved).
-* **A request pending at a `HALT`.** Upstream's CPU tests for a pending interrupt
-  before it latches the next instruction, so it takes the interrupt and never
-  executes the `HALT`; this CPU executes the `HALT`. `test/prog_int_halt.asm` is
-  a known divergence against upstream's RTL for exactly this reason.
+* **The interrupted program makes progress.** Upstream's `RTI` goes straight to
+  `cs_fetch`, which tests for a pending interrupt *before* it latches the next
+  instruction, so a request pending at the `RTI` is taken with nothing of the
+  interrupted program run, and back-to-back requests can starve it. This CPU runs
+  the instruction at the return address first (guarantee 6).
+  `test/prog_int_progress.asm` is a known divergence against upstream's RTL for
+  exactly this reason. **A request pending at a `HALT`** is the special case:
+  upstream takes it and never executes the `HALT`, this CPU executes the `HALT`,
+  and `test/prog_int_halt.asm` diverges the same way.
 * **Masking lands later.** Upstream's unpipelined CPU cannot be interrupted after
   the instruction that writes its mask register. This CPU retires that
   instruction before the write reaches the bus, so the boundary after it is
@@ -367,7 +381,8 @@ bus master that keeps running. The layer in front of this CPU does.
 ## Tested against upstream's CPU, and why not against the emulator
 
 **Every hardware interrupt program in this repository has also run on upstream's
-own CPU, with the same Interrupt Generator, and only one of them differs.**
+own CPU, with the same Interrupt Generator, and the only two that differ do so
+for one deliberate reason.**
 `make crosscheck_rtl` runs each program in `TESTS` on upstream's
 `vhdl/qnice_cpu.vhd` through `test/tb_upstream.vhd`, which instantiates
 `test/interrupt.vhd` — the same file `test/system.vhd` uses, not a second model
@@ -378,7 +393,8 @@ with this CPU's, word for word.
 |---|---|
 | `prog_int_hw.asm` | identical |
 | `prog_int_waveform.asm` | identical |
-| `prog_int_halt.asm` | **differs**: upstream takes a request pending at a `HALT`, this CPU halts; see [Where this diverges from upstream](#where-this-diverges-from-upstream) |
+| `prog_int_progress.asm` | **differs**: upstream takes a request pending at an `RTI` before any instruction at the return address runs, this CPU runs one first; see [Where this diverges from upstream](#where-this-diverges-from-upstream) |
+| `prog_int_halt.asm` | **differs**, the special case of the above: upstream takes a request pending at a `HALT`, this CPU halts |
 | `prog_int_sw.asm`, `prog_int_rogue_rti.asm`, `prog_int_rogue_int.asm` | identical |
 
 Two details keep that honest. The programs check themselves, so "identical"
@@ -394,7 +410,7 @@ requested — watch upstream's CPU through the adapter on every program, too.
 **The same test cannot be run against upstream's C emulator**, which `make
 crosscheck` otherwise compares every program against. The emulator has no device
 at `0xBF00`, where that address is plain RAM, so the countdown never fires and all
-three Interrupt Generator programs are `KNOWN_DIVERGENCE`s in
+four Interrupt Generator programs are `KNOWN_DIVERGENCE`s in
 `test/crosscheck.py`. Adding one would not give the same test:
 
 * **There is no file to share.** The value of the RTL comparison is that the

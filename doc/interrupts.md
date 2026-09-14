@@ -138,13 +138,22 @@ the decision was first taken on that evidence. **Implemented choice: `R14` and
 `R15` only**, re-derived on this evidence and confirmed — see
 [The decision to make first](#the-decision-to-make-first-what-state-is-saved).
 
-**A request pending at a `HALT`.** Found by the differential test rather than by
-reading: upstream's `cs_fetch` tests for a pending interrupt *before* it latches
-the next instruction, so a request pending as the `HALT` comes up is taken and
-the `HALT` never executes. This CPU takes a request only at the boundary after a
-retiring instruction, and after a `HALT` there is none. Neither document
-addresses the case. **Implemented choice: the `HALT` wins**;
-`test/prog_int_halt.asm` is a known divergence against upstream's RTL.
+**A request pending at an `RTI` — the documents are silent, and the reference
+CPU does the opposite of this one.** Upstream's `ctrlRTI` arm clears
+`Int_Active` and goes straight to `cs_fetch`, and `cs_fetch` tests for a pending
+interrupt *before* it latches the next instruction. So a request that was
+pending at the `RTI` is taken with nothing of the interrupted program run. Neither
+the ISA document nor `int-device.md` addresses the case, so by rule 3 the
+reference's behaviour would stand. **Implemented choice: the instruction at the
+return address runs first**, as a decision of its own — see
+[Programmer's model](#programmers-model).
+
+It was found in its special case first, and by the differential test rather
+than by reading: a request pending as a `HALT` comes up. Upstream takes it and
+the `HALT` never executes; this CPU takes a request only at the boundary after a
+retiring instruction, and after a `HALT` there is none, so **the `HALT` wins**.
+`test/prog_int_halt.asm` and `test/prog_int_progress.asm` are both known
+divergences against upstream's RTL.
 
 ### The interrupt request interface
 
@@ -290,6 +299,20 @@ WRITE work, but it has not been tested.
 * **Interrupts do not nest.** A request is accepted only when no ISR is already
   running. The reference gates this on `Int_Active` in the `cs_fetch` arm of
   `fsm_output_decode`.
+* **The interrupted program makes progress.** After an `RTI`, the instruction at
+  the return address retires before another hardware request is accepted, even
+  one that was pending throughout.
+
+  DECISION: this is a requirement, and it overrides rule 3. The reference CPU
+  takes a pending request straight after the `RTI` (see
+  [Where the sources disagree](#where-the-sources-disagree)), so a device that
+  requests again as soon as it is serviced can hold the interrupted program
+  still indefinitely. With this rule the same device slows it to one instruction
+  per service routine but cannot starve it. It costs nothing here: it is what
+  refusing a request while `irq_active` is set gives at the `RTI`, and it is now
+  stated as guarantee 6 of
+  [the contract](../src/interrupt/README.md#the-contract), asserted as
+  `f_irq_progress`, and tested by `test/prog_int_progress.asm`.
 * **`R14` (SR) and `R15` (PC) are saved** into latches invisible to software.
   The reference and the emulator save `R8`-`R15`; this design follows the
   document. See [Where the sources disagree](#where-the-sources-disagree).
@@ -430,6 +453,10 @@ Happy path:
    that `RTI` resumes after the constant word rather than on it.
 7. `INT` immediately after `INCRB`, with an ISR that changes the bank. Checks
    the bank-change flush still holds across an interrupt.
+8. Raise a hardware request inside a service routine, so that it is pending at
+   the `RTI`. Checks that exactly one instruction at the return address runs
+   before it is taken: none is upstream's behaviour, and more than one would mean
+   it was not taken at the first boundary.
 
 Not happy path: rogue `RTI` and rogue `INT`, which halt.
 
@@ -440,8 +467,9 @@ diagram quotes fails the writes-log diff.
 
 Where they live: cases 1, 2, 3, 6 (for `INT`), and 7 in `test/prog_int_sw.asm`;
 cases 4, 5, and 6 in `test/prog_int_hw.asm`, together with edge cases the list
-does not name (see its header); the pending-at-`HALT` case in
-`test/prog_int_halt.asm`; and the rogue cases in `test/prog_int_rogue_rti.asm`
+does not name (see its header); case 8 in `test/prog_int_progress.asm`, and its
+special case, a request pending at a `HALT`, in `test/prog_int_halt.asm`; and the
+rogue cases in `test/prog_int_rogue_rti.asm`
 and `test/prog_int_rogue_int.asm`. All are in `TESTS`.
 
 ### Formal verification
@@ -459,11 +487,16 @@ trip is checked against a return address the shadow computed cycles earlier.
 * **Hardware entry** (task T9): taken at the first boundary it is present at, and
   redirected to `irq_addr_i` (`f_irq_entry`); and at no other time — only while
   requested, only at an instruction boundary and never in reset, never inside a
-  service routine including at its `RTI`, and never at a `HALT`, `INT`, or `RTI`
+  service routine including at its `RTI`, and never at a `HALT` or `INT`
   (`f_irq_ready_requested`, `f_irq_ready_boundary`, `f_irq_ready_not_nested`,
   `f_irq_ready_not_ctrl`). A request withdrawn before the boundary that would
   have taken it is reached by the cover `c_irq_withdrawn`, which is the only
   place withdrawal is exercised at all.
+* **Progress**: never at an `RTI` (`f_irq_progress`). It follows from
+  `f_irq_ready_not_nested` for a legitimate `RTI`, but it is asserted on its own
+  because it is a requirement and a divergence, not a side effect. The cover
+  `c_irq_after_rti` shows a request pending at an `RTI` taken at the very next
+  boundary.
 * **The round trip**: `f_rti_return` and `f_rti_restore_r14`, against state saved
   on `INT` and on hardware entry alike.
 * **Rogue instructions** must not redirect, must pulse `halt_o`, and must leave
@@ -479,7 +512,9 @@ from about 4 to about 16 minutes. The properties were checked against the bugs
 simulation found, by putting each back: saving `next_pc` instead of the branch
 target fails `f_rti_return`, saving `R14` from before the instruction fails
 `f_rti_restore_r14`, and taking a request at a `HALT` fails
-`f_irq_ready_not_ctrl`. Withdrawal, which no simulation exercises, was checked
+`f_irq_ready_not_ctrl`. Taking a request pending at an `RTI` straight away, as
+upstream does, fails `f_irq_progress` at step 6, and `test/prog_int_progress.asm`
+with status `0x1B04`. Withdrawal, which no simulation exercises, was checked
 the same way: a CPU that remembers a request once seen, and so takes one that
 was withdrawn, fails `f_irq_ready_requested` at step 3.
 

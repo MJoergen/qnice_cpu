@@ -173,6 +173,10 @@ KNOWN_DIVERGENCE = {
             "program reports 0x1803 from its bounded wait. The wait is bounded "
             "for this reason only; unbounded, the emulator ran into the "
             "harness timeout.",
+        "prog_int_progress":
+            "the emulator has no Interrupt Generator, as for prog_int_halt: "
+            "INT_STAT reads back as RAM, so the request never asserts and the "
+            "program reports 0x1B01 from the same bounded wait.",
         "prog_int_waveform":
             "the emulator has no Interrupt Generator, as for prog_int_hw: the "
             "countdown at 0xBF00 is plain RAM there, so neither service routine "
@@ -207,7 +211,18 @@ KNOWN_DIVERGENCE = {
             "CPU takes a request only at the boundary after a retiring "
             "instruction, and there is none after a HALT, so the HALT wins "
             "(irq_is_irq_s in src/cpu_main/write.vhd). Both are consistent "
-            "with the ISA documentation, which does not address the case.",
+            "with the ISA documentation, which does not address the case. It "
+            "is the special case of prog_int_progress below.",
+        "prog_int_progress":
+            "the same ordering as prog_int_halt, in general. Upstream's RTI "
+            "arm goes straight to cs_fetch, which takes the request pending "
+            "since inside the software ISR before latching the instruction at "
+            "the return address, so no instruction of the main program runs "
+            "between the two service routines and the program reports 0x1B04. "
+            "This CPU refuses the request at the RTI and takes it at the next "
+            "boundary, so exactly one instruction runs: a deliberate "
+            "divergence, so that back-to-back interrupts cannot starve the "
+            "interrupted program (doc/interrupts.md, 'Programmer's model').",
     },
 }
 

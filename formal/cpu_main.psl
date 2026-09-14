@@ -877,6 +877,26 @@ vunit i_cpu_main(cpu_main(synthesis))
                           f_irq_active = '0' and f_halt_retires = '0' and
                           f_int_retires = '0' and f_rti_retires = '0' else '0';
 
+   -- A service routine has just been left with a request present at its RTI,
+   -- and nothing has retired since. Used only by c_irq_after_rti below, to
+   -- show that such a request is taken at the next boundary.
+   signal f_rti_pending : std_logic := '0';
+
+   p_rti_pending : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if f_rti_retires = '1' and f_irq_active = '1' and irq_valid_i = '1' then
+            f_rti_pending <= '1';
+         elsif inst_done_o = '1' then
+            f_rti_pending <= '0';
+         end if;
+
+         if rst_i = '1' then
+            f_rti_pending <= '0';
+         end if;
+      end if;
+   end process p_rti_pending;
+
    -- WHERE THE ROUTINE MUST RETURN TO: the address execution would otherwise
    -- have continued at. That is the branch target if the retiring instruction
    -- writes R15 -- a taken branch, including one DECODE already redirected
@@ -1177,13 +1197,28 @@ vunit i_cpu_main(cpu_main(synthesis))
       {irq_ready_o = '1'}
       |-> {f_irq_active = '0'};
 
-   -- Never at a HALT, and never at an INT or RTI. After a HALT there is no
-   -- next boundary, and taking the request would restart a stopped CPU
+   -- Never at a HALT, and never at an INT. After a HALT there is no next
+   -- boundary, and taking the request would restart a stopped CPU
    -- (test/prog_int_halt.asm is the simulation of this); an INT takes
-   -- priority; an RTI is covered by the property above or is rogue.
+   -- priority.
    f_irq_ready_not_ctrl : assert always
       {irq_ready_o = '1'}
-      |-> {f_halt_retires = '0' and f_int_retires = '0' and f_rti_retires = '0'};
+      |-> {f_halt_retires = '0' and f_int_retires = '0'};
+
+   -- (10) THE INTERRUPTED PROGRAM MAKES PROGRESS: never at an RTI. The
+   -- instruction at the return address retires before another request is
+   -- taken, even one pending throughout, so back-to-back requests slow the
+   -- interrupted program but cannot starve it (src/interrupt/README.md,
+   -- guarantee 6). f_irq_ready_not_nested implies this for a legitimate RTI,
+   -- and a rogue one halts, but it is a requirement of its own and a
+   -- DIVERGENCE from upstream, whose CPU takes the request straight after the
+   -- RTI (doc/interrupts.md, "Programmer's model"), so it is stated on its
+   -- own. The other half, that the request is then taken at the next
+   -- boundary, is (8); c_irq_after_rti shows it happening.
+   -- test/prog_int_progress.asm is the simulation of this.
+   f_irq_progress : assert always
+      {irq_ready_o = '1'}
+      |-> {f_rti_retires = '0'};
 
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
@@ -1581,6 +1616,11 @@ vunit i_cpu_main(cpu_main(synthesis))
                                  f_rti_retires = '1' and f_irq_active = '1'};
    c_irq_refused_halt   : cover {rst_i = '0' and inst_done_o = '1' and irq_valid_i = '1' and
                                  f_irq_active = '0' and f_halt_retires = '1'};
+
+   -- Non-vacuity of (10) together with (8): a request present at an RTI, taken
+   -- at the very next boundary, as the instruction at the return address
+   -- retires.
+   c_irq_after_rti      : cover {f_irq_take = '1' and f_rti_pending = '1'};
 
    -- A withdrawn request: present outside a service routine and not yet
    -- accepted, then dropped in time for the boundary that would have taken

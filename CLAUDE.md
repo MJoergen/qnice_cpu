@@ -197,12 +197,15 @@ handled in DECODE.
 
 **Interrupts** — `INT`, `RTI`, and hardware entry — are implemented entirely in WRITE, the one stage
 a flush does not reset: `irq_active` and the saved `irq_r14`/`irq_r15` in `src/cpu_main/write.vhd`.
-Entry and exit are one more term on `fetch_valid_o`. Two deliberate **divergences from upstream**
+Entry and exit are one more term on `fetch_valid_o`. Three deliberate **divergences from upstream**
 are easy to "fix" by accident, so know them before touching this: only `R14` and `R15` are saved,
 where upstream's register file and emulator save `R8`-`R15` into shadow registers (and so `EXC`,
-which exchanges them, is not implemented); and the CPU has **no `INT_N`/`IGRANT_N` pins** — it
+which exchanges them, is not implemented); the CPU has **no `INT_N`/`IGRANT_N` pins** — it
 presents a valid/ready request port, and a QNICE-FPGA system needs an adaptation layer for
-interrupts, as it already does for the two memory buses. The write-up is
+interrupts, as it already does for the two memory buses; and a request pending at an `RTI` is
+taken only **after the instruction at the return address has retired**, where upstream takes it
+at once, so that back-to-back interrupts cannot starve the interrupted program
+(`f_irq_progress`, `test/prog_int_progress.asm`). The write-up is
 [doc/README.md](doc/README.md#interrupts); every decision behind it, with the upstream sources it
 was weighed against, is [doc/interrupts.md](doc/interrupts.md).
 
@@ -249,11 +252,13 @@ was weighed against, is [doc/interrupts.md](doc/interrupts.md).
   [Simulated peripherals: the Interrupt Generator](test/CLAUDE.md#simulated-peripherals-the-interrupt-generator),
   [Simulating a slow memory](test/CLAUDE.md#simulating-a-slow-memory), and
   [The data bus multiplexer](test/CLAUDE.md#the-data-bus-multiplexer).
-  `test/prog_int_hw.asm` and `test/prog_int_halt.asm` are the hardware-interrupt programs, and
+  `test/prog_int_hw.asm`, `test/prog_int_halt.asm`, and `test/prog_int_progress.asm` are the
+  hardware-interrupt programs — the last checks that the interrupted program makes progress
+  between two service routines, which upstream's CPU does not do — and
   `test/prog_int_rogue_rti.asm` and `test/prog_int_rogue_int.asm` test that a rogue `RTI` or `INT`
   halts.
-  Those last three are the programs whose verdict is not only their status word, which each writes
-  before the halt: `prog_int_halt` fails when `test/test_monitor.vhd` sees an instruction retire
+  `prog_int_halt` and the two rogue programs are the programs whose verdict is not only their
+  status word, which each writes before the halt: `prog_int_halt` fails when `test/test_monitor.vhd` sees an instruction retire
   after the `HALT`, a check that applies to every program, and the two rogue programs fail on that
   check or on the watchdog.
   One of the programs, `test/prog_waveform.asm`, is not really a test: it

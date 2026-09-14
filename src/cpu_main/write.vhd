@@ -187,6 +187,12 @@ begin
          end if;
       else
          -- Leaving an interrupt service routine: return to the previous location.
+         -- A hardware request pending here is deliberately NOT taken: it waits
+         -- for the instruction at the return address to retire, so that
+         -- back-to-back requests cannot starve the interrupted program. That is
+         -- guarantee 6 in src/interrupt/README.md, and a divergence from
+         -- upstream, which takes it at once (formal/cpu_main.psl's
+         -- f_irq_progress, test/prog_int_progress.asm).
          if irq_is_rti_s = '1' then
             irq_active_s   <= '0';
             irq_sw_addr_s  <= irq_r15;

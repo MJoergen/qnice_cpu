@@ -446,6 +446,8 @@ cpu_main.i_cpu_main.f_irq_exact
 @28
 cpu_main.i_cpu_main.f_irq_take
 @28
+cpu_main.i_cpu_main.f_rti_pending
+@28
 cpu_main.i_cpu_main.f_mem_dst_oustanding
 @28
 cpu_main.i_cpu_main.f_mem_dst_request
