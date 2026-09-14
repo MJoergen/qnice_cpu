@@ -1,0 +1,23 @@
+## Verification of the Interrupt Generator
+
+[tasks]
+prove  prove
+cover  cover
+
+[options]
+prove: mode prove
+prove: depth 10
+cover: mode cover
+cover: depth 10
+
+[engines]
+smtbmc
+
+[script]
+ghdl --std=08 interrupt.vhd interrupt.psl -e interrupt
+prep -top interrupt
+
+[files]
+interrupt.psl
+../test/interrupt.vhd
+

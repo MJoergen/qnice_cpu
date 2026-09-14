@@ -33,6 +33,24 @@
 -- overwrite its own verdict afterwards.
 --
 --
+-- NOTHING RETIRES AFTER THE HALT
+--
+-- The flip side of "only the first write counts" is that a program can write
+-- its passing verdict early and then fail to stop, and the status word alone
+-- would never notice: whatever the CPU goes on to do, including writing a
+-- failure code, is ignored. That is not hypothetical. test/prog_int_halt.asm
+-- used to write 0x0000, arm an interrupt and HALT; under "make test_slow" the
+-- CPU took the interrupt as the HALT retired, ran the service routine, wrote
+-- 0x1802, and the run still reported TEST PASSED.
+--
+-- So the drain doubles as a check on the CPU itself: if inst_done_i pulses in
+-- any drain cycle, an instruction retired after the HALT, and the run fails
+-- whatever the status word says. The HALT's own retire pulse coincides with the
+-- halt and is not sampled here. G_DRAIN_CYCLES bounds how long a CPU that fails
+-- to stop is watched; a pipeline that is still running retires something
+-- within a handful of cycles, even against the slow memory model.
+--
+--
 -- PROBES
 --
 -- The same snoop serves a second, entirely optional purpose. Any write into the
@@ -108,21 +126,25 @@ entity test_monitor is
       G_STATS_FILE    : string                        := ""
    );
    port (
-      clk_i      : in  std_logic;
-      rst_i      : in  std_logic;
+      clk_i       : in  std_logic;
+      rst_i       : in  std_logic;
 
       -- Asserted once the CPU has retired a HALT instruction
-      halt_i     : in  std_logic;
+      halt_i      : in  std_logic;
+
+      -- One pulse per retiring instruction. Checked during the drain only, see
+      -- NOTHING RETIRES AFTER THE HALT above.
+      inst_done_i : in  std_logic;
 
       -- Data Wishbone bus, sampled on every accepted write
-      mem_we_i   : in  std_logic;
-      mem_addr_i : in  std_logic_vector(15 downto 0);
-      mem_data_i : in  std_logic_vector(15 downto 0);
+      mem_we_i    : in  std_logic;
+      mem_addr_i  : in  std_logic_vector(15 downto 0);
+      mem_data_i  : in  std_logic_vector(15 downto 0);
 
       -- Accepted request beats on each of the two Wishbone buses, i.e.
       -- cyc and stb and not stall. Used for the statistics only.
-      wbi_req_i  : in  std_logic;
-      wbd_req_i  : in  std_logic
+      wbi_req_i   : in  std_logic;
+      wbd_req_i   : in  std_logic
    );
 end entity test_monitor;
 
@@ -177,6 +199,7 @@ begin
       variable status_valid : boolean := false;
       variable status       : std_logic_vector(15 downto 0) := (others => '0');
       variable drain        : natural;
+      variable late_retires : natural := 0;
 
       -- One cycle's worth of bus snooping, called from both loops below. The
       -- status word and the probe window are disjoint, and only the first
@@ -237,17 +260,27 @@ begin
          exit halt_loop when halt_i = '1';
       end loop halt_loop;
 
-      -- Let any in-flight memory write reach the bus.
+      -- Let any in-flight memory write reach the bus, and check that the CPU
+      -- really has stopped.
       drain := G_DRAIN_CYCLES;
       drain_loop : while drain > 0 loop
          wait until rising_edge(clk_i);
          sample_bus;
+         if inst_done_i = '1' then
+            late_retires := late_retires + 1;
+         end if;
          drain := drain - 1;
       end loop drain_loop;
 
       write_stats;
 
-      if not status_valid then
+      if late_retires > 0 then
+         report "TEST FAILED: " & integer'image(late_retires) & " instruction(s) " &
+                "retired in the " & integer'image(G_DRAIN_CYCLES) & " cycles after " &
+                "the HALT. The CPU did not stop, so the status word cannot be " &
+                "trusted. Re-run with DEBUG=true to see what ran.";
+         stop(1);
+      elsif not status_valid then
          report "TEST FAILED: HALT reached without a test status write to 0x" &
                 to_hstring(G_STATUS_ADDR) & ". " &
                 "Re-run with DEBUG=true and look at the address of the last " &

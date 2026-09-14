@@ -1,0 +1,149 @@
+-- Formal verification of test/interrupt.vhd.
+--
+-- This tests the Wishbone Slave interface and the AXI Master interface.
+-- Additionally, verifies the register interface of the module.
+
+vunit i_interrupt(interrupt(synthesis))
+{
+
+   -- set all declarations to run on clk
+   default clock is rising_edge(clk_i);
+
+   -----------------------------
+   -- MODEL OF THE ENVIRONMENT: what a program has written, and what the CPU has accepted
+   -----------------------------
+
+   signal f_rd     : std_logic;
+   signal f_wr     : std_logic;
+   signal f_isr    : std_logic_vector(15 downto 0) := (others => '0');
+   signal f_cnt    : std_logic_vector(15 downto 0) := (others => '0');
+   signal f_accept : std_logic_vector(15 downto 0) := (others => '0');
+
+   f_rd <= wb_cyc_i and wb_stb_i and not wb_we_i;
+   f_wr <= wb_cyc_i and wb_stb_i and wb_we_i;
+
+   p_model : process (clk_i)
+   begin
+      if rising_edge(clk_i) then
+         if f_cnt > 0 and irq_valid_o = '0' then
+            f_cnt <= f_cnt - 1;
+         end if;
+         if f_wr = '1' and wb_addr_i = "000" then
+            f_cnt <= wb_wr_data_i;
+         end if;
+         if f_wr = '1' and wb_addr_i = "001" then
+            f_isr <= wb_wr_data_i;
+         end if;
+         if irq_ready_i = '1' then
+            f_accept <= f_accept + 1;
+         end if;
+         if rst_i = '1' then
+            f_isr    <= (others => '0');
+            f_cnt    <= (others => '0');
+            f_accept <= (others => '0');
+         end if;
+      end if;
+   end process p_model;
+
+
+   -----------------------------
+   -- ASSUMPTIONS ABOUT INPUTS
+   -----------------------------
+
+   -- Require reset at startup.
+   f_reset : assume {rst_i};
+
+   -- Wishbone Master: STB is always accompanied by a CYC
+   f_stb_cyc : assume always {wb_stb_i = '1'} |-> {wb_cyc_i = '1'};
+
+   -- Wishbone Master: A stalled request may not change until it is accepted.
+   f_s_stable : assume always {wb_stb_i = '1' and wb_stall_o = '1' and rst_i = '0'} |=>
+      {rst_i = '1' or wb_cyc_i = '0' or (stable(wb_stb_i) and stable(wb_addr_i) and
+                                         stable(wb_we_i) and stable(wb_wr_data_i))};
+
+   -- AXI Slave: No stray READY without a VALID
+   -- This is not an AXI requirement, but rather a requirement of the CPU.
+   f_ready_valid : assume always {irq_valid_o = '0'} |-> {irq_ready_i = '0'};
+
+
+   ------------------------------------------------
+   -- PROPERTIES OF THE AXI MASTER INTERFACE
+   ------------------------------------------------
+
+   -- AXI Master : Unconditionally clear handshake signals after reset.
+   f_after_reset : assert always {rst_i = '1'} |=> {irq_valid_o = '0' and wb_ack_o = '0'};
+
+   -- AXI Master : Stay stable when not accepted.
+   f_irq_stable : assert always {irq_valid_o = '1' and irq_ready_i = '0' and rst_i = '0'} |=>
+      {stable(irq_valid_o) and stable(irq_addr_o)};
+
+   -- AXI Master : After acceptance, the address must be scrambled. This is
+   -- needed to gain greater test coverage of the CPU.
+   f_release : assert always {irq_ready_i = '1' and rst_i = '0'} |=>
+      {irq_valid_o = '0' and irq_addr_o = x"FFFF"};
+
+   -- AXI Master : Will assert when timer has reached zero (and is not being
+   -- written to).
+   f_fire_when_due : assert always {irq_valid_o = '0' and f_cnt = 1 and rst_i = '0' and
+                                   not (f_wr = '1' and wb_addr_i = "000")} |=> {irq_valid_o = '1'};
+
+   -- AXI Master : Don't assert EXCEPT when timer has reached zero, and report the
+   -- correct address.
+   f_fire_only_when_due : assert always {irq_valid_o = '0' and rst_i = '0'; irq_valid_o = '1'} |->
+      {prev(f_cnt) = 1 and irq_addr_o = prev(f_isr)};
+
+
+   ------------------------------------------------
+   -- PROPERTIES OF THE WISHBONE SLAVE INTERFACE
+   ------------------------------------------------
+
+   -- Wishbone Slave : Don't spuriously ACK unless a STB was seen in previous
+   -- clock cycle.
+   f_no_spurious_ack : assert always {wb_stb_i = '0'} |=> {wb_ack_o = '0'};
+
+   -- Wishbone Slave : Do always ack in the immediately following clock cycle.
+   f_ack : assert always {wb_cyc_i = '1' and wb_stb_i = '1' and rst_i = '0'} |=> {wb_ack_o = '1'};
+
+   -- Wishbone Slave : Read from 0xBF00
+   f_rd_count  : assert always {f_rd = '1' and wb_addr_i = "000" and rst_i = '0'} |=> {wb_rd_data_o = prev(f_cnt)};
+
+   -- Wishbone Slave : Read from 0xBF01
+   f_rd_addr   : assert always {f_rd = '1' and wb_addr_i = "001" and rst_i = '0'} |=> {wb_rd_data_o = prev(f_isr)};
+
+   -- Wishbone Slave : Read from 0xBF02
+   f_rd_stat   : assert always {f_rd = '1' and wb_addr_i = "010" and rst_i = '0'} |=>
+      {wb_rd_data_o = x"000" & "000" & prev(irq_valid_o)};
+
+   -- Wishbone Slave : Read from 0xBF03
+   f_rd_accept : assert always {f_rd = '1' and wb_addr_i = "011" and rst_i = '0'} |=> {wb_rd_data_o = prev(f_accept)};
+
+
+   ----------------------------------------------
+   -- ADDITIONAL ASSERTS NEEDED FOR K-INDUCTION
+   ----------------------------------------------
+
+   f_inv_accept : assert always {f_accept = irq_accept};
+
+   f_inv_isr : assert always {f_isr = irq_addr};
+
+   f_inv_cnt : assert always {f_cnt = irq_timer};
+
+   -- There used to be an invariant on irq_ready_d here, the one-cycle-delayed
+   -- ready that the module's own "Duplicate irq_ready_i" check compares
+   -- against. That check is simulation only now that the module is also
+   -- synthesised, so neither it nor irq_ready_d reaches this job, and
+   -- f_ready_valid above already rules a stray ready out.
+
+
+   --------------------------------------------
+   -- COVER STATEMENTS TO VERIFY REACHABILITY
+   --------------------------------------------
+
+   -- Can fire with a delay of 3 clock cycles
+   c_fire_after_write : cover {f_wr = '1' and wb_addr_i = "000" and wb_wr_data_i = x"0003" and irq_valid_o = '0' and rst_i = '0';
+                               irq_valid_o = '0'[*2]; irq_valid_o = '1'};
+
+   -- Can acknowledge an interrupt request
+   f_int_acknowledge : cover {irq_valid_o = '1' and rst_i = '0'; irq_valid_o = '0'};
+}
+

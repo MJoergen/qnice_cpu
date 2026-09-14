@@ -42,6 +42,8 @@ vunit i_sequencer(sequencer(synthesis))
        stable(m_stage_o.dst_imm) and
        stable(m_stage_o.res_reg) and
        stable(m_stage_o.is_crb) and
+       stable(m_stage_o.is_int) and
+       stable(m_stage_o.is_rti) and
        stable(m_stage_o.is_sub) and
        stable(m_stage_o.ptr_sr) and
        stable(m_stage_o.early_jmp)};

@@ -160,6 +160,25 @@ KNOWN_DIVERGENCE = {
             "result register still holds S2's value and it halts at E_S3. That "
             "is the RTL behaviour the test is pinning, and '--reference rtl' "
             "confirms it: upstream's own EAE.vhd is combinational too.",
+        "prog_int_hw":
+            "the emulator has no Interrupt Generator. test/interrupt.vhd's "
+            "registers at 0xBF00-0xBF03 lie below the emulator's IO area, so "
+            "they are plain RAM there: the countdown never fires, and the "
+            "program halts at Test 4's first 'ISR entered' check (0x1403). "
+            "'--reference rtl' shares the device with this CPU and compares "
+            "the program word for word.",
+        "prog_int_halt":
+            "the emulator has no Interrupt Generator, as for prog_int_hw: "
+            "INT_STAT reads back as RAM, so the request never asserts and the "
+            "program reports 0x1803 from its bounded wait. The wait is bounded "
+            "for this reason only; unbounded, the emulator ran into the "
+            "harness timeout.",
+        "prog_int_waveform":
+            "the emulator has no Interrupt Generator, as for prog_int_hw: the "
+            "countdown at 0xBF00 is plain RAM there, so neither service routine "
+            "is ever entered and the program halts at E1, its 'ISR1 ran once' "
+            "check, without writing its status word. '--reference rtl' shares "
+            "the device with this CPU and compares the program word for word.",
     },
     "rtl": {
         "prog_r15":
@@ -179,6 +198,16 @@ KNOWN_DIVERGENCE = {
             "other way, by reading the destination after the source. This CPU "
             "follows the emulator, which is what test/prog_r15.asm was written "
             "against; the two upstream references simply differ here.",
+        "prog_int_halt":
+            "upstream's CPU takes a pending interrupt BEFORE it latches the "
+            "next instruction: cs_fetch tests INT_N ahead of decoding the "
+            "fetched word. This program's software ISR returns straight onto "
+            "a HALT with a hardware request pending, so upstream enters "
+            "ISR_HALT instead of executing the HALT and reports 0x1802. This "
+            "CPU takes a request only at the boundary after a retiring "
+            "instruction, and there is none after a HALT, so the HALT wins "
+            "(irq_is_irq_s in src/cpu_main/write.vhd). Both are consistent "
+            "with the ISA documentation, which does not address the case.",
     },
 }
 
@@ -340,9 +369,13 @@ def run_emulator(emulator, out_file, dump_file, seed_file, timeout):
                               text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, None, "emulator did not halt within %ds" % timeout, None
-    m = re.search(r"HALT instruction executed at address ([0-9A-Fa-f]+)", proc.stdout)
+    # A rogue RTI or INT halts too, and says so in words of its own. This CPU
+    # halts on both as well (test/prog_int_rogue_rti.asm and
+    # test/prog_int_rogue_int.asm), so both count as a halt here.
+    m = re.search(r"(?:HALT instruction executed|Rogue (?:RTI|INT) instruction[^\n]*?)"
+                  r" at address ([0-9A-Fa-f]+)", proc.stdout)
     if not m:
-        # The emulator prints a diagnostic and halts on a rogue RTI/INT/EXC too;
+        # The emulator prints a diagnostic and halts on EXC's errors too;
         # surface whatever it said rather than a bare "no halt".
         tail = " | ".join(proc.stdout.strip().splitlines()[-3:])
         return None, None, "no HALT reported by the emulator (%s)" % (tail or "no output"), None

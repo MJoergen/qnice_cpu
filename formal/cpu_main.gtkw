@@ -99,6 +99,16 @@ cpu_main.mem_src_valid_i
 @1000200
 -MEMORY
 @800200
+-hardware interrupt request
+@28
+cpu_main.irq_valid_i
+@22
+cpu_main.irq_addr_i[15:0]
+@28
+cpu_main.irq_ready_o
+@1000200
+-hardware interrupt request
+@800200
 -to FETCH, and the flush
 @28
 [color] 2
@@ -418,7 +428,11 @@ cpu_main.i_cpu_main.f_fetch_uses_bank
 @28
 cpu_main.i_cpu_main.f_gp_regs
 @28
+cpu_main.i_cpu_main.f_halted
+@28
 cpu_main.i_cpu_main.f_int_beat
+@28
+cpu_main.i_cpu_main.f_halt_retires
 @28
 cpu_main.i_cpu_main.f_int_imm
 @28
@@ -427,6 +441,10 @@ cpu_main.i_cpu_main.f_int_modes
 cpu_main.i_cpu_main.f_int_retires
 @28
 cpu_main.i_cpu_main.f_irq_active
+@28
+cpu_main.i_cpu_main.f_irq_exact
+@28
+cpu_main.i_cpu_main.f_irq_take
 @28
 cpu_main.i_cpu_main.f_mem_dst_oustanding
 @28
@@ -446,8 +464,6 @@ cpu_main.i_cpu_main.f_move_modes
 @28
 cpu_main.i_cpu_main.f_move_reg_reg
 @28
-cpu_main.i_cpu_main.f_nested_int
-@28
 cpu_main.i_cpu_main.f_operand_modes
 @28
 cpu_main.i_cpu_main.f_prep_uses_bank
@@ -456,9 +472,23 @@ cpu_main.i_cpu_main.f_push_pending
 @22
 cpu_main.i_cpu_main.f_r14_next[15:0]
 @28
+cpu_main.i_cpu_main.f_rogue
+@28
 cpu_main.i_cpu_main.f_rti_retires
+@28
+cpu_main.i_cpu_main.f_saved_2w
+@28
+cpu_main.i_cpu_main.f_saved_exact
+@28
+cpu_main.i_cpu_main.f_saved_hw
+@28
+cpu_main.i_cpu_main.f_saved_jump
 @22
 cpu_main.i_cpu_main.f_saved_r14[15:0]
+@28
+cpu_main.i_cpu_main.f_saved_r14w
+@28
+cpu_main.i_cpu_main.f_wr_r15
 @1000200
 -formal
 [pattern_trace] 1

@@ -24,7 +24,7 @@ set_property -dict { PACKAGE_PIN V11 IOSTANDARD LVCMOS33 } [get_ports { led_o[15
 
 # Clock definition
 #
-# 7.45 ns. This design has been relaxed twice, and both steps are worth keeping.
+# 7.80 ns. This design has been relaxed four times, and each step is worth keeping.
 #
 # FIRST, 7.25 -> 7.35 ns, because the build had become a coin flip.
 #
@@ -61,10 +61,45 @@ set_property -dict { PACKAGE_PIN V11 IOSTANDARD LVCMOS33 } [get_ports { led_o[15
 # out of a series OR into its own term, and deleting a provably dead arm of
 # smc_hit -- together moved WNS by 0.004 ns.
 #
-# Timing numbers quoted in the documentation that cite a 7.25 or 7.35 ns
-# constraint were measured before the respective change and have been left as
-# measured; see doc/README.md, "The critical path".
-create_clock -name sys_clk -period 7.45 [get_ports {clk_i}];
+# THIRD, 7.45 -> 7.70 ns, to afford hardware interrupts.
+#
+# In the bitstream the hardware interrupt path is optimised away altogether --
+# nothing drives irq_valid_i here -- yet adding it took the design from WNS
+# +0.003 ns to -0.163 ns: logically the same netlist, mapped and placed
+# differently. Two follow-up changes recovered part of it (INT and RTI decoded
+# in DECODE rather than compared in WRITE, and the post-instruction R14/R15
+# saves confined to hardware entry, so they fold away too), reaching -0.125 ns
+# with 24 failing endpoints. The failing paths are the familiar ones: PREPARE's
+# dst_val_pc through the self-modifying-code window into fetch_valid_o and on
+# into ICACHE and FETCH, 67-74% routing. Replacing that window's subtraction
+# with block compares cut two logic levels and made WNS WORSE (-0.213 ns), which
+# is what a routing-dominated path does. The structural fix, registering the
+# flush, costs a cycle on every redirect.
+#
+# Why 7.70 and not less: at 7.60 ns the build closed, at 7.65 ns it FAILED
+# (WNS -0.129 ns, 46 failing endpoints, on PREPARE's r14 -> alu_src_val loop),
+# and at 7.70 ns it closed again. A looser constraint does not buy margin
+# monotonically here, it changes what placement does. Note too that both
+# closing builds report WNS exactly 0.000 ns: with these directives Vivado
+# stops improving once timing is met, so a zero is not evidence of zero slack,
+# and nor is it evidence of more. 0.25 ns costs 3.4% of clock rate.
+#
+# FOURTH, 7.70 -> 7.80 ns, to synthesise the Interrupt Generator.
+#
+# test/system.vhd now instantiates test/interrupt.vhd in the bitstream too, so
+# that irq_valid_i is driven by real logic and the hardware interrupt path is
+# placed and timed instead of optimised away. At 7.70 ns that build FAILED, WNS
+# -0.054 ns with 13 failing endpoints -- on PREPARE's dst_val_pc into ICACHE's
+# clock enable and on the ALU operand loop, 70% routing, and NOT on the request
+# path, whose worst path had +1.343 ns. The interrupt logic that used to fold
+# away is merged into those same cones (WRITE grew from 517 to 532 LUTs), and
+# that moved the placement. At 7.80 ns it closes at +0.001 ns, the request path
+# at +1.627 ns. 0.10 ns costs 1.3% of clock rate.
+#
+# Timing numbers quoted in the documentation that cite a 7.25, 7.35, 7.45, or
+# 7.70 ns constraint were measured before the respective change and have been
+# left as measured; see doc/README.md, "The critical path".
+create_clock -name sys_clk -period 7.80 [get_ports {clk_i}];
 
 # Configuration Bank Voltage Select
 set_property CFGBVS VCCO [current_design]

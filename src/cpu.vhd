@@ -343,7 +343,9 @@ begin
    ------------------------------------------------------------
 
    -- halt_o is the level "this CPU has executed a HALT", as opposed to the
-   -- single-cycle pulse CPU_MAIN reports when the HALT retires.
+   -- single-cycle pulse CPU_MAIN reports when the HALT retires. A rogue RTI or
+   -- INT counts as a HALT here; WRITE stops the pipeline behind one itself, see
+   -- irq_halted in cpu_main/write.vhd.
    p_halt : process (clk_i)
    begin
       if rising_edge(clk_i) then

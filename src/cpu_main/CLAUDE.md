@@ -57,6 +57,15 @@ function: `is_crb` is decoded in DECODE and carried in the stage records, not re
 and the design **does not build** (WNS −0.036 ns at 7.25 ns, 4 failing endpoints); with the
 precomputed bit it closes at +0.093 ns.
 
+`is_int` and `is_rti` travel down the records for the same reason, since `INT`/`RTI` reach
+`fetch_valid_o` through `irq_sw_valid_s`. Measured with the post-instruction `R14`/`R15` saves
+gated to hardware entry: comparing `prep_stage_i.inst` in WRITE gave WNS −0.217 ns (61 failing
+endpoints), the precomputed bits −0.125 ns (24). Before hardware interrupts went in, the same
+design closed at +0.003 ns, and the hardware path itself folded away in that bitstream — nothing
+drove `irq_valid_i` there — so those remaining 0.13 ns were placement, not logic. The Interrupt
+Generator is synthesised now, so the path is live; see [hw/CLAUDE.md](../../hw/CLAUDE.md) for what
+that cost.
+
 An ordinary write to `R14` still flushes **unconditionally**, and its trigger is deliberately
 **syntactic** — "writes `R14`, or writes `R15`", collapsed into a single product term because the
 two share `reg_addr_o(3 downto 1)` — and NOT a comparison of the new bank against the old: the

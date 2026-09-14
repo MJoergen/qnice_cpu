@@ -48,7 +48,8 @@ entity write is
 
       inst_done_o     : out std_logic;
 
-      -- Asserted for one clock cycle when a HALT instruction retires.
+      -- Asserted for one clock cycle when a HALT, a rogue RTI, or a rogue INT
+      -- retires.
       halt_o          : out std_logic                         -- combinational
    );
 end entity write;
@@ -79,65 +80,112 @@ architecture synthesis of write is
    -- makes VSG align each half to its own width (architecture_026).
    signal irq_is_int_s   : std_logic;                         -- An INT is retiring
    signal irq_is_rti_s   : std_logic;                         -- An RTI is retiring
+   signal irq_is_irq_s   : std_logic;                         -- A hardware interrupt is detected
    signal irq_active_s   : std_logic;                         -- Next value of irq_active
    signal irq_rogue_s    : std_logic;                         -- A rogue INT or RTI is retiring
    signal irq_sw_addr_s  : std_logic_vector(15 downto 0);     -- New value for PC
    signal irq_sw_valid_s : std_logic;                         -- irq_sw_addr_s is valid
    signal irq_active     : std_logic;                         -- In an interrupt service routine?
+   signal irq_halted     : std_logic;                         -- A rogue INT or RTI has retired
    signal irq_r14        : std_logic_vector(15 downto 0);     -- Stored value of R14
    signal irq_r15        : std_logic_vector(15 downto 0);     -- Stored value of R15
+   signal irq_r14_next   : std_logic_vector(15 downto 0);     -- R14 after this instruction
+   signal resume_pc      : std_logic_vector(15 downto 0);     -- R15 after this instruction
 
 begin
 
-   -- Is an INT / an RTI retiring this cycle? Factored out of p_irq_sw below,
-   -- which would otherwise repeat the same ten-bit compare four times.
-   irq_is_int_s <= inst_done_o when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
-                                    prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_INT else
+   -- Is an INT / an RTI retiring this cycle? From bits DECODE decoded and
+   -- carried down the stage records, not from prep_stage_i.inst: both reach
+   -- fetch_valid_o through irq_sw_valid_s, and that net cannot afford a ten-bit
+   -- compare in front of it -- the same argument as is_crb, see "Register bank
+   -- switch" below.
+   irq_is_int_s <= inst_done_o and prep_stage_i.is_int;
+   irq_is_rti_s <= inst_done_o and prep_stage_i.is_rti;
+
+   -- Is a rogue INT or RTI retiring? An RTI with nothing to return to, or an
+   -- INT inside a service routine, since interrupts do not nest. Both HALT the
+   -- CPU: that is what upstream's CPU and emulator do, and doc/interrupts.md
+   -- records it as a decision, since neither ISA document says anything about
+   -- either case. The rogue instruction retires, pulses halt_o, and changes
+   -- nothing else -- p_irq_sw below neither enters nor leaves a service routine
+   -- for it -- and irq_halted then keeps anything behind it from retiring.
+   -- test/prog_int_rogue_rti.asm and test/prog_int_rogue_int.asm are the tests.
+   --
+   -- Kept out of p_irq_sw on purpose: halt_o depends on this, and irq_is_irq_s
+   -- on halt_o, so deriving it in the same process as irq_sw_valid_s would read
+   -- as a loop even though there is none.
+   irq_rogue_s <= ((irq_is_rti_s and not irq_active) or (irq_is_int_s and irq_active)) and
+                  not rst_i;
+
+   -- Is a hardware interrupt request present when an instruction is retiring?
+   --
+   -- Not when that instruction is a HALT. The request is taken at the boundary
+   -- AFTER the retiring instruction, and after a HALT there is no boundary: the
+   -- CPU has stopped. Taking it anyway redirects FETCH, which also clears
+   -- cpu.vhd's halt_fetched gate, so the CPU carried on into the service routine
+   -- past its own HALT. test/prog_int_halt.asm is the test.
+   irq_is_irq_s <= inst_done_o when irq_valid_i = '1' and halt_o = '0' else
                    '0';
 
-   irq_is_rti_s <= inst_done_o when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
-                                    prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_RTI else
-                   '0';
+   -- The architectural state as the retiring instruction LEAVES it, which is
+   -- what interrupt entry must save: the return address is the boundary after
+   -- the instruction, so the instruction's own effect on R14 and R15 is part of
+   -- what the RTI has to put back. Saving prep_stage_i.r14 and next_pc instead,
+   -- as this file first did, is only right for an instruction that changes
+   -- neither -- which INT is, and a hardware interrupt's retiring instruction in
+   -- general is not. Tests 6H (writes to R14), 6I (flags), and 6J (taken
+   -- branches) in test/prog_int_hw.asm are the tests.
+   --
+   -- R14: registers.vhd resolves its two write ports in favour of the ordinary
+   -- one, so that is the order here too. Note these feed only the irq_r14 and
+   -- irq_r15 flip-flops, never fetch_valid_o, and only on hardware entry (see
+   -- p_irq); see the "Register bank switch" comment below for what a value
+   -- compare on R14 costs on that net.
+   --
+   -- R15: the redirect fetch_addr_o would otherwise make, i.e. the branch target
+   -- if this instruction writes R15 and next_pc if it does not. That includes
+   -- the early-redirected branches, where wr_early suppresses the redirect but
+   -- p_reg still writes the target to R15.
+   irq_r14_next <= reg_val_o when reg_we_o = '1' and reg_addr_o = C_REG_SR else
+                   alu_res_flags;
+
+   resume_pc <= reg_val_o when wr_r15 = '1' else
+                next_pc;
 
 
-   -- Handle software interrupt request. This is a combinational process.
+   -- Handle interrupt entry (INT or a hardware request) and exit (RTI). This is
+   -- a combinational process.
    --
    -- irq_sw_valid_s is pulsed when entering or leaving an interrupt service
    -- routine. It controls restoring R14 (in p_reg), redirecting R15 (in
    -- fetch_addr_o and fetch_valid_o), and storing the old R14/R15 (in p_irq).
    --
    -- The two illegal cases -- an RTI outside a service routine and an INT
-   -- inside one, since interrupts do not nest -- raise irq_rogue_s and change
-   -- nothing else, so in hardware they retire as no-ops. doc/interrupts.md
-   -- says they should halt the CPU instead; the two rogue assertions in
-   -- p_unimplemented below are a simulation-only stand-in for that, not the
-   -- implementation of it.
+   -- inside one -- do nothing here. They halt the CPU, see irq_rogue_s above.
    p_irq_sw : process (all)
    begin
       -- Set defaults, to avoid latches
       irq_active_s   <= irq_active; -- irq_active is the registered copy of irq_active_s
-      irq_rogue_s    <= '0';
       irq_sw_addr_s  <= (others => '0');
       irq_sw_valid_s <= '0';
+      irq_ready_o    <= '0';
 
       if irq_active = '0' then
+
          -- Entering an interrupt service routine: jump to the destination.
+         -- This takes priority over a hardware interrupt.
          if irq_is_int_s = '1' then
             irq_active_s   <= '1';
             irq_sw_addr_s  <= alu_res_val;
             irq_sw_valid_s <= '1';
-         end if;
-
-         -- Rogue: RTI with nothing to return to.
-         if irq_is_rti_s = '1' then
-            irq_rogue_s <= '1';
+         -- Now check for hardware interrupts.
+         elsif irq_is_irq_s = '1' then
+            irq_active_s   <= '1';
+            irq_sw_addr_s  <= irq_addr_i;
+            irq_sw_valid_s <= '1';
+            irq_ready_o    <= '1';
          end if;
       else
-         -- Rogue: interrupts do not nest.
-         if irq_is_int_s = '1' then
-            irq_rogue_s <= '1';
-         end if;
-
          -- Leaving an interrupt service routine: return to the previous location.
          if irq_is_rti_s = '1' then
             irq_active_s   <= '0';
@@ -146,20 +194,15 @@ begin
          end if;
       end if;
 
+      -- Including irq_ready_o: a CPU in reset must not accept a request, which
+      -- the device would then drop. formal/cpu_main.psl's f_irq_ready_boundary
+      -- found this.
       if rst_i = '1' then
          irq_active_s   <= '0';
-         irq_rogue_s    <= '0';
          irq_sw_valid_s <= '0';
+         irq_ready_o    <= '0';
       end if;
    end process p_irq_sw;
-
-   -- The hardware-interrupt request port is not implemented yet: this stage
-   -- serves INT/RTI only, and irq_valid_i/irq_addr_i are left unread. Drive the
-   -- ready low rather than leaving the port undriven -- an unconnected "out"
-   -- resolves to 'U' and would propagate out through cpu.vhd the moment
-   -- anything but "open" is attached to it. See src/interrupt/README.md.
-   irq_ready_o <= '0';
-
 
    p_irq : process (clk_i)
    begin
@@ -172,15 +215,57 @@ begin
          -- return address it is in the middle of consuming.
          -- Harmless today -- the next INT overwrites both before anything reads
          -- them -- but it makes the state meaningless to look at in a trace.
+         --
+         -- INT keeps saving prep_stage_i.r14 and next_pc, which for INT are the
+         -- same values (it changes neither register), and that is a TIMING
+         -- decision. Only hardware entry needs irq_r14_next and resume_pc.
+         -- When this was measured nothing drove irq_valid_i in the bitstream,
+         -- so the hardware arm folded away; saving them for INT as well made
+         -- them live logic behind the ALU, and moved WNS from -0.125 to about
+         -- -0.2 ns on a routing-dominated path that does not even pass through
+         -- here. The Interrupt Generator is synthesised now, so the hardware
+         -- arm is live regardless, but INT still does not need to pay for it.
          if irq_sw_valid_s = '1' and irq_active = '0' then
-            irq_r14 <= prep_stage_i.r14;
-            irq_r15 <= next_pc;
+            if irq_is_int_s = '1' then
+               irq_r14 <= prep_stage_i.r14;
+               irq_r15 <= next_pc;
+            else
+               irq_r14 <= irq_r14_next;
+               irq_r15 <= resume_pc;
+            end if;
+         end if;
+
+         -- Stop for good after a rogue INT or RTI. Only a reset restarts.
+         if irq_rogue_s = '1' then
+            irq_halted <= '1';
+         end if;
+
+         if rst_i = '1' then
+            irq_halted <= '0';
          end if;
       end if;
    end process p_irq;
 
 
-   prep_ready_o <= mem_req_ready_i when or(mem_req_op_o) = '1' else '1';
+   -- irq_halted stops the CPU after a rogue INT or RTI by refusing every
+   -- further micro-op, so nothing behind the rogue instruction ever retires,
+   -- and every effect this stage has is qualified by that handshake: register
+   -- writes (p_reg), inst_done_o and everything derived from it, and -- through
+   -- mem_req_valid_o below -- memory requests.
+   --
+   -- It has to be done here, and not the way a HALT is stopped. cpu.vhd's
+   -- halt_fetched gate stops a HALT from entering DECODE, because by the time it
+   -- retires one or two further instructions are already in the pipeline. That
+   -- gate needs nothing but the opcode, and a rogue instruction cannot be
+   -- recognised that early: whether an INT or RTI is rogue depends on
+   -- irq_active as it RETIRES, which an INT, an RTI, or a hardware interrupt
+   -- still ahead of it in the pipeline can change. So the stop is here, where
+   -- that is known. Refusing the handshake, rather than flushing, also means a
+   -- rogue instruction never redirects FETCH -- irq_r15 has no reset, so a
+   -- rogue RTI that jumped would jump into an uninitialised latch.
+   prep_ready_o <= '0' when irq_halted = '1' else
+                   mem_req_ready_i when or(mem_req_op_o) = '1' else
+                   '1';
 
 
    -- NOTE: prep_stage_i.r14 is used directly, with no bypass of this stage's own
@@ -235,9 +320,10 @@ begin
    -- is 0 and the ROM returns entry 0 -- three bare C_VAL_LAST, i.e. a single
    -- micro-op that does nothing at all. alu_flags acts only on INCRB/DECRB and
    -- leaves the Status Register alone otherwise (its "when others => null").
-   -- The result is that RTI, INT, and EXC currently RETIRE AS NO-OPS, and the
-   -- assembler emits them without complaint: "RTI" assembles to 0xE040 and
-   -- executes as nothing whatsoever.
+   -- The result is that an undecoded control command such as EXC RETIRES AS A
+   -- NO-OP, and the assembler emits it without complaint. (RTI and INT used to
+   -- be the same story -- "RTI" assembles to 0xE040 -- until p_irq_sw decoded
+   -- them; a rogue RTI or INT used to be trapped here too, and now halts.)
    --
    -- That is the worst behaviour to have while interrupts are being written,
    -- because a half-finished implementation looks like it works -- the
@@ -267,26 +353,6 @@ begin
                       ctrl_str(prep_stage_i.inst(R_CTRL_CMD)) & "). " &
                       "It is not decoded anywhere and would otherwise retire " &
                       "as a no-op."
-               severity failure;
-
-            -- Same argument, for the two interrupt instructions that ARE
-            -- decoded but are illegal where they stand: an RTI with nothing to
-            -- return to, and an INT inside a service routine. p_irq_sw raises
-            -- irq_rogue_s for both and then does nothing with it, so they too
-            -- retire silently. doc/interrupts.md specifies a halt; until
-            -- irq_rogue_s reaches halt_o, this is what stops a test program
-            -- from quietly passing over one. No test program executes either
-            -- case today, so this assertion is not currently reachable.
-            assert not (irq_rogue_s = '1' and irq_active = '0')
-               report "ROGUE RTI at address 0x" & to_hstring(prep_stage_i.addr) &
-                      ". There is no interrupt service routine to return from, " &
-                      "so it would otherwise retire as a no-op."
-               severity failure;
-
-            assert not (irq_rogue_s = '1' and irq_active = '1')
-               report "ROGUE INT at address 0x" & to_hstring(prep_stage_i.addr) &
-                      ". Interrupts do not nest, so it would otherwise retire " &
-                      "as a no-op and lose the outer return address."
                severity failure;
 
             assert prep_stage_i.inst(R_OPCODE) /= C_OPCODE_RES
@@ -779,7 +845,8 @@ begin
                 '0';
 
 
-   mem_req_valid_o <= prep_valid_i and or(mem_req_op_o);
+   -- Not after a rogue INT or RTI: see irq_halted, at prep_ready_o.
+   mem_req_valid_o <= prep_valid_i and or(mem_req_op_o) and not irq_halted;
 
    -- The three memory op bits come straight from the micro-op -- except the
    -- store, which is gated by update_reg, exactly as p_reg gates every register
@@ -827,9 +894,13 @@ begin
    -- outside world that the program has run to completion. cpu.vhd latches this
    -- pulse and stops feeding the pipeline, and the testbench uses it as the
    -- end-of-test event.
+   --
+   -- A rogue INT or RTI halts too, and pulses halt_o the same way; see
+   -- irq_rogue_s. The pipeline is stopped by irq_halted in that case, not by
+   -- cpu.vhd.
    halt_o <= inst_done_o when prep_stage_i.inst(R_OPCODE) = C_OPCODE_CTRL and
                               prep_stage_i.inst(R_CTRL_CMD) = C_CTRL_HALT else
-             '0';
+             irq_rogue_s;
 
 end architecture synthesis;
 

@@ -50,6 +50,7 @@ SOURCES += src/cpu.vhd
 TEST_SOURCES += test/wb_dp_mem.vhd
 TEST_SOURCES += test/test_monitor.vhd
 TEST_SOURCES += test/eae.vhd
+TEST_SOURCES += test/interrupt.vhd
 TEST_SOURCES += test/wb_mux.vhd
 TEST_SOURCES += test/system.vhd
 
@@ -59,6 +60,17 @@ TEST_SOURCES += test/system.vhd
 # "make lint" holds the testbench to the same style rules as everything else.
 UPSTREAM_TB    = test/tb_upstream.vhd
 UPSTREAM_PATCH = test/upstream.patch
+
+# This repository's own modules that the upstream testbench instantiates, and
+# which therefore have to be analysed into the upstream work library as well as
+# the ordinary one. Today just the Interrupt Generator: prog_int_hw.asm needs an
+# interrupt source, and both sides of the differential test are given the SAME
+# one, so that a divergence between the two CPUs cannot turn out to be a
+# divergence between two interrupt generators. test/tb_upstream.vhd's header
+# has the whole argument, and the two adapters it costs. These files are in
+# TEST_SOURCES above as well, which is what "make lint" and "make test" see;
+# this names them again for the other library.
+UPSTREAM_LOCAL = test/interrupt.vhd
 
 TEST ?= prog
 REGISTER_BANK_WIDTH ?= 8
@@ -98,7 +110,12 @@ TESTS += prog_hazard
 TESTS += prog_self_modifying
 TESTS += prog_subroutine
 TESTS += prog_int_sw
+TESTS += prog_int_hw
+TESTS += prog_int_halt
+TESTS += prog_int_rogue_rti
+TESTS += prog_int_rogue_int
 TESTS += prog_waveform
+TESTS += prog_int_waveform
 TESTS += prog_eae
 TESTS += prog_eae_stall
 TESTS += prog_wb_mux
@@ -157,6 +174,7 @@ help:
 	@echo "  make crosscheck     : Diff every program against the reference emulator"
 	@echo "  make crosscheck_rtl : Diff every program against the upstream RTL CPU"
 	@echo "  make check          : Run one test program headless"
+	@echo "  make run            : Run one test program headless, without waveform tracing"
 	@echo "  make golden         : Regenerate the test/*.{writes,stats}.golden files"
 	@echo "  make system.bit     : Run synthesis using Vivado"
 	@echo "  make utilization    : Refresh the utilization numbers in doc/README.md (needs Vivado)"
@@ -415,14 +433,15 @@ UPSTREAM_SOURCES += $(UPSTREAM_DIR)/EAE.vhd
 # repository, it touches one file, and every reason for it is written in the
 # patch's own header. "patch" fails the build if it no longer applies, which is
 # what should happen when the pinned commit moves.
-$(UPSTREAM_STAMP): $(UPSTREAM_TB) $(UPSTREAM_PATCH) Makefile
+$(UPSTREAM_STAMP): $(UPSTREAM_TB) $(UPSTREAM_LOCAL) $(UPSTREAM_PATCH) Makefile
 	@mkdir -p $(CROSSCHECK_DIR)
 	rm -rf $(UPSTREAM_DIR) $(UPSTREAM_WORK)
 	git -C $(QNICE_FPGA) archive $(QNICE_REF) \
 	   $(patsubst $(CROSSCHECK_DIR)/%,%,$(UPSTREAM_SOURCES)) | tar -x -C $(CROSSCHECK_DIR)
 	patch -p1 -d $(CROSSCHECK_DIR) < $(UPSTREAM_PATCH)
 	@mkdir -p $(UPSTREAM_WORK)
-	ghdl -a --std=08 -fsynopsys --workdir=$(UPSTREAM_WORK) $(UPSTREAM_SOURCES) $(UPSTREAM_TB)
+	ghdl -a --std=08 -fsynopsys --workdir=$(UPSTREAM_WORK) $(UPSTREAM_SOURCES) \
+	   $(UPSTREAM_LOCAL) $(UPSTREAM_TB)
 	touch $@
 
 # Narrow the scope the ordinary make way, by overriding TESTS:
@@ -447,8 +466,9 @@ crosscheck_rtl: $(UPSTREAM_STAMP)
 #
 # These targets only RENDER the diagrams, they do not derive them: every value
 # in a .tex was read off a simulation by hand (src/cpu_main/timing.tex from
-# test/prog_waveform.asm, doc/loop_timing.tex from test/prog_poll.asm, the two
-# src/registers ones from test/prog.asm). If you change the pipeline, re-read
+# test/prog_waveform.asm, src/interrupt/timing.tex from
+# test/prog_int_waveform.asm, doc/loop_timing.tex from test/prog_poll.asm, the
+# two src/registers ones from test/prog.asm). If you change the pipeline, re-read
 # the values from a fresh simulation first.
 TIMINGS  = src/cpu_main/timing src/interrupt/timing doc/loop_timing
 TIMINGS += src/registers/write_before_read src/registers/write_before_read_2

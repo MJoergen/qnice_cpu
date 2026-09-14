@@ -415,8 +415,10 @@ is asserted whenever WRITE writes to register 15, and `fetch_addr_o` is that
 write value. The same `fetch_valid_o` also flushes the pipeline, see
 [Pipeline flush](#pipeline-flush) below.
 
-The one case that is not a write to `R15` is a change of the register bank, see
-[Register bank switch](#register-bank-switch).
+The cases that are not a write to `R15` are a change of the register bank, see
+[Register bank switch](#register-bank-switch), and interrupt entry and exit, see
+[Interrupts](#interrupts): an `INT` or an accepted hardware request redirects to
+the service routine's address, and an `RTI` to the saved return address.
 
 One class of branch does *not* redirect from here, because DECODE has already
 done it two cycles earlier — see [From DECODE to FETCH](#from-decode-to-fetch)
@@ -445,14 +447,27 @@ The only signals in CPU_MAIN that skip a stage. They exist so that an
 combinational and both are explained under
 [Register bank switch](#register-bank-switch).
 
+### Interrupt request
+```
+irq_valid_i : in  std_logic;
+irq_ready_o : out std_logic;                        -- combinational
+irq_addr_i  : in  std_logic_vector(15 downto 0);
+```
+The CPU's hardware interrupt request port, passed straight through from
+[cpu.vhd](../cpu.vhd) to WRITE. WRITE reads both inputs only in the cycle an
+instruction retires, and accepts a request in that same cycle. See
+[Interrupts](#interrupts), and for the handshake and its contract
+[src/interrupt/README.md](../interrupt/README.md).
+
 ### Halt
 ```
 halt_o : out std_logic;
 ```
 This output is asserted for one clock cycle when a `HALT` instruction retires,
-i.e. it is `inst_done_o` qualified by the instruction being `CTRL HALT`. `HALT`
-has no architectural effect inside CPU_MAIN; all this does is tell the outside
-world that the program has run to completion.
+i.e. it is `inst_done_o` qualified by the instruction being `CTRL HALT`, and
+likewise when a rogue `RTI` or `INT` retires (see [Interrupts](#interrupts)).
+`HALT` has no architectural effect inside CPU_MAIN; all this does is tell the
+outside world that the program has run to completion.
 
 Acting on it is [cpu.vhd](../cpu.vhd)'s job, and it does so at the *other* end
 of the pipeline: `p_halt_fetched` there watches the ICACHE-to-DECODE handshake
@@ -769,6 +784,33 @@ This also covers the exit from reset. While `rst_i` is asserted, the `p_reg`
 process in [write.vhd](write.vhd) forces a write of `R15 = 0`, which in turn
 asserts `fetch_valid_o` and so starts execution from address 0 with a clean
 pipeline.
+
+### Interrupts
+Interrupt entry and exit are flushes too, and the reason the interrupt state
+has to live in WRITE: it is the one stage `fetch_valid_o` does not reset. The
+state is `irq_active` and the saved `irq_r14`/`irq_r15`, in
+[write.vhd](write.vhd).
+
+* **`INT`** redirects to its destination operand, which DECODE reads like any
+  other operand, and saves `prep_stage_i.r14` and `next_pc`.
+* **A hardware request** is taken when `irq_valid_i` is high as an instruction
+  retires, no service routine is running, and the instruction is not a `HALT`,
+  an `INT`, or an `RTI` (`irq_is_irq_s` and `p_irq_sw`). In that cycle WRITE asserts
+  `irq_ready_o`, redirects to `irq_addr_i`, and saves `irq_r14_next` and
+  `resume_pc` — the state as the retiring instruction leaves it, including the
+  target of a taken branch.
+* **`RTI`** redirects to `irq_r15` and restores `R14` from `irq_r14` through the
+  ordinary register port, which wins over the Status Register port.
+* **A rogue `RTI` or `INT`** pulses `halt_o` and sets `irq_halted`, which holds
+  `prep_ready_o` and `mem_req_valid_o` low from then on, so nothing behind it
+  retires. The `HALT` gate in `cpu.vhd` cannot do this, since it decides before
+  DECODE and rogue-ness is known only as the instruction retires.
+
+`INT` and `RTI` are recognised from `is_int`/`is_rti`, decoded in DECODE and
+carried in the stage records, not from `prep_stage_i.inst`: both feed
+`fetch_valid_o`, which cannot afford a ten-bit compare in front of it — the same
+argument as `is_crb` under [Register bank switch](#register-bank-switch). For the
+whole feature, see [Interrupts](../../doc/README.md#interrupts).
 
 ### Early redirect
 A branch costs four cycles because WRITE resolves it two stages after DECODE

@@ -5,10 +5,13 @@ library ieee;
 -- with a test program read from the file G_ROM, and is accessible via both the
 -- Instruction Memory and Data Memory interfaces.
 --
--- With G_SIMULATION, an EAE (Extended Arithmetic Element) is additionally
--- addressable in the upper half of the data address space, 0x8000-0xFFFF, and
--- a multiplexer splits the data bus between the two. Neither is synthesised;
--- the comment above that generate says why it matters that they are not.
+-- An INT (Interrupt Generator) listens on 0x8000-0xBFFF of the data address
+-- space and drives the CPU's interrupt request port, in simulation and in
+-- synthesis alike; see the comment above i_interrupt. With G_SIMULATION, an EAE
+-- (Extended Arithmetic Element) is additionally addressable at 0xC000-0xFFFF,
+-- and two multiplexers split the data bus between RAM, INT, and EAE. Those
+-- multiplexers and the EAE are not synthesised; the comment above that
+-- generate says why it matters that they are not.
 
 entity system is
    generic (
@@ -61,7 +64,8 @@ architecture synthesis of system is
    signal wbd_ack     : std_logic;
    signal wbd_data_rd : std_logic_vector(15 downto 0);
 
-   signal halt : std_logic;
+   signal halt      : std_logic;
+   signal inst_done : std_logic;
 
    -- Data bus as the RAM sees it. In simulation this is the lower half of the
    -- address space, downstream of i_wb_mux; in synthesis it is the whole bus.
@@ -74,6 +78,21 @@ architecture synthesis of system is
    signal wbd_ack_mem     : std_logic;
    signal wbd_data_rd_mem : std_logic_vector(15 downto 0);
 
+   -- Data bus as the Interrupt Generator sees it: downstream of i_wb_mux_dev in
+   -- simulation, and a listen-only tap on the whole bus in synthesis.
+   signal wbd_cyc_int     : std_logic;
+   signal wbd_stb_int     : std_logic;
+   signal wbd_stall_int   : std_logic;
+   signal wbd_we_int      : std_logic;
+   signal wbd_addr_int    : std_logic_vector(15 downto 0);
+   signal wbd_data_wr_int : std_logic_vector(15 downto 0);
+   signal wbd_ack_int     : std_logic;
+   signal wbd_data_rd_int : std_logic_vector(15 downto 0);
+
+   signal irq_valid : std_logic;
+   signal irq_ready : std_logic;
+   signal irq_addr  : std_logic_vector(15 downto 0);
+
 begin
 
    -- Force driving output ports, to avoid Vivado Synthesis pruning to entire
@@ -83,9 +102,6 @@ begin
 
 
    -- Instantiate the QNICE CPU.
-   -- The three irq_* ports are tied off: hardware interrupts are not
-   -- implemented, and this system has no interrupt-generating device.
-   -- See src/interrupt/README.md.
    i_cpu : entity work.cpu
       generic map (
          G_REGISTER_BANK_WIDTH => G_REGISTER_BANK_WIDTH,
@@ -109,9 +125,10 @@ begin
          wbd_dat_o   => wbd_data_wr,
          wbd_ack_i   => wbd_ack,
          wbd_data_i  => wbd_data_rd,
-         irq_valid_i => '0',
-         irq_ready_o => open,
-         irq_addr_i  => (others => '0'),
+         irq_valid_i => irq_valid,
+         irq_ready_o => irq_ready,
+         irq_addr_i  => irq_addr,
+         inst_done_o => inst_done,
          halt_o      => halt
       ); -- i_cpu
 
@@ -149,12 +166,38 @@ begin
       ); -- i_wb_dp_mem
 
 
-   -- The upper half of the data address space, 0x8000-0xFFFF, holds the EAE,
-   -- and the EAE exists only in simulation -- it is there to give
-   -- prog_mandel_perf.asm a multiplier, i.e. to make one test program's
-   -- instruction mix realistic. Nothing in a bitstream ever addresses it.
+   -- INT (Interrupt Generator). Instantiated in synthesis as well as in
+   -- simulation, and that is the point of it being here rather than inside
+   -- gen_sim below: without it nothing drives the CPU's irq_valid_i in the
+   -- bitstream, so the whole hardware interrupt path -- irq_valid_i straight
+   -- into fetch_valid_o, the reset of every flip-flop in DECODE and PREPARE --
+   -- is optimised away, and the timing of the design says nothing about it. With
+   -- it, the path is live and placed. How its data bus is connected differs,
+   -- see gen_sim.
+   i_interrupt : entity work.interrupt
+      port map (
+         clk_i        => clk_i,
+         rst_i        => not rstn_i,
+         wb_cyc_i     => wbd_cyc_int,
+         wb_stb_i     => wbd_stb_int,
+         wb_stall_o   => wbd_stall_int,
+         wb_addr_i    => wbd_addr_int(2 downto 0),
+         wb_we_i      => wbd_we_int,
+         wb_wr_data_i => wbd_data_wr_int,
+         wb_ack_o     => wbd_ack_int,
+         wb_rd_data_o => wbd_data_rd_int,
+         irq_valid_o  => irq_valid,
+         irq_ready_i  => irq_ready,
+         irq_addr_o   => irq_addr
+      ); -- i_interrupt
+
+
+   -- The upper half of the data address space, 0x8000-0xFFFF, holds the
+   -- Interrupt Generator and the EAE. The EAE exists only in simulation -- it is
+   -- there to give prog_mandel_perf.asm a multiplier, i.e. to make one test
+   -- program's instruction mix realistic.
    --
-   -- So the multiplexer in front of it is simulation-only too, and NOT because
+   -- So the multiplexers in front of them are simulation-only too, and NOT because
    -- it is untidy to synthesise dead logic. It costs real timing margin, in two
    -- ways, both measured with Vivado 2022.2 at the 7.35 ns constraint:
    --
@@ -175,6 +218,15 @@ begin
 
    gen_sim : if G_SIMULATION generate
 
+      signal wbd_cyc_dev     : std_logic;
+      signal wbd_stb_dev     : std_logic;
+      signal wbd_stall_dev   : std_logic;
+      signal wbd_we_dev      : std_logic;
+      signal wbd_addr_dev    : std_logic_vector(15 downto 0);
+      signal wbd_data_wr_dev : std_logic_vector(15 downto 0);
+      signal wbd_ack_dev     : std_logic;
+      signal wbd_data_rd_dev : std_logic_vector(15 downto 0);
+
       signal wbd_cyc_eae     : std_logic;
       signal wbd_stb_eae     : std_logic;
       signal wbd_stall_eae   : std_logic;
@@ -186,7 +238,7 @@ begin
 
    begin
 
-      -- Split the data bus at 0x8000: RAM below, EAE above. Note this is a real
+      -- Split the address bus at 0x8000: RAM below, dev above. Note this is a real
       -- multiplexer and not just an address decode -- the two slaves have
       -- different, and configurable, latencies, and a pipelined WISHBONE master
       -- can only pair responses with requests by position. See wb_mux.vhd.
@@ -207,6 +259,7 @@ begin
             s_data_i   => wbd_data_wr,
             s_ack_o    => wbd_ack,
             s_data_o   => wbd_data_rd,
+            s_sel_i    => wbd_addr(15),
             --
             m0_cyc_o   => wbd_cyc_mem,
             m0_stb_o   => wbd_stb_mem,
@@ -217,6 +270,48 @@ begin
             m0_ack_i   => wbd_ack_mem,
             m0_data_i  => wbd_data_rd_mem,
             --
+            m1_cyc_o   => wbd_cyc_dev,
+            m1_stb_o   => wbd_stb_dev,
+            m1_stall_i => wbd_stall_dev,
+            m1_we_o    => wbd_we_dev,
+            m1_addr_o  => wbd_addr_dev,
+            m1_data_o  => wbd_data_wr_dev,
+            m1_ack_i   => wbd_ack_dev,
+            m1_data_i  => wbd_data_rd_dev
+         ); -- i_wb_mux
+
+      -- Split the address bus at 0xC000: INT below, EAE above. Note this is a real
+      -- multiplexer and not just an address decode -- the two slaves have
+      -- different, and configurable, latencies, and a pipelined WISHBONE master
+      -- can only pair responses with requests by position. See wb_mux.vhd.
+      i_wb_mux_dev : entity work.wb_mux
+         generic map (
+            G_ADDR_SIZE       => 16,
+            G_DATA_SIZE       => 16,
+            G_MAX_OUTSTANDING => 2
+         )
+         port map (
+            clk_i      => clk_i,
+            rst_i      => not rstn_i,
+            s_cyc_i    => wbd_cyc_dev,
+            s_stb_i    => wbd_stb_dev,
+            s_stall_o  => wbd_stall_dev,
+            s_we_i     => wbd_we_dev,
+            s_addr_i   => wbd_addr_dev,
+            s_data_i   => wbd_data_wr_dev,
+            s_ack_o    => wbd_ack_dev,
+            s_data_o   => wbd_data_rd_dev,
+            s_sel_i    => wbd_addr_dev(14),
+            --
+            m0_cyc_o   => wbd_cyc_int,
+            m0_stb_o   => wbd_stb_int,
+            m0_stall_i => wbd_stall_int,
+            m0_we_o    => wbd_we_int,
+            m0_addr_o  => wbd_addr_int,
+            m0_data_o  => wbd_data_wr_int,
+            m0_ack_i   => wbd_ack_int,
+            m0_data_i  => wbd_data_rd_int,
+            --
             m1_cyc_o   => wbd_cyc_eae,
             m1_stb_o   => wbd_stb_eae,
             m1_stall_i => wbd_stall_eae,
@@ -225,7 +320,8 @@ begin
             m1_data_o  => wbd_data_wr_eae,
             m1_ack_i   => wbd_ack_eae,
             m1_data_i  => wbd_data_rd_eae
-         ); -- i_wb_mux
+         ); -- i_wb_mux_dev
+
 
       -- EAE (Extended Arithmetic Element)
       i_eae : entity work.eae
@@ -258,6 +354,23 @@ begin
       wbd_ack         <= wbd_ack_mem;
       wbd_data_rd     <= wbd_data_rd_mem;
 
+      -- The Interrupt Generator LISTENS on the same bus, to requests addressed
+      -- to 0x8000-0xBFFF, and answers none of them: its stall, ACK, and read
+      -- data go nowhere, and the RAM, which aliases across the whole address
+      -- space, goes on answering every request by itself. That is deliberate.
+      -- A second responder would need a multiplexer to keep responses in
+      -- order, and a slave the CPU can see stalling costs the timing margin
+      -- recorded above; a listener costs neither, and is all it takes for a
+      -- program's write to the countdown to raise a real request. A read of
+      -- the generator's registers returns RAM contents instead, which nothing
+      -- in a bitstream relies on.
+      wbd_cyc_int     <= wbd_cyc;
+      wbd_stb_int     <= wbd_stb when wbd_addr(15 downto 14) = "10" else
+                         '0';
+      wbd_we_int      <= wbd_we;
+      wbd_addr_int    <= wbd_addr;
+      wbd_data_wr_int <= wbd_data_wr;
+
    end generate gen_sim;
 
 
@@ -271,14 +384,15 @@ begin
          G_STATS_FILE => G_STATS_FILE
       )
       port map (
-         clk_i      => clk_i,
-         rst_i      => not rstn_i,
-         halt_i     => halt,
-         mem_we_i   => wbd_stb and wbd_we and not wbd_stall,
-         mem_addr_i => wbd_addr,
-         mem_data_i => wbd_data_wr,
-         wbi_req_i  => wbi_cyc and wbi_stb and not wbi_stall,
-         wbd_req_i  => wbd_cyc and wbd_stb and not wbd_stall
+         clk_i       => clk_i,
+         rst_i       => not rstn_i,
+         halt_i      => halt,
+         inst_done_i => inst_done,
+         mem_we_i    => wbd_stb and wbd_we and not wbd_stall,
+         mem_addr_i  => wbd_addr,
+         mem_data_i  => wbd_data_wr,
+         wbi_req_i   => wbi_cyc and wbi_stb and not wbi_stall,
+         wbd_req_i   => wbd_cyc and wbd_stb and not wbd_stall
       ); -- i_test_monitor
 -- pragma synthesis_on
 

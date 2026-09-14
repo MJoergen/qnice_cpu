@@ -144,6 +144,8 @@ package cpu_constants is
       dst_imm    : std_logic;
       res_reg    : std_logic_vector(3 downto 0);
       is_crb     : std_logic;                     -- INCRB/DECRB, decoded early (decode.vhd)
+      is_int     : std_logic;                     -- INT, decoded early (decode.vhd)
+      is_rti     : std_logic;                     -- RTI, decoded early (decode.vhd)
       is_sub     : std_logic;                     -- ASUB/RSUB, decoded early (decode.vhd)
       ptr_sr     : std_logic;                     -- @R14/@R15 pointer write-back (decode.vhd)
       early_jmp  : std_logic;                     -- Redirect already issued (decode.vhd)
@@ -166,6 +168,8 @@ package cpu_constants is
       dst_imm     : std_logic;
       res_reg     : std_logic_vector(3 downto 0);
       is_crb      : std_logic;
+      is_int      : std_logic;
+      is_rti      : std_logic;
       is_sub      : std_logic;
       ptr_sr      : std_logic;
       early_jmp   : std_logic;
@@ -196,6 +200,8 @@ package cpu_constants is
       dst_imm     : std_logic;
       res_reg     : std_logic_vector(3 downto 0);
       is_crb      : std_logic;
+      is_int      : std_logic;
+      is_rti      : std_logic;
       is_sub      : std_logic;
       ptr_sr      : std_logic;
       early_jmp   : std_logic;

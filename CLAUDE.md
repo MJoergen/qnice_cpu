@@ -92,12 +92,11 @@ regenerate both with `make golden` and read the `git diff` carefully.
 
 A run can also fail before any of that, on `p_unimplemented` in `src/cpu_main/write.vhd`: a
 simulation-only assertion that kills the run if an instruction retires that nothing decodes. Today
-that means the control commands `RTI`, `INT`, and `EXC`, and reserved opcode `0xD`. Without it they
-are **silent no-ops** — DECODE classifies every CTRL instruction as no-operand/no-read/no-write, so
-the microcode ROM returns entry 0, three bare `C_VAL_LAST`, and `alu_flags` leaves the SR alone via
-its `when others => null`. The assembler emits them regardless (`RTI` is `0xE040`). This matters
-most while interrupts are being implemented, since a half-finished `RTI` would otherwise look like
-it works. Drop each arm of the check as its instruction gains a real implementation.
+that means the control command `EXC` and reserved opcode `0xD`. Without it they are **silent
+no-ops** — DECODE classifies every CTRL instruction as no-operand/no-read/no-write, so the
+microcode ROM returns entry 0, three bare `C_VAL_LAST`, and `alu_flags` leaves the SR alone via its
+`when others => null`. The assembler emits them regardless. `RTI` and `INT` were on the list until
+they were decoded. Drop each arm of the check as its instruction gains a real implementation.
 
 The statistics file is the performance counterpart of the writes log, and exists because a change
 that makes the CPU flush twice as often produces an identical writes log and passes CI green.
@@ -114,9 +113,17 @@ retire pulse from WRITE would be one or two instructions too late), and clears t
 pipeline flush, since a branch retiring can discard an already-accepted `HALT` —
 `test/prog_pipeline.asm` branches over twelve `HALT`s used as padding and depends on this.
 
+A **rogue `RTI` or `INT`** — outside, respectively inside, an interrupt service routine — halts the
+CPU too, but that gate cannot stop it: whether an `RTI` or `INT` is rogue is only known as it
+retires. So WRITE stops it instead. `irq_halted` in `src/cpu_main/write.vhd` holds `prep_ready_o`
+and `mem_req_valid_o` low from the cycle after, so nothing behind it retires. The programs are
+`test/prog_int_rogue_rti.asm` and `test/prog_int_rogue_int.asm`, whose passing status word is
+necessarily written *before* the halt, so the code after the rogue instruction spins rather than
+halting — a failure `HALT` there would pass, since only the first status write counts.
+
 ### Linting
 
-`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 29
+`make lint` runs [VSG](https://vhdl-style-guide.readthedocs.io/) (VHDL Style Guide) over all 30
 VHDL files with the repo's `vsg.yml`, which maps CODING_STYLE.md onto VSG's rule set. CI runs it
 too, in its own workflow [.github/workflows/lint.yml](.github/workflows/lint.yml), from a **pinned**
 vsg release — the pin is load-bearing, because VSG adds and re-scopes rules between releases and
@@ -149,9 +156,9 @@ not after.
 | [src/registers/CLAUDE.md](src/registers/CLAUDE.md) | writing PSL against write-before-read forwarding | a forwarding property without its escape clause fails BMC on something that is not a bug |
 | [src/sub/CLAUDE.md](src/sub/CLAUDE.md) | the six elastic-pipeline primitives (no README of their own) | buffers are combinational both ways, `two_stage_fifo`'s reset is asymmetric on purpose, `dp_ram` gets one address per port |
 | [src/memory/CLAUDE.md](src/memory/CLAUDE.md) | the op-type FIFO behind a bare Wishbone ACK | it requires in-order ACKs, and `mreq_accept` must read registered state only |
-| [test/CLAUDE.md](test/CLAUDE.md) | differential testing, the EAE, the slow-memory model, the bus multiplexer | `make test_slow` is what gives `wb_mux` teeth; the mux is kept out of the bitstream for measured timing reasons |
+| [test/CLAUDE.md](test/CLAUDE.md) | differential testing, the EAE, the Interrupt Generator, the slow-memory model, and the bus multiplexers | `make test_slow` is what gives `wb_mux` teeth; the muxes are kept out of the bitstream for measured timing reasons; `prog_int_hw` clears where its interrupts landed before passing, or it cannot cross-check against upstream |
 | [formal/CLAUDE.md](formal/CLAUDE.md) | the `.psl`/`.sby`/`.gtkw` triplet, the stamp files, CI | all thirteen DUTs pass; anything commented out of `DUTS` to narrow scope goes back |
-| [hw/CLAUDE.md](hw/CLAUDE.md) | Yosys synthesis, utilization numbers, the 7.45 ns constraint | `make synth` elaborates `cpu` and not `system` by necessity; timing is routing-dominated, so unrelated edits move it |
+| [hw/CLAUDE.md](hw/CLAUDE.md) | Yosys synthesis, utilization numbers, the 7.80 ns constraint | `make synth` elaborates `cpu` and not `system` by necessity; timing is routing-dominated, so unrelated edits move it |
 
 ## Architecture
 
@@ -188,6 +195,17 @@ stale slot directly was a real bug, fixed by that substitution;
 register write at the end of most instructions); `R13` (Stack Pointer) is an ordinary register,
 handled in DECODE.
 
+**Interrupts** — `INT`, `RTI`, and hardware entry — are implemented entirely in WRITE, the one stage
+a flush does not reset: `irq_active` and the saved `irq_r14`/`irq_r15` in `src/cpu_main/write.vhd`.
+Entry and exit are one more term on `fetch_valid_o`. Two deliberate **divergences from upstream**
+are easy to "fix" by accident, so know them before touching this: only `R14` and `R15` are saved,
+where upstream's register file and emulator save `R8`-`R15` into shadow registers (and so `EXC`,
+which exchanges them, is not implemented); and the CPU has **no `INT_N`/`IGRANT_N` pins** — it
+presents a valid/ready request port, and a QNICE-FPGA system needs an adaptation layer for
+interrupts, as it already does for the two memory buses. The write-up is
+[doc/README.md](doc/README.md#interrupts); every decision behind it, with the upstream sources it
+was weighed against, is [doc/interrupts.md](doc/interrupts.md).
+
 ### Directory layout
 
 - `src/README.md` — the map of this tree: what each file is, and the only write-up of the
@@ -200,17 +218,19 @@ handled in DECODE.
 - `src/cpu_main/` — DECODE, SEQUENCER, PREPARE, WRITE, and the `sub/` microcode ROM and ALU.
   SEQUENCER sits beside the stages rather than in `sub/` because `cpu_main.vhd` instantiates it
   itself, on the DECODE→PREPARE link.
-- `src/interrupt/` — **no VHDL yet.** A README and a timing diagram only: the port list and
-  handshake `interrupt.vhd` will have to implement, drawn ahead of the module because the bus
-  protocol is the part of the feature the upstream sources disagreed about most. The CPU does
-  **not** implement the `INT_N`/`IGRANT_N` daisy chain: it presents an AXI-stream request port
-  (`irq_valid_i`/`irq_ready_o`/`irq_addr_i`), sees exactly one interrupt-generating device, and
-  leaves chaining and arbitration to an adaptation layer outside it — the same concession already
-  made for the Harvard split and Wishbone. It is task T2 of
-  [doc/interrupts.md](doc/interrupts.md), and its `timing.tex` is in the Makefile's `TIMINGS`, so
-  `make diagrams` renders it like any other. Read it as a specification, not as a description of
-  something that exists; the diagram is to be redrawn against a real simulation once the module
-  runs.
+- `src/interrupt/` — **no VHDL.** The description of the hardware interrupt request port and its
+  timing diagram, read off `test/prog_int_waveform.asm`. The port itself is implemented in WRITE
+  (`src/cpu_main/write.vhd`): the registered module once planned for this directory (task T2 of
+  [doc/interrupts.md](doc/interrupts.md)) was never built. The CPU does **not** implement the
+  `INT_N`/`IGRANT_N` daisy chain: it presents a valid/ready request port
+  (`irq_valid_i`/`irq_ready_o`/`irq_addr_i`, AXI-stream except that a request may be withdrawn),
+  sees exactly one interrupt-generating device, and leaves chaining and arbitration to an
+  adaptation layer outside it — the same concession already made for the Harvard split and
+  Wishbone. `irq_valid_i` reaches `fetch_valid_o` combinationally. `test/system.vhd` wires the
+  port to `test/interrupt.vhd`, a program-controlled interrupt source (task T1), in the bitstream
+  as well as in simulation, so that path is placed and timed; the constraint went to 7.80 ns to
+  afford it, see [hw/CLAUDE.md](hw/CLAUDE.md) and
+  [Simulated peripherals: the Interrupt Generator](test/CLAUDE.md#simulated-peripherals-the-interrupt-generator).
 - `src/sub/` — reusable elastic-pipeline building blocks, see
   [Elastic pipeline building blocks](src/sub/CLAUDE.md).
 - `src/cpu.vhd` — top-level entity tying FETCH, ICACHE, REGISTERS, MEMORY, and CPU_MAIN together.
@@ -219,19 +239,31 @@ handled in DECODE.
   from a failing one. `test/tb_upstream.vhd`, `test/upstream.patch` and `test/crosscheck.py`
   belong to the differential tests instead — see
   [Differential testing against upstream](test/CLAUDE.md#differential-testing-against-upstream). `test/eae.vhd` is a simulation-only arithmetic peripheral,
-  `test/wb_dp_mem.vhd` the memory model whose latency generics drive `make test_slow`, and
-  `test/wb_mux.vhd` the order-restoring data bus multiplexer between them,
-  and `test/prog_mandel_stats.asm` the instrumented build of
+  `test/interrupt.vhd` a programmable interrupt source (the one test peripheral that is also
+  synthesised),
+  `test/wb_dp_mem.vhd` the memory model whose latency generics drive `make test_slow`,
+  `test/wb_mux.vhd` the order-restoring data bus multiplexer, instantiated twice to split the bus
+  between those three, and `test/prog_mandel_stats.asm` the instrumented build of
   `test/prog_mandel_perf.asm` — see
   [Simulated peripherals: the EAE](test/CLAUDE.md#simulated-peripherals-the-eae),
-  [Simulating a slow memory](test/CLAUDE.md#simulating-a-slow-memory) and
+  [Simulated peripherals: the Interrupt Generator](test/CLAUDE.md#simulated-peripherals-the-interrupt-generator),
+  [Simulating a slow memory](test/CLAUDE.md#simulating-a-slow-memory), and
   [The data bus multiplexer](test/CLAUDE.md#the-data-bus-multiplexer).
+  `test/prog_int_hw.asm` and `test/prog_int_halt.asm` are the hardware-interrupt programs, and
+  `test/prog_int_rogue_rti.asm` and `test/prog_int_rogue_int.asm` test that a rogue `RTI` or `INT`
+  halts.
+  Those last three are the programs whose verdict is not only their status word, which each writes
+  before the halt: `prog_int_halt` fails when `test/test_monitor.vhd` sees an instruction retire
+  after the `HALT`, a check that applies to every program, and the two rogue programs fail on that
+  check or on the watchdog.
   One of the programs, `test/prog_waveform.asm`, is not really a test: it
   is the program the pipeline timing diagram in
   [src/cpu_main/README.md](src/cpu_main/README.md#waveforms) was read off, and it is in `TESTS`
   only so that a change invalidating the diagram's quoted addresses and cycle counts fails the
   writes-log diff. The diagram itself is hand-written in `src/cpu_main/timing.tex` and rendered
   by `make diagrams`; nothing derives it from the simulation automatically.
+  `test/prog_int_waveform.asm` plays the same role for the interrupt timing diagram in
+  `src/interrupt/timing.tex`.
   `test/prog_poll.asm` is the same idea for the ten-cycle polling loop drawn in
   [doc/loop_timing.tex](doc/loop_timing.tex), but it is deliberately **not** in `TESTS`: it is a
   device-polling loop with no device, so it never halts and `make check TEST=prog_poll` would run

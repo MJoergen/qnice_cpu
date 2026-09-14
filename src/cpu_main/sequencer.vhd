@@ -142,6 +142,8 @@ begin
       m_stage_o.dst_imm   <= s_stage_i.dst_imm;
       m_stage_o.res_reg   <= s_stage_i.res_reg;
       m_stage_o.is_crb    <= s_stage_i.is_crb;
+      m_stage_o.is_int    <= s_stage_i.is_int;
+      m_stage_o.is_rti    <= s_stage_i.is_rti;
       m_stage_o.is_sub    <= s_stage_i.is_sub;
       m_stage_o.ptr_sr    <= s_stage_i.ptr_sr;
       m_stage_o.early_jmp <= s_stage_i.early_jmp;

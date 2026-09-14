@@ -120,6 +120,18 @@ def parse_timing(path):
     return float(m.group(1)), int(m.group(3))
 
 
+def parse_clock_period(path):
+    """Return the clock period, in ns, the timing report was taken against.
+
+    Read off the report rather than off hw/system.xdc, so that the constraint
+    quoted in doc/README.md is the one the quoted slack was measured at.
+    """
+    m = re.search(r"period=(\d+\.\d+)ns", open(path).read())
+    if not m:
+        raise AnchorError("no clock period found in %s" % path)
+    return float(m.group(1))
+
+
 def parse_critical_path(path):
     """Return (source, destination, logic levels, % of delay spent routing).
 
@@ -208,6 +220,7 @@ def main():
     hier = parse_hierarchy(args.hier)
     totals = parse_device_totals(args.placed)
     wns, failing = parse_timing(args.timing)
+    period = parse_clock_period(args.timing)
     crit = parse_critical_path(args.timing)
     version = parse_tool_version(args.placed)
     commit = subprocess.check_output(
@@ -247,6 +260,10 @@ def main():
         "ffs":  h(cpu + "/(self)")["ffs"] + h(main_ + "/(self)")["ffs"],
     }
     cpu_total = h(cpu)
+    # The Interrupt Generator sits beside the CPU in SYSTEM, in the bitstream
+    # as well as in simulation, so it is part of the device totals but not of
+    # the CPU; its own size is quoted next to them.
+    interrupt = h("system/i_interrupt")
 
     rows = modules + [("Glue", glue), ("**CPU total**", cpu_total)]
     accounted = sum(r["luts"] for _, r in rows[:-1])
@@ -284,14 +301,22 @@ def main():
         "\n".join(table).replace("\\", "\\\\"),
         "device totals table")
 
+    doc = replace_once(
+        doc,
+        r"the Interrupt Generator is \d+ LUTs and \d+ flip-flops",
+        "the Interrupt Generator is %d LUTs and %d flip-flops"
+        % (interrupt["luts"], interrupt["ffs"]),
+        "Interrupt Generator sentence")
+
     # --- timing -----------------------------------------------------------
     endpoints = ("no failing endpoints" if failing == 0
                  else "%d failing endpoints" % failing)
     doc = replace_once(
         doc,
-        r"^(Timing at the [\d.]+ ns constraint: \*\*WNS )[+-][\d.]+( ns\*\*, )"
+        r"^Timing at the [\d.]+ ns constraint: \*\*WNS [+-][\d.]+ ns\*\*, "
         r"(?:no failing endpoints|\d+ failing endpoints)",
-        lambda m: "%s%+.3f%s%s" % (m.group(1), wns, m.group(2), endpoints),
+        lambda m: "Timing at the %.2f ns constraint: **WNS %+.3f ns**, %s"
+        % (period, wns, endpoints),
         "timing sentence")
 
     # --- per-module table -------------------------------------------------
@@ -351,10 +376,11 @@ def main():
         f.write(doc)
 
     print("%s updated from Vivado %s at commit %s" % (args.doc, version, commit))
-    print("  device: %d LUTs, %d FFs, %d BRAM; WNS %+.3f ns, %s"
+    print("  device: %d LUTs, %d FFs, %d BRAM; WNS %+.3f ns at %.2f ns, %s"
           % (totals["Slice LUTs"]["used"], totals["Slice Registers"]["used"],
-             totals["Block RAM Tile"]["used"], wns, endpoints))
+             totals["Block RAM Tile"]["used"], wns, period, endpoints))
     print("  cpu:    %d LUTs, %d FFs" % (cpu_total["luts"], cpu_total["ffs"]))
+    print("  int:    %d LUTs, %d FFs" % (interrupt["luts"], interrupt["ffs"]))
 
 
 if __name__ == "__main__":

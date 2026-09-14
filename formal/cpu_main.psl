@@ -329,11 +329,19 @@ vunit i_cpu_main(cpu_main(synthesis))
    signal f_mov_dst_data : std_logic_vector(15 downto 0);
    f_mov_dst_data <= c_src_val when c_src_mode = work.cpu_constants.C_MODE_REG else c_mem_src_val;
 
+   -- A rogue INT or RTI has halted the CPU. Declared here, ahead of its first
+   -- use below, because a vunit allows no forward references; it is driven by
+   -- p_irq_shadow in the SOFTWARE INTERRUPTS section, which says what it means.
+   signal f_halted : std_logic := '0';
+
    -- (1) SOURCE ADDRESS. The micro-op carrying MEM_READ_SRC must present a read
    -- request at the address the mode implies: the pointer register, or one below
    -- it for a pre-decrement. This is a property of the request as formed from
-   -- the beat, so it does not wait for the request to be accepted.
-   f_mem_src_addr : assert always {prep2wr_valid = '1' and rst_i = '0' and
+   -- the beat, so it does not wait for the request to be accepted. The one
+   -- exception is a CPU that a rogue INT or RTI has halted, which forms no
+   -- requests at all; f_halted, in the SOFTWARE INTERRUPTS section, excludes
+   -- it here and in f_mem_dst_addr and f_int_dst_addr below.
+   f_mem_src_addr : assert always {prep2wr_valid = '1' and rst_i = '0' and f_halted = '0' and
                                    f_operand_modes = '1' and f_gp_regs = '1' and
                                    c_src_mode /= work.cpu_constants.C_MODE_REG and
                                    prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_SRC) = '1'} |->
@@ -409,7 +417,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- address must be the one the destination mode implies -- and it must be the
    -- same address the result is later written to, which is what makes
    -- "read-modify-write" mean anything.
-   f_mem_dst_addr : assert always {prep2wr_valid = '1' and rst_i = '0' and
+   f_mem_dst_addr : assert always {prep2wr_valid = '1' and rst_i = '0' and f_halted = '0' and
                                    f_operand_modes = '1' and f_gp_regs = '1' and
                                    c_dst_mode /= work.cpu_constants.C_MODE_REG and
                                    prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_DST) = '1'} |->
@@ -785,7 +793,7 @@ vunit i_cpu_main(cpu_main(synthesis))
 
 
    ------------------------------------------------------
-   -- SOFTWARE INTERRUPTS: INT AND RTI
+   -- INTERRUPTS: INT, RTI, AND HARDWARE ENTRY
    ------------------------------------------------------
    --
    -- The state an interrupt saves -- irq_active, irq_r14, irq_r15 in write.vhd
@@ -801,7 +809,9 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- What is NOT claimed: that an INT is ever taken, or that an entered
    -- service routine ever returns. Both are liveness, and out of reach for BMC
    -- for the same reason set out above f_mov_r_r_read. The covers at the end
-   -- carry the reachability half.
+   -- carry the reachability half. A hardware request, by contrast, IS claimed
+   -- to be taken, at the very instruction boundary it is present at, because
+   -- that is a property of a single cycle: see (8) below.
 
    signal f_int_retires : std_logic;
    signal f_rti_retires : std_logic;
@@ -829,37 +839,138 @@ vunit i_cpu_main(cpu_main(synthesis))
                      prep2wr_stage.addr + 1;
 
    -- THE SHADOW. Interrupts do not nest, so an INT retiring while already
-   -- inside a service routine must leave the saved pair alone -- that is what
-   -- makes f_rti_return below a check on the outer return address surviving a
-   -- rogue INT, and not merely on the most recent one.
-   signal f_irq_active : std_logic;
-   signal f_saved_r14  : std_logic_vector(15 downto 0);
-   signal f_saved_r15  : std_logic_vector(15 downto 0);
-   signal f_saved_2w   : std_logic;
-   signal f_nested_int : std_logic;
+   -- inside a service routine must leave the saved pair alone. Such an INT is
+   -- rogue and halts the CPU, as does an RTI retiring outside one; f_halted
+   -- records that it has happened, and (7) below says what it means.
+   signal f_irq_active  : std_logic;
+   signal f_saved_r14   : std_logic_vector(15 downto 0);
+   signal f_saved_r15   : std_logic_vector(15 downto 0);
+   signal f_saved_2w    : std_logic;
+   signal f_saved_hw    : std_logic;
+   signal f_saved_jump  : std_logic;
+   signal f_saved_r14w  : std_logic;
+   signal f_saved_exact : std_logic;
+   signal f_rogue       : std_logic;
+
+   f_rogue <= (f_int_retires and f_irq_active) or (f_rti_retires and not f_irq_active);
+
+   -- HARDWARE ENTRY, in the shadow's terms. Stated from the retire pulse, the
+   -- request pin, and the instruction encoding -- never from irq_ready_o,
+   -- which is what (8) and (9) below check against this.
+   --
+   -- A request is taken at the boundary after an instruction retires, when
+   -- no service routine is running, unless that instruction is:
+   --
+   --   * a HALT, after which there is no boundary: the CPU has stopped;
+   --   * an INT, which enters a service routine of its own and takes
+   --     priority, so the request waits for the RTI;
+   --   * an RTI. With a routine running it has not left it yet as far as
+   --     this boundary is concerned -- f_irq_active is still '1' -- and
+   --     without one it is rogue and halts.
+   signal f_halt_retires : std_logic;
+   signal f_irq_take     : std_logic;
+
+   f_halt_retires <= '1' when prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                              prep2wr_stage.inst(11 downto 6) = work.cpu_constants.C_CTRL_HALT else '0';
+
+   f_irq_take <= '1' when rst_i = '0' and inst_done_o = '1' and irq_valid_i = '1' and
+                          f_irq_active = '0' and f_halt_retires = '0' and
+                          f_int_retires = '0' and f_rti_retires = '0' else '0';
+
+   -- WHERE THE ROUTINE MUST RETURN TO: the address execution would otherwise
+   -- have continued at. That is the branch target if the retiring instruction
+   -- writes R15 -- a taken branch, including one DECODE already redirected
+   -- early, and any other write to R15 -- and the next instruction otherwise,
+   -- one or two words on depending on whether an operand is the immediate
+   -- @R15++. The two-word test is taken from the encoding, as f_int_imm is,
+   -- not from DECODE's src_imm/dst_imm.
+   --
+   -- Which fields are operands depends on the opcode: CTRL has no source and
+   -- JMP no destination (its low six bits are the condition).
+   signal f_has_src    : std_logic;
+   signal f_has_dst    : std_logic;
+   signal f_src_imm    : std_logic;
+   signal f_dst_imm    : std_logic;
+   signal f_wr_r15     : std_logic;
+   signal f_wr_r14     : std_logic;
+   signal f_irq_resume : std_logic_vector(15 downto 0);
+   signal f_irq_exact  : std_logic;
+
+   f_has_src <= '1' when prep2wr_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_CTRL else '0';
+   f_has_dst <= '1' when prep2wr_stage.inst(15 downto 12) /= work.cpu_constants.C_OPCODE_JMP else '0';
+
+   f_src_imm <= '1' when f_has_src = '1' and prep2wr_stage.inst(11 downto 8) = 15 and
+                         prep2wr_stage.inst(7 downto 6) = work.cpu_constants.C_MODE_POST else '0';
+   f_dst_imm <= '1' when f_has_dst = '1' and prep2wr_stage.inst(5 downto 2) = 15 and
+                         prep2wr_stage.inst(1 downto 0) = work.cpu_constants.C_MODE_POST else '0';
+
+   f_wr_r15 <= '1' when reg_we_o = '1' and reg_addr_o = 15 else '0';
+   f_wr_r14 <= '1' when reg_we_o = '1' and reg_addr_o = 14 else '0';
+
+   f_irq_resume <= reg_val_o              when f_wr_r15 = '1' else
+                   prep2wr_stage.addr + 2 when f_src_imm = '1' or f_dst_imm = '1' else
+                   prep2wr_stage.addr + 1;
+
+   -- The encodings f_irq_resume speaks for. Excluded, for the reasons
+   -- f_gp_regs excludes R14 and R15 everywhere else: a pointer through R14 or
+   -- R15 (other than the immediate @R15++), whose write-back on an earlier
+   -- micro-op is "A pointer through R14 or R15" in doc/README.md and not an
+   -- interrupt question; two immediates in one instruction, which is three
+   -- words and which ICACHE does not deliver; and a CTRL instruction whose low
+   -- six bits are not the zeros the assembler emits. Outside these the shadow
+   -- still tracks entry and exit, and only the two return properties, which
+   -- are qualified by f_saved_exact, stand down.
+   f_irq_exact <= '1' when not (f_src_imm = '1' and f_dst_imm = '1') and
+                           not (f_has_src = '1' and f_src_imm = '0' and
+                                prep2wr_stage.inst(11 downto 9) = "111" and
+                                prep2wr_stage.inst(7 downto 6) /= work.cpu_constants.C_MODE_REG) and
+                           not (f_has_dst = '1' and f_dst_imm = '0' and
+                                prep2wr_stage.inst(5 downto 3) = "111" and
+                                prep2wr_stage.inst(1 downto 0) /= work.cpu_constants.C_MODE_REG) and
+                           not (prep2wr_stage.inst(15 downto 12) = work.cpu_constants.C_OPCODE_CTRL and
+                                prep2wr_stage.inst(5 downto 0) /= "000000") else '0';
 
    p_irq_shadow : process (clk_i)
    begin
       if rising_edge(clk_i) then
          if f_int_retires = '1' and f_irq_active = '0' then
-            f_irq_active <= '1';
-            f_saved_r14  <= prep2wr_stage.r14;
-            f_saved_r15  <= f_int_ret_addr;
-            f_saved_2w   <= f_int_imm;
+            f_irq_active  <= '1';
+            f_saved_r14   <= prep2wr_stage.r14;
+            f_saved_r15   <= f_int_ret_addr;
+            f_saved_2w    <= f_int_imm;
+            f_saved_hw    <= '0';
+            f_saved_jump  <= '0';
+            f_saved_r14w  <= '0';
+            f_saved_exact <= '1';
          end if;
 
-         if f_int_retires = '1' and f_irq_active = '1' then
-            f_nested_int <= '1';
+         -- Hardware entry saves the state the retiring instruction LEAVES:
+         -- f_r14_next is what lands in R14 this cycle, through whichever port
+         -- wins, and f_irq_resume is where execution goes next. An INT changes
+         -- neither register, which is why the arm above can take them from
+         -- before the instruction.
+         if f_irq_take = '1' then
+            f_irq_active  <= '1';
+            f_saved_r14   <= f_r14_next;
+            f_saved_r15   <= f_irq_resume;
+            f_saved_2w    <= (f_src_imm or f_dst_imm) and not f_wr_r15;
+            f_saved_hw    <= '1';
+            f_saved_jump  <= f_wr_r15;
+            f_saved_r14w  <= f_wr_r14;
+            f_saved_exact <= f_irq_exact;
          end if;
 
          if f_rti_retires = '1' and f_irq_active = '1' then
             f_irq_active <= '0';
-            f_nested_int <= '0';
+         end if;
+
+         if f_rogue = '1' then
+            f_halted <= '1';
          end if;
 
          if rst_i = '1' then
             f_irq_active <= '0';
-            f_nested_int <= '0';
+            f_halted     <= '0';
          end if;
       end if;
    end process p_irq_shadow;
@@ -907,7 +1018,7 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- CTRL wholesale because JMP and CTRL re-purpose the operand fields. INT is
    -- the one CTRL instruction that does not, so it needs these stated again.
    f_int_dst_addr : assert always
-      {f_int_beat = '1' and
+      {f_int_beat = '1' and f_halted = '0' and
        c_dst_mode /= work.cpu_constants.C_MODE_REG and
        prep2wr_stage.microcode(work.cpu_constants.C_MEM_READ_DST) = '1'}
       |-> {mem_req_valid_o = '1' and
@@ -937,11 +1048,13 @@ vunit i_cpu_main(cpu_main(synthesis))
       |-> {reg_we_o = '0'};
 
    -- (4) THE ROUND TRIP, and the reason this section exists. An RTI must send
-   -- FETCH back to the instruction after the INT that entered -- the address
-   -- the shadow computed from that INT's own encoding, cycles earlier and
-   -- independently of anything write.vhd latched.
+   -- FETCH back to where the routine was entered from -- the address the
+   -- shadow computed cycles earlier, independently of anything write.vhd
+   -- latched: the instruction after the INT, from that INT's own encoding, or
+   -- after hardware entry the address execution would otherwise have
+   -- continued at (f_irq_resume).
    f_rti_return : assert always
-      {f_rti_retires = '1' and f_irq_active = '1'}
+      {f_rti_retires = '1' and f_irq_active = '1' and f_saved_exact = '1'}
       |-> {fetch_valid_o = '1' and fetch_addr_o = f_saved_r15};
 
    -- ...and it must put back the Status Register that INT saved, through the
@@ -951,13 +1064,13 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- restore to the Status Register port instead would be silently overridden
    -- by the SR the service routine left behind, which is the whole point.
    f_rti_restore_r14 : assert always
-      {f_rti_retires = '1' and f_irq_active = '1'}
+      {f_rti_retires = '1' and f_irq_active = '1' and f_saved_exact = '1'}
       |-> {reg_we_o = '1' and reg_addr_o = 14 and reg_val_o = f_saved_r14};
 
    -- (5) INTERRUPTS DO NOT NEST. An INT retiring inside a service routine is
-   -- the other rogue case, and it must not transfer control -- doc/interrupts.md
-   -- specifies a halt, and "does not jump anywhere" is the part of that which
-   -- holds both today and afterwards, exactly as for the rogue RTI below.
+   -- the other rogue case, and it must not transfer control. It halts the CPU,
+   -- which (7) below states; this states that the halt does not jump anywhere
+   -- first, exactly as for the rogue RTI below.
    --
    -- This one has to be asserted rather than left to f_rti_return, and the
    -- distinction is worth recording because a mutation found it. p_irq latches
@@ -982,9 +1095,8 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- (6) A ROGUE RTI MUST NOT REDIRECT. irq_r15 has no reset, so an RTI
    -- outside a service routine that redirected would send FETCH to whatever
    -- the latch happens to hold -- an X in simulation, a stale return address
-   -- in hardware. doc/interrupts.md specifies a halt here; what is asserted is
-   -- the part that holds today and will still hold then, namely that it does
-   -- not jump anywhere.
+   -- in hardware. It halts the CPU, which (7) below states; this states that
+   -- the halt does not jump anywhere first.
    --
    -- Restricted to the encoding the assembler actually emits, 0xE040. A formal
    -- trace can present any bit pattern in the low six bits, and those make RTI
@@ -995,6 +1107,84 @@ vunit i_cpu_main(cpu_main(synthesis))
        prep2wr_stage.inst(5 downto 0) = "000000"}
       |-> {fetch_valid_o = '0'};
 
+   -- (7) A ROGUE INSTRUCTION HALTS THE CPU, in every encoding and addressing
+   -- mode. It pulses halt_o as it retires, just as a HALT does...
+   f_rogue_halt : assert always
+      {f_rogue = '1'}
+      |-> {halt_o = '1'};
+
+   -- ...and then nothing else happens, ever: no instruction retires, and so
+   -- no halt_o either, and nothing leaves the stage -- no memory request, no
+   -- register or Status Register write, no redirect, no interrupt accept.
+   -- Only a reset restarts, and the environment below never asserts one after
+   -- the first cycle.
+   --
+   -- This is the half a HALT gets from cpu.vhd's halt_fetched gate, which
+   -- stops the HALT from entering DECODE and is therefore outside this vunit
+   -- anyway. A rogue instruction cannot be stopped that way, since whether it
+   -- is rogue is only known as it retires, so write.vhd stops everything
+   -- behind it instead, and this is what checks it. Dropping irq_halted from
+   -- prep_ready_o fails it on the first instruction after the rogue one.
+   f_halted_quiet : assert always
+      {f_halted = '1'}
+      |-> {inst_done_o = '0' and halt_o = '0' and
+           mem_req_valid_o = '0' and
+           reg_we_o = '0' and reg_r14_we_o = '0' and
+           fetch_valid_o = '0' and irq_ready_o = '0'};
+
+   -- (8) A HARDWARE REQUEST IS TAKEN AT THE FIRST BOUNDARY IT IS PRESENT AT:
+   -- accepted, and control transferred to the address that came with it, in
+   -- the same cycle. The redirect is also the pipeline flush -- the
+   -- instructions already fetched behind the retiring one must not run -- and
+   -- the address is the one on irq_addr_i in this cycle, since a device may
+   -- withdraw a request, or change it, until it is accepted
+   -- (doc/interrupts.md, "Withdrawal").
+   --
+   -- Stating the "first boundary" half is a choice, not a necessity: a design
+   -- that took the request one instruction later would be correct too, just
+   -- slower. It is stated because it is what doc/interrupts.md specifies and
+   -- write.vhd implements, and because without it nothing here would notice
+   -- a CPU that never took an interrupt at all.
+   f_irq_entry : assert always
+      {f_irq_take = '1'}
+      |-> {irq_ready_o = '1' and fetch_valid_o = '1' and fetch_addr_o = irq_addr_i};
+
+   -- (9) ...AND AT NO OTHER TIME. The converse of (8), split up so that a
+   -- counterexample names the clause it breaks. Together with (8) this makes
+   -- irq_ready_o exactly f_irq_take, which is also what licenses the shadow to
+   -- update from f_irq_take rather than from the output under test.
+   --
+   -- Only for a request that is actually there: this is also the CPU's side
+   -- of the handshake, which src/interrupt/README.md states as "only while
+   -- irq_valid_i is high", and which holds here by construction rather than
+   -- because a device is forbidden to withdraw.
+   f_irq_ready_requested : assert always
+      {irq_ready_o = '1'}
+      |-> {irq_valid_i = '1'};
+
+   -- Only at an instruction boundary. The saved return address is that of a
+   -- RETIRING instruction; mid-instruction there is no such address, since a
+   -- partly executed instruction may already have applied post-increments and
+   -- nothing can resume it.
+   f_irq_ready_boundary : assert always
+      {irq_ready_o = '1'}
+      |-> {inst_done_o = '1' and rst_i = '0'};
+
+   -- Never while a service routine is running: interrupts do not nest. This
+   -- includes the cycle an RTI retires in -- the routine is left at the
+   -- boundary AFTER it, so a request present then is taken at the next one.
+   f_irq_ready_not_nested : assert always
+      {irq_ready_o = '1'}
+      |-> {f_irq_active = '0'};
+
+   -- Never at a HALT, and never at an INT or RTI. After a HALT there is no
+   -- next boundary, and taking the request would restart a stopped CPU
+   -- (test/prog_int_halt.asm is the simulation of this); an INT takes
+   -- priority; an RTI is covered by the property above or is rogue.
+   f_irq_ready_not_ctrl : assert always
+      {irq_ready_o = '1'}
+      |-> {f_halt_retires = '0' and f_int_retires = '0' and f_rti_retires = '0'};
+
    -----------------------------
    -- ASSUMPTIONS ABOUT INPUTS
    -----------------------------
@@ -1003,6 +1193,18 @@ vunit i_cpu_main(cpu_main(synthesis))
    assume rst_i;
    assume not ic_valid_i;
    assume always {true} |=> not rst_i;
+
+   -- The hardware interrupt request port is left entirely free: irq_valid_i
+   -- may rise, fall, or withdraw on any cycle, and irq_addr_i may change
+   -- whenever it likes. That is deliberate. A device may withdraw a request
+   -- before it is accepted (doc/interrupts.md, "Withdrawal"), and the address
+   -- is used in the cycle it is accepted in, so the CPU needs no obligation
+   -- from the device at all, and assuming one here would hide a CPU that
+   -- relied on it.
+   --
+   -- This used to read "assume always not irq_valid_i", from when the shadow
+   -- above modelled INT and RTI only: a hardware entry it could not see made
+   -- every RTI after it look rogue.
 
    assume always {ic_valid_i and not ic_ready_o} |=> {stable(ic_valid_i) and stable(ic_addr_i) and stable(ic_data_i(15 downto 0))};
 
@@ -1328,8 +1530,10 @@ vunit i_cpu_main(cpu_main(synthesis))
    -- ever reachable at an RTI, a design that always returned to the same offset
    -- would satisfy f_rti_return. c_int_imm covers the two-word form ENTERING,
    -- which is not the same claim.
-   c_rti_return_1word : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_2w = '0'};
-   c_rti_return_2word : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_2w = '1'};
+   c_rti_return_1word : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_hw = '0' and
+                               f_saved_2w = '0'};
+   c_rti_return_2word : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_hw = '0' and
+                               f_saved_2w = '1'};
 
    -- The RTI whose restored Status Register moves the register bank, i.e. the
    -- scenario test/prog_int_sw.asm TEST_7 pins in simulation. This is the
@@ -1340,18 +1544,60 @@ vunit i_cpu_main(cpu_main(synthesis))
    c_rti_bank_change : cover {f_rti_retires = '1' and f_irq_active = '1' and
                               f_saved_r14(15 downto 8) /= prep2wr_stage.r14(15 downto 8)};
 
-   -- Interrupts do not nest, and the second of these is the one that matters:
-   -- an RTI returning correctly AFTER a rogue INT was refused. The shadow
-   -- leaves f_saved_r15 alone on a nested INT, so if the design latched a new
-   -- return address there, f_rti_return fails on this trace and nowhere else.
-   c_int_nested       : cover {f_int_retires = '1' and f_irq_active = '1'};
-   c_int_nested_reg   : cover {f_int_modes = '1' and f_irq_active = '1' and
-                               c_dst_mode = work.cpu_constants.C_MODE_REG};
-   c_int_nested_imm   : cover {f_int_retires = '1' and f_irq_active = '1' and f_int_imm = '1'};
-   c_rti_after_nested : cover {f_rti_retires = '1' and f_irq_active = '1' and f_nested_int = '1'};
+   -- Interrupts do not nest. There used to be a fourth cover here, an RTI
+   -- returning correctly AFTER a rogue INT had been refused as a no-op. A rogue
+   -- INT now halts the CPU, so no RTI can follow one, and f_halted_quiet is
+   -- what says so.
+   c_int_nested     : cover {f_int_retires = '1' and f_irq_active = '1'};
+   c_int_nested_reg : cover {f_int_modes = '1' and f_irq_active = '1' and
+                             c_dst_mode = work.cpu_constants.C_MODE_REG};
+   c_int_nested_imm : cover {f_int_retires = '1' and f_irq_active = '1' and f_int_imm = '1'};
 
    c_rti_rogue : cover {f_rti_retires = '1' and f_irq_active = '0' and
                         prep2wr_stage.inst(5 downto 0) = "000000"};
+
+   -- Non-vacuity of the hardware-interrupt properties. The return covers are
+   -- the ones that matter, one for each way f_irq_resume and f_saved_r14 can
+   -- be formed: after an instruction of one word and of two, after one that
+   -- writes R15, and after one that writes R14 through the ordinary port.
+   -- Each is a whole round trip -- request, entry, a service routine, RTI --
+   -- in one trace, for the same reason as c_rti_return above.
+   c_irq_entry : cover {f_irq_take = '1'};
+
+   c_irq_return_1word : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_hw = '1' and
+                               f_saved_exact = '1' and f_saved_2w = '0' and f_saved_jump = '0'};
+   c_irq_return_2word : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_hw = '1' and
+                               f_saved_exact = '1' and f_saved_2w = '1'};
+   c_irq_return_jump  : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_hw = '1' and
+                               f_saved_exact = '1' and f_saved_jump = '1'};
+   c_irq_return_r14w  : cover {f_rti_retires = '1' and f_irq_active = '1' and f_saved_hw = '1' and
+                               f_saved_exact = '1' and f_saved_r14w = '1'};
+
+   -- The refusals (9) has to be able to see: a request present at a boundary
+   -- inside a service routine, at the RTI that leaves it, and at a HALT.
+   c_irq_refused_nested : cover {rst_i = '0' and inst_done_o = '1' and irq_valid_i = '1' and
+                                 f_irq_active = '1' and f_rti_retires = '0'};
+   c_irq_refused_at_rti : cover {inst_done_o = '1' and irq_valid_i = '1' and
+                                 f_rti_retires = '1' and f_irq_active = '1'};
+   c_irq_refused_halt   : cover {rst_i = '0' and inst_done_o = '1' and irq_valid_i = '1' and
+                                 f_irq_active = '0' and f_halt_retires = '1'};
+
+   -- A withdrawn request: present outside a service routine and not yet
+   -- accepted, then dropped in time for the boundary that would have taken
+   -- it. f_irq_ready_requested is what says the CPU must not take it there;
+   -- this says the solver has actually been handed that case. Without it,
+   -- nothing shows a withdrawal was ever tried: no test program withdraws,
+   -- since test/interrupt.vhd holds its request until it is accepted. A CPU
+   -- that remembers a request once seen fails f_irq_ready_requested at step 3.
+   c_irq_withdrawn : cover {rst_i = '0' and irq_valid_i = '1' and irq_ready_o = '0' and
+                            f_irq_active = '0' and f_halted = '0';
+                            rst_i = '0' and irq_valid_i = '0' and inst_done_o = '1' and
+                            f_irq_active = '0' and f_halt_retires = '0' and
+                            f_int_retires = '0' and f_rti_retires = '0'};
+
+   -- Non-vacuity of f_halted_quiet: the CPU halted by a rogue instruction,
+   -- with an instruction waiting behind it that it refuses to retire.
+   c_halted_waiting : cover {f_halted = '1' and prep2wr_valid = '1'};
 
 
    ----------------------------------------------

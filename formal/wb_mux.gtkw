@@ -101,7 +101,7 @@ wb_mux.head_fill[1:0]
 [color] 7
 wb_mux.head_ready
 @28
-wb_mux.sel
+wb_mux.s_sel_i
 @28
 wb_mux.req_accept
 @28

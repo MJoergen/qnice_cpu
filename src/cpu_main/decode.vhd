@@ -92,6 +92,7 @@ architecture synthesis of decode is
    signal uses_bank   : std_logic; -- The instruction at this stage's input
    signal uses_bank_d : std_logic; -- The instruction in the output register
    signal is_crb      : std_logic; -- Is the instruction at the input INCRB/DECRB?
+   signal is_rti      : std_logic; -- Is the instruction at the input RTI?
    signal is_int      : std_logic; -- Is the instruction at the input INT?
    signal is_sub      : std_logic; -- Is the instruction at the input ASUB/RSUB?
    signal ptr_sr      : std_logic; -- Does it auto-modify a pointer through R14/R15?
@@ -209,6 +210,15 @@ begin
    is_crb <= '1' when ic_data_i(R_OPCODE) = C_OPCODE_CTRL and
                       (ic_data_i(R_CTRL_CMD) = C_CTRL_INCRB or
                        ic_data_i(R_CTRL_CMD) = C_CTRL_DECRB) else
+             '0';
+
+   -- INT (is_int, decoded above for uses_bank) and RTI are carried down the
+   -- stage records for the same reason: WRITE's interrupt entry and exit
+   -- (irq_sw_valid_s) is a term of fetch_valid_o. Re-deriving the two ten-bit
+   -- compares from prep_stage_i.inst in WRITE put them in front of that net, on
+   -- the path that failed timing once hardware interrupts went in.
+   is_rti <= '1' when ic_data_i(R_OPCODE) = C_OPCODE_CTRL and
+                      ic_data_i(R_CTRL_CMD) = C_CTRL_RTI else
              '0';
 
    -- The instruction in this stage's output register read its operands one
@@ -388,6 +398,8 @@ begin
             seq_stage_o.dst_imm    <= immediate_dst;
             seq_stage_o.res_reg    <= reg_dst_addr_o;
             seq_stage_o.is_crb     <= is_crb;
+            seq_stage_o.is_int     <= is_int;
+            seq_stage_o.is_rti     <= is_rti;
             seq_stage_o.is_sub     <= is_sub;
             seq_stage_o.ptr_sr     <= ptr_sr;
             seq_stage_o.early_jmp  <= early_jmp;

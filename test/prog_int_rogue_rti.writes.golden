@@ -1,0 +1,6 @@
+Write value 0x7FFF to register 0 bank 0x00
+Write value 0x0000 to register 2 bank 0x00
+Write value 0x0012 to register 1 bank 0x00
+Write value 0x0001 to register 2 bank 0x00
+Write value 0x0001 to register E
+Write value 0x0000 to memory 0x7FFF

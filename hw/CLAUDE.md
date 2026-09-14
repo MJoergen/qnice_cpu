@@ -74,7 +74,7 @@ consequence — logic nowhere near it can still move the slack by perturbing pla
 flip-flop added next to ICACHE for the HALT gate once cost 0.284 ns, the whole margin, without
 appearing on the path; re-measure after an unrelated edit rather than assuming it cannot matter.
 
-**The clock constraint is 7.45 ns** (`hw/system.xdc`), and has been relaxed twice. It was 7.25 ns
+**The clock constraint is 7.80 ns** (`hw/system.xdc`), and has been relaxed four times. It was 7.25 ns
 until that placement sensitivity made `make system.bit` a coin flip: two refactors that added no logic — the design came
 out 14 LUTs *smaller* — moved WNS from +0.025 to −0.018 ns and stopped the build emitting a
 bitstream, while five `place_design` directives on one unchanged netlist spanned +0.028 to
@@ -94,8 +94,29 @@ and the design missed at 7.35 ns by −0.100 ns with 21 failing endpoints. Neith
 can be optimised away: the failing path runs `r14` → `update_reg` → `reg_we_o` → `fetch_valid_o` →
 ICACHE's clock enable and is 80% routing, and `update_reg` cannot leave that net. Two attempts to
 buy it back — lifting `rst_i` out of a series OR into its own term, and deleting a provably dead arm
-of `smc_hit` — moved WNS by 0.004 ns between them. Current build: **WNS +0.017 ns**, no failing
-endpoints.
+of `smc_hit` — moved WNS by 0.004 ns between them. That build closed at +0.017 ns.
+
+The **third**, 7.45 → 7.70 ns, paid for hardware interrupts, and it is the clearest demonstration
+yet that this path moves with placement rather than logic. Nothing drove `irq_valid_i` in that
+bitstream, so the whole hardware path was optimised away — the synthesised netlists before and after
+it have the same 638 flip-flops in `i_cpu` and no `irq_valid`/`irq_addr` nets at all — and WNS still
+went from +0.003 to −0.163 ns. Decoding `INT`/`RTI` in DECODE and confining the post-instruction
+`R14`/`R15` saves to hardware entry got back to −0.125 ns (24 failing endpoints); rebuilding the
+self-modifying-code windows from block compares removed two logic levels and made it *worse*,
+−0.213 ns, which is what it looks like when routing is three quarters of the delay. The
+constraint itself was not monotonic either: 7.60 ns closed, 7.65 ns failed (−0.129 ns, 46 failing
+endpoints), 7.70 ns closed, at **WNS +0.000 ns**. Both closing builds reported exactly zero
+because these directives stop once timing is met, so the reported slack says nothing about the
+real margin in either direction.
+
+The **fourth**, 7.70 → 7.80 ns, paid for synthesising the Interrupt Generator: `test/system.vhd`
+instantiates `test/interrupt.vhd` in the bitstream as a listen-only tap on the data bus, so that
+`irq_valid_i` is driven and the hardware path is live. At 7.70 ns that build failed at −0.054 ns
+(13 failing endpoints), on `dst_val_pc` into ICACHE's clock enable and on the ALU operand loop —
+not on the request path, whose worst path had +1.343 ns. The logic that had been folding away is
+merged into those cones (WRITE 517 → 532 LUTs), which is enough to move this placement. At 7.80 ns
+it closes at **WNS +0.001 ns**, the request path at +1.627 ns. The generator itself is 42 LUTs and
+49 flip-flops, which `make utilization` reports on its own.
 
 The script rewrites **numbers only** — the surrounding analysis is a hand-written design argument.
 Every substitution is anchored on an exact pattern and a missing anchor is a hard error, so

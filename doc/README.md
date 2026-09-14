@@ -10,6 +10,7 @@ Table of contents:
 * [Interleaving](#interleaving)
 * [A polling loop, cycle by cycle](#a-polling-loop-cycle-by-cycle)
 * [Self-modifying code](#self-modifying-code)
+* [Interrupts](#interrupts)
 * [Where the pipeline registers are](#where-the-pipeline-registers-are)
 * [Optimizations](#optimizations)
 * [TODO](#todo)
@@ -122,11 +123,12 @@ half-issued micro-operation list. WRITE itself is deliberately *not* reset: it
 is the stage producing the flush, and it has to be allowed to retire the
 instruction that caused it.
 
-Four conditions raise `fetch_valid_o`, and
-[write.vhd](../src/cpu_main/write.vhd) builds all four out of registered stage
-state rather than out of the ALU result. That is not an accident of style. This
+Six conditions raise `fetch_valid_o`, and
+[write.vhd](../src/cpu_main/write.vhd) builds them out of registered stage
+state rather than out of the ALU result, with one exception: the hardware
+interrupt request pin. That is not an accident of style. This
 net is the reset pin of every flip-flop in four stages, so it has enormous
-fanout and must settle early. Two of the four tests below are, for that reason,
+fanout and must settle early. Two of the tests below are, for that reason,
 deliberately cheap over-approximations of the condition they stand for — they
 flush in cases that did not strictly need it — and the measured price of the
 precise version is recorded next to each in the RTL.
@@ -184,10 +186,16 @@ precise version is recorded next to each in the RTL.
   is measured from the target and only applies when DECODE resolved the branch
   itself; see
   [The store the window could not see](#the-store-the-window-could-not-see).
+* **Interrupt entry and exit.** An `INT`, a hardware interrupt request taken as
+  an instruction retires, and an `RTI` each transfer control, to the service
+  routine's address or back to the saved return address. The `INT` and `RTI`
+  half comes from bits DECODE decoded and carried down the stage records; the
+  hardware half reads the `irq_valid_i` pin in the retiring cycle, which is the
+  one input to this net that is not a register. See [Interrupts](#interrupts).
 
 ### A pointer through R14 or R15
 
-Three of the four conditions above are tested at the moment an instruction
+All but one of the conditions above are tested at the moment an instruction
 retires. The write to `R14`/`R15` is not: `p_reg` drives `reg_addr_o` for the
 pre- and post-increment write-backs too, and those land on whichever
 micro-operation carries the corresponding `REG_MOD` flag. For a *source*
@@ -213,8 +221,8 @@ Counter to the address of the instruction itself, so the reference loops on it
 forever; here the deferred flush resumes at the following instruction instead.
 Both are degenerate; this one at least terminates.
 
-Reset is the fifth case, and it goes through the first of those four rather
-than around it: while `rst_i` is asserted, `p_reg` in `write.vhd` forces a write
+Reset is one more case, and it goes through the first of those conditions
+rather than around it: while `rst_i` is asserted, `p_reg` in `write.vhd` forces a write
 of `R15 = 0`, which raises `fetch_valid_o` by the ordinary path and so starts
 execution from address 0 with a clean pipeline.
 
@@ -222,7 +230,9 @@ A flush also clears the HALT gate in [cpu.vhd](../src/cpu.vhd). A `HALT` handed
 to DECODE stops the CPU, but a `HALT` that DECODE has accepted is not
 necessarily one that will execute — an older branch retiring behind it discards
 it. [`test/prog_pipeline.asm`](../test/prog_pipeline.asm) branches over twelve
-`HALT`s used as padding and depends on this.
+`HALT`s used as padding and depends on this. Interrupt entry is a flush too, so
+the same clear would restart a CPU that has stopped — which is why no request is
+taken as a `HALT` retires; see [Interrupts](#interrupts).
 
 ### What a flush costs
 A flush costs **four cycles**: one to register the new PC in FETCH, one for the
@@ -292,6 +302,8 @@ For more detailed information about the design look here:
 * [REGISTERS](../src/registers/README.md)
 * [MEMORY](../src/memory/README.md)
 * [DECODE/SEQUENCER/PREPARE/WRITE](../src/cpu_main/README.md)
+* [The interrupt request port](../src/interrupt/README.md), which has no module
+  of its own: it is implemented in WRITE
 
 The six stages and the two shared blocks are all built from a small set of
 reusable valid/ready primitives in `src/sub/` (`one_stage_buffer`,
@@ -628,6 +640,118 @@ return address at the immediate operand of the instruction it is calling; each
 of those fails without the flush. `T3` stores *outside* the window and `T6`
 stores to data that merely sits near the PC — both pass either way, and are
 there to pin the two edges.
+
+
+## Interrupts
+
+The QNICE ISA has software interrupts, `INT` and `RTI`, and hardware interrupts
+requested by a device. This CPU implements all of them. It does not implement
+`EXC`, which `p_unimplemented` still traps in simulation (see [TODO](#todo)).
+Why each part is the way it is — the upstream sources, where they contradict
+each other, and each decision taken between them — is recorded in
+[interrupts.md](interrupts.md).
+
+### What a program sees
+
+* **`INT <dst>`** enters a service routine at the address given by its
+  destination operand, in any addressing mode; `INT <constant>` is two words.
+  It saves `R14` and the address of the next instruction.
+* **A hardware request** is taken at the boundary after an instruction retires.
+  It saves `R14` as that instruction left it and the address execution would
+  otherwise have continued at — the target, if the instruction was a taken
+  branch.
+* **`RTI`** restores `R14` and `R15` and resumes there.
+* **Interrupts do not nest.** A hardware request waits while a service routine
+  runs; one still waiting at the `RTI` is taken after exactly one instruction at
+  the return address, so a device that never lets go cannot livelock the CPU.
+* **A rogue `RTI`** — outside a service routine — and **a rogue `INT`** — inside
+  one — halt the CPU, as they do upstream.
+* **Only `R14` and `R15` are saved.** A service routine must leave every other
+  register as it found it, which is upstream's own rule for ISR authors (see
+  [Where this diverges from upstream](#where-this-diverges-from-upstream)).
+
+### How it is built
+
+The interrupt state lives in WRITE — `irq_active`, and the saved pair `irq_r14`
+and `irq_r15` in [write.vhd](../src/cpu_main/write.vhd) — because WRITE is the
+one stage a [pipeline flush](#pipeline-flush) does not reset, and interrupt entry
+is itself a flush. Entry and exit are control transfers like any other:
+`fetch_valid_o` goes out with the service routine's address or with `irq_r15`,
+and an `RTI` restores `R14` through the ordinary register port, which is also
+the write that makes a restored register bank take effect. DECODE decodes
+`INT` and `RTI` and carries the result down the stage records (`is_int`,
+`is_rti`), rather than WRITE re-deriving them, for the same timing reason as
+`is_crb`; an `INT` reads its destination operand like any other instruction.
+
+A hardware request needs no module of its own. WRITE reads `irq_valid_i` and
+`irq_addr_i` in the cycle an instruction retires, and in that one cycle accepts
+the request (`irq_ready_o`), flushes, redirects, and saves the return state.
+Entry therefore costs a taken branch's penalty and nothing more. Three things
+refuse a request that is present: a running service routine, a retiring `INT`,
+which takes priority, and a retiring `HALT` — a flush at a `HALT` would clear the
+`HALT` gate and restart a stopped CPU.
+
+A rogue instruction cannot be stopped where a `HALT` is. `cpu.vhd` stops a `HALT`
+before it enters DECODE, from the opcode alone, but whether an `RTI` or `INT` is
+rogue depends on `irq_active` as it retires, which an `INT`, `RTI`, or hardware
+entry still in the pipeline can change. So WRITE stops it: `halt_o` pulses as it
+retires, and a registered `irq_halted` then refuses every further micro-op, so
+nothing behind it retires, writes, or redirects.
+
+### The request port
+
+`irq_valid_i`, `irq_ready_o`, and `irq_addr_i`, active high and synchronous to
+the clock: a valid/ready handshake carrying the service routine's address, with
+one relaxation of AXI-stream — a device may withdraw a request before it is
+accepted, which is what upstream's external interrupt mask does. The CPU sees
+exactly one interrupt-generating device. The handshake, its timing diagram, and
+the contract on each side are in
+[src/interrupt/README.md](../src/interrupt/README.md).
+
+### Where this diverges from upstream
+
+* **Saved state.** Upstream's register file and emulator save and restore
+  `R8`-`R15`, in eight shadow registers that `EXC` can exchange; this CPU saves
+  `R14` and `R15` only, as the ISA document's own programmer's model says, and so
+  has no `EXC`. A service routine that follows upstream's `doc/best-practices.md`
+  — leave every register as you found it — cannot tell the difference. One that
+  relies on upstream's shadow copies to clobber `R8`-`R13` freely breaks. Saving
+  more here would make `RTI` a multi-cycle instruction, and upstream's continuous
+  shadow copy cannot be built on this design's register file at all; see
+  [the decision](interrupts.md#the-decision-to-make-first-what-state-is-saved).
+* **No `INT_N`/`IGRANT_N` pins.** This CPU does not speak upstream's interrupt
+  daisy chain. A QNICE-FPGA system needs an adaptation layer in front of it for
+  interrupts, exactly as it already does for the two memory buses (upstream's
+  `env1.vhd` is that layer for memory). What the layer has to do is in
+  [src/interrupt/README.md](../src/interrupt/README.md#what-the-adaptation-layer-has-to-do).
+* **A request pending at a `HALT`.** Upstream's CPU takes the interrupt and never
+  executes the `HALT`; this CPU executes the `HALT`.
+* **Masking lands later.** Upstream masks interrupts with an external register
+  (`vhdl/interrupt_controller.vhd`), and its unpipelined CPU cannot be
+  interrupted after the instruction that writes it. Here that instruction
+  retires before its write has reached the bus, so a request can still be taken
+  at the boundary after it, and at more boundaries when the bus is slow. Reading
+  the mask register back closes the window from the read-back on; see
+  [interrupts.md](interrupts.md#masking-and-why-it-lands-later-than-upstream).
+
+### Timing, and how it is verified
+
+`irq_valid_i` reaches `fetch_valid_o` combinationally. The synthesised system
+drives it from the Interrupt Generator, so that path is placed and timed like any
+other: in the build measured under [Utilization](#utilization), the worst path
+from the request register has **+1.627 ns** of slack, a long way from critical.
+What the live interrupt logic did cost was placement: at 7.70 ns the design
+failed on its usual routing-dominated paths, and the clock constraint was relaxed
+to 7.80 ns to pay for it.
+
+Six test programs cover interrupts, all in `TESTS`: `prog_int_sw.asm` for `INT`
+and `RTI`; `prog_int_hw.asm`, `prog_int_halt.asm`, and `prog_int_waveform.asm`
+for hardware requests, through the Interrupt Generator `test/interrupt.vhd`; and `prog_int_rogue_rti.asm` and `prog_int_rogue_int.asm`
+for the rogue cases. All but `prog_int_halt.asm` compare word for word against
+upstream's RTL CPU (see [test/README.md](../test/README.md)). The formal
+properties in [formal/cpu_main.psl](../formal/cpu_main.psl) check entry, the
+round trip, the refusals, and the rogue halt against a shadow model, with the
+request port left entirely unconstrained.
 
 
 ## Where the pipeline registers are
@@ -996,25 +1120,16 @@ Remaining ideas:
   and `memory`'s inductive proof has one property still open. `wb_mux.psl`
   records that every assertion but `f_response_order` closes inductively, but
   since that job has no `prove` task either, nothing re-checks it.
-* Add interrupts. `RTI`, `INT`, and `EXC` are not decoded anywhere today, and
-  without help they retire as silent no-ops; `p_unimplemented` in
-  [write.vhd](../src/cpu_main/write.vhd) fails the simulation on them instead,
-  so a half-finished implementation cannot look like a working one. Two
-  constraints to know before starting: `RTI` restores `R14` and so can change
-  the register bank, which must reach the flush described under
-  [Register bank switch](../src/cpu_main/README.md#register-bank-switch); and an
-  interrupt would be a fourth driver of `fetch_valid_o`, a net whose timing
-  history is documented under "Register bank switch" in the same file.
-  [interrupts.md](interrupts.md) works this up in full: what the ISA requires,
-  the one behavioural question to settle first, the test cases, and the order
-  the work should happen in. `EXC` is out of scope, but not because it is
-  unspecified: it exchanges a register with one of the eight shadow registers an
-  interrupt fills, so it only means anything once those exist.
-
+* Interrupts: `EXC` is not implemented, and
+  `p_unimplemented` in [write.vhd](../src/cpu_main/write.vhd) still traps it in
+  simulation; it exchanges a register with one of eight shadow registers this
+  design deliberately does not have, so it comes into scope only if the saved
+  state is ever widened to `R8`-`R15` (see
+  [interrupts.md](interrupts.md#exc-is-out-of-scope-and-that-is-not-a-shortcut)).
 
 ## Utilization
 
-Measured with Vivado 2022.2 on commit `5d66768`.
+Measured with Vivado 2022.2 on commit `cf8aed3`.
 
 Refresh with `make utilization` (needs Vivado). That re-runs both passes below
 and rewrites every number on this page — the provenance line above, both tables,
@@ -1026,23 +1141,44 @@ unnoticed.
 ### Device totals
 
 From the shipping build (`make system.bit`), **after place-and-route**. These
-cover the whole `system`, i.e. the CPU plus the testbench memory model — but the
-memory model is essentially all Block RAM, so the LUTs are the CPU's:
+cover the whole `system`: the CPU, the testbench memory model, and the Interrupt
+Generator. The memory model is essentially all Block RAM, and in the per-module
+pass below the Interrupt Generator is 42 LUTs and 49 flip-flops, so the LUTs are
+nearly all the CPU's. The generator is synthesised so that the CPU's
+`irq_valid_i` is driven by real logic, and the hardware interrupt path is placed
+and timed rather than optimised away; see `i_interrupt` in `test/system.vhd`:
 
 | Resource        | Used | Available | %    |
 | --------------- | ---- | --------- | ---- |
-| Slice LUTs      |  983 |     63400 | 1.55 |
-| Slice Registers |  625 |    126800 | 0.49 |
-| Slices          |  381 |     15850 | 2.40 |
+| Slice LUTs      | 1180 |     63400 | 1.86 |
+| Slice Registers |  711 |    126800 | 0.56 |
+| Slices          |  421 |     15850 | 2.66 |
 | Block RAM Tile  |    6 |       135 | 4.44 |
 
-Timing at the 7.45 ns constraint: **WNS +0.017 ns**, no failing endpoints. The
+Timing at the 7.80 ns constraint: **WNS +0.001 ns**, no failing endpoints. The
 build aborts on negative slack, so a bitstream implies timing was met — see the
 comment above the tcl-generating rule in the top-level `Makefile`.
 
-**That constraint has been relaxed twice, from 7.25 to 7.35 to 7.45 ns**, so
-timing figures quoted elsewhere on this page were taken at whichever constraint
-was current and have been left as measured. The second step is recorded under
+**That constraint has been relaxed four times, from 7.25 to 7.35 to 7.45 to
+7.70 to 7.80 ns**, so timing figures quoted elsewhere on this page were taken at
+whichever constraint was current and have been left as measured. The fourth step
+paid for synthesising the Interrupt Generator, so that `irq_valid_i` is driven in
+the bitstream and the hardware interrupt path is real logic rather than optimised
+away. At 7.70 ns that build failed at −0.054 ns with 13 failing endpoints — but on
+the familiar flush and operand-loop paths, not on the request path, which had
++1.343 ns: the interrupt logic that had been folding away was merged into those
+cones and moved the placement. At 7.80 ns it closes, with the request path at
++1.627 ns. The third step paid for hardware interrupts in the first place, and is
+the strangest of the four: in that bitstream the hardware path was optimised away
+entirely, since nothing drove `irq_valid_i`, yet adding it moved WNS from +0.003 ns to −0.163 ns on a netlist that is logically
+unchanged. Decoding `INT`/`RTI` in DECODE recovered part of it, to −0.125 ns; a
+self-modifying-code window rebuilt from block compares, two logic levels
+shallower, came out worse at −0.213 ns. Nor did the constraint behave
+monotonically: 7.60 ns closed, 7.65 ns failed at −0.129 ns, and 7.70 ns closed.
+Both closing builds report WNS exactly +0.000 ns, which with these directives
+means only that Vivado stopped once timing was met — so treat the next unrelated
+edit as able to break the build. The history and the numbers are in
+`hw/system.xdc`. The second step is recorded under
 [A pointer through R14 or R15](#a-pointer-through-r14-or-r15): deferring that
 flush costs about 0.11 ns on the net that can least afford it, and the design
 missed at 7.35 ns by -0.100 ns with 21 failing endpoints. The reason for the move is the one
@@ -1070,26 +1206,32 @@ costs 1.4% of clock rate and buys a margin the design can be edited in.
 ### The critical path
 
 <!-- generated: critical path -->
-The worst setup path runs from `i_prepare/wr_stage_o_reg[dst_val_pc][4]` to
-`i_icache/m_data_reg[13]`: 10 logic levels, with 67% of the delay in routing
-rather than logic.
+The worst setup path runs from `i_prepare/wr_stage_o_reg[alu_dst_val][8]` to
+`i_prepare/wr_stage_o_reg[alu_dst_val][14]`: 9 logic levels, with 80% of the
+delay in routing rather than logic.
 <!-- end -->
 
-It is bar 6 of
+It is bar 1 of
 [Where the pipeline registers are](#where-the-pipeline-registers-are), which
 measures the other six alongside it and shows how little separates them.
 
-**In the build measured above, the worst path is the one this section
-describes** — the Status Register loop. Both endpoints are `wr_stage_o` fields,
-and the full listing shows it leaving PREPARE, passing through the register
+**In the build measured above, the worst path is a sibling of the one this
+section describes.** It leaves PREPARE's other ALU operand register,
+`alu_dst_val`, runs through the ALU, and comes back into PREPARE through the
+register file's forwarding of an ORDINARY register write (`dst_val_d`) rather
+than of a Status Register write. The 7.70 ns build before it took yet another
+exit from the same ALU: through `reg_val_o` and `fetch_addr_o` into FETCH's
+`wb_addr_o`, a branch target on its way to the instruction bus. The build at
+7.60 ns had the Status Register loop itself on top: both endpoints
+`wr_stage_o` fields, the listing leaving PREPARE, passing through the register
 file's forwarding (`src_val_d`) and SEQUENCER, and being latched again by
 PREPARE. (That leg used to be declared in DECODE; moving the register file's
 read data to SEQUENCER renamed the module it belongs to without changing the
-net.) It is not always: some builds instead put a Block RAM clock-to-out path
-inside the register file on top, with zero logic levels, nothing to optimise,
-and nothing this design controls.
+net.) Other builds have put a Block RAM clock-to-out path inside the register
+file on top, with zero logic levels, nothing to optimise, and nothing this
+design controls.
 
-Which of the two wins is not a durable property, and neither is the number
+Which of these wins is not a durable property, and neither is the number
 attached to it, nor which leg of the loop the listing happens to run through --
 the build before this one entered the loop through the ALU's adder
 (`i_write/res_sum[14]`) instead. The loop is routing-dominated, this design's
@@ -1109,8 +1251,9 @@ is reported under `i_prepare/` even though most of it is the ALU, which lives in
 WRITE. The full path listing in `timing_summary.rpt` gives it away: the second
 hop is `i_write/i_alu/addend[0]`.
 
-What that path really is, in every build where the full listing was examined, is
-the **Status Register loop**:
+What that path really is, in every build where the full listing was examined up
+to 7.60 ns (later ones took the branch-target exit and the ordinary-forwarding
+exit instead), is the **Status Register loop**:
 
 ```
 PREPARE's registered ALU operand
@@ -1223,21 +1366,21 @@ written:
 | --------------- | ---- | --- |
 | FETCH           |   63 |  92 |
 | ICACHE          |   44 |  66 |
-| DECODE          |   78 |  79 |
+| DECODE          |   89 |  81 |
 | SEQUENCER       |   10 |   2 |
-| PREPARE         |   70 | 149 |
-| WRITE           |  490 |   0 |
+| PREPARE         |   70 | 151 |
+| WRITE           |  532 |  34 |
 | REGISTERS       |  166 | 142 |
 | MEMORY          |   59 |  74 |
 | Glue            |   17 |   1 |
-| **CPU total**   |  997 | 605 |
+| **CPU total**   | 1050 | 643 |
 
 The `Glue` row is logic sitting directly at the `cpu` and `cpu_main` levels,
 belonging to no sub-module.
 
 Two things stand out:
 
-* **WRITE dominates, at 49% of the CPU's LUTs**, and 247 of its 490 are the ALU
+* **WRITE dominates, at 51% of the CPU's LUTs**, and 247 of its 532 are the ALU
   (`alu_data` 195, `alu_flags` 52). The two barrel shifters in `alu_data` are the
   single largest block in the design. They were 230 LUTs until the shift amount
   was constrained to its reachable range of 0 to 16 — indexing with an
@@ -1249,8 +1392,9 @@ Two things stand out:
   removed once they were shown to be dead — see
   [cpu_main/README.md](../src/cpu_main/README.md#why-write-needs-no-status-register-bypass).
 
-The two tables do not add up to each other (997 vs 983 LUTs). That is expected,
-and note that the *sign* of the gap is not stable — it has landed both ways
+The two tables do not add up to each other (1050 vs 1180 LUTs). That is expected.
+Part of the gap is simply that the device figure includes the Interrupt Generator
+and the memory model and the CPU total does not. The rest has landed both ways
 round across builds. The per-module figure comes first and stops after synthesis
 with `-flatten_hierarchy none`, which forbids optimisation across module
 boundaries and so tends to over-count; the device figure comes second, after

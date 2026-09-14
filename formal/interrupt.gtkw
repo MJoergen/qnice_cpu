@@ -1,0 +1,47 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Sun Sep 13 05:58:59 2026
+[*]
+[dumpfile] "/home/mike/git/MJoergen/qnice_cpu/formal/interrupt_cover/engine_0/trace1.vcd"
+[dumpfile_mtime] "Sun Sep 13 05:56:18 2026"
+[dumpfile_size] 1218
+[savefile] "/home/mike/git/MJoergen/qnice_cpu/formal/interrupt.gtkw"
+[timestart] 0
+[size] 1000 600
+[pos] -1577 42
+*-3.024946 6 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 239
+[signals_width] 219
+[sst_expanded] 1
+[sst_vpaned_height] 159
+@800200
+-interrupt
+@28
+interrupt.clk_i
+interrupt.rst_i
+interrupt.wb_cyc_i
+interrupt.wb_stb_i
+interrupt.wb_stall_o
+interrupt.wb_addr_i[2:0]
+interrupt.wb_we_i
+@22
+interrupt.wb_wr_data_i[15:0]
+@28
+interrupt.wb_ack_o
+@22
+interrupt.wb_rd_data_o[15:0]
+@28
+[color] 2
+interrupt.irq_valid_o
+@29
+[color] 7
+interrupt.irq_ready_i
+@22
+interrupt.irq_addr_o[15:0]
+interrupt.irq_timer[15:0]
+interrupt.irq_addr[15:0]
+interrupt.irq_accept[15:0]
+@1000200
+-interrupt
+[pattern_trace] 1
+[pattern_trace] 0

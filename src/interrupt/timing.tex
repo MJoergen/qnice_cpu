@@ -1,49 +1,60 @@
 % Timing diagram of the CPU's interrupt request interface: one hardware
-% interrupt taken to completion, followed by a second request that arrives while
-% the ISR is still running and is therefore made to wait.
+% interrupt taken at the boundary it arrives at, followed by a second request
+% that arrives while the service routine is still running and is therefore made
+% to wait until the boundary after the RTI.
 %
 % The interface is AXI-stream shaped -- irq_valid_i / irq_ready_o / irq_addr_i --
 % and deliberately knows nothing about daisy chaining, which is a matter for the
 % adaptation layer around the CPU.  See src/interrupt/README.md.
 %
-% This diagram is the SPECIFICATION of the protocol, not a recording of it --
-% src/interrupt/interrupt.vhd (task T2) does not exist yet.  Redraw it against
-% a real GHDL simulation once it does, exactly as src/cpu_main/timing.tex is
-% read off test/prog_waveform.asm.  See doc/interrupts.md for the prose.
+% All values below are taken from a GHDL simulation of
+% test/prog_int_waveform.asm at the default (zero) memory latencies: t=0 is the
+% clock cycle from 270 ns to 280 ns.  Changing that program, or the number of
+% cycles any instruction in it takes, invalidates them.  The addresses are:
+%
+%   000C-000E  padding "MOVE R2, R2" in the main program
+%   0026       ISR1, which requests the second interrupt
+%   002A-002D  the last three instructions of ISR1, ending in RTI at 002D
+%   002E       ISR2
 
 \documentclass{standalone}
 \usepackage{timing}
 
-% ACCEPTED lasts two cycles and does not fit in a default-width box.
-\renewcommand{\wavescale}{1.7}
+% Four-digit addresses do not fit in a default-width box.
+\renewcommand{\wavescale}{1.15}
 
 \begin{document}
 % Drawing convention, the same one src/cpu_main/timing.tex uses: handshake bits
 % are always drawn with their true value; a bus is greyed out ("x") in every
-% cycle in which its owner is not driving it.
+% cycle in which it carries nothing this diagram is about -- irq_addr_i while
+% irq_valid_i is low (test/interrupt.vhd drives all-ones there on purpose),
+% prep_stage_i.addr and resume_pc except in a cycle an instruction retires in or
+% a request is taken in, and fetch_addr_o except when fetch_valid_o is high.
 %
-% Every signal below is either a pin (the top three) or a register output, with
-% one deliberate exception: start_i is combinational.  Unlike the daisy-chain
-% protocol this replaced, irq_addr_i is valid from the cycle the device asserts
-% irq_valid_i and is held until the request is accepted, so the CPU never has to
-% capture it inside a one-cycle window.
+% There is no interrupt module between the pins and WRITE, and nothing in the
+% handshake is registered: WRITE reads irq_valid_i and irq_addr_i in the cycle an
+% instruction retires, and irq_ready_o, fetch_valid_o, and fetch_addr_o are all
+% combinational in them.  The only registers are irq_active and irq_r15 (and
+% irq_r14, not drawn), which change on the edge that ends a cycle with a
+% transfer or an RTI.
 %
-% The transfer happens in the single cycle t=4, where irq_valid_i and
-% irq_ready_o are both high.  The CPU has already committed at t=3 and has
-% already redirected FETCH there, from the copy of the address it registered at
-% t=2; the accept is what releases the device, not what delivers the address.
-\begin{wave}{11}{12}
- \nextwave{irq\_valid\_i}             \bit{0}{1} \bit{1}{4} \bit{0}{2} \bit{1}{5}
- \nextwave{irq\_addr\_i}              \unknown[x]{1} \known{ISR}{4} \unknown[x]{2} \known{ISR2}{5}
- \nextwave{irq\_ready\_o}             \bit{0}{4} \bit{1}{1} \bit{0}{7}
- \nextwave{interrupt/state}           \known{IDLE}{4} \known{ACCEPTED}{2} \known{IDLE}{6}
- \nextwave{interrupt/pending\_o}      \bit{0}{2} \bit{1}{2} \bit{0}{4} \bit{1}{4}
- \nextwave{interrupt/addr\_o}         \unknown[x]{2} \known{ISR}{6} \known{ISR2}{4}
- \nextwave{WRITE/start\_i}            \bit{0}{3} \bit{1}{1} \bit{0}{8}
- \nextwave{WRITE/inst\_done\_o}       \bit{0}{3} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/int\_active}         \bit{0}{4} \bit{1}{7} \bit{0}{1}
- \nextwave{WRITE/fetch\_valid\_o}     \bit{0}{3} \bit{1}{1} \bit{0}{6} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/fetch\_addr\_o}      \unknown[x]{3} \known{ISR}{1} \unknown[x]{6} \known{PC}{1} \unknown[x]{1}
+% t=1   Request 1 arrives in the cycle 000D retires, and is taken in that same
+%       cycle: accepted, redirected to 0026, and resume_pc (000E) saved.
+% t=11  Request 2 arrives inside ISR1.  It is refused at 002A, 002C, and at the
+%       RTI at 002D (t=13), because irq_active is still high in that cycle.
+% t=18  The first instruction back at the return address, 000E, retires, and
+%       request 2 is taken, saving 000F.
+\begin{wave}{10}{20}
+ \nextwave{irq\_valid\_i}                 \bit{0}{1} \bit{1}{1} \bit{0}{9} \bit{1}{8} \bit{0}{1}
+ \nextwave{irq\_addr\_i}                  \unknown[x]{1} \known{0026}{1} \unknown[x]{9} \known{002E}{8} \unknown[x]{1}
+ \nextwave{irq\_ready\_o}                 \bit{0}{1} \bit{1}{1} \bit{0}{16} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/inst\_done\_o}           \bit{1}{2} \bit{0}{5} \bit{1}{1} \bit{0}{1} \bit{1}{1} \bit{0}{1} \bit{1}{3} \bit{0}{4} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/prep\_stage\_i.addr}     \known{000C}{1} \known{000D}{1} \unknown[x]{5} \known{0026}{1} \unknown[x]{1} \known{0028}{1} \unknown[x]{1} \known{002A}{1} \known{002C}{1} \known{002D}{1} \unknown[x]{4} \known{000E}{1} \unknown[x]{1}
+ \nextwave{WRITE/resume\_pc}              \unknown[x]{1} \known{000E}{1} \unknown[x]{16} \known{000F}{1} \unknown[x]{1}
+ \nextwave{WRITE/irq\_active}             \bit{0}{2} \bit{1}{12} \bit{0}{5} \bit{1}{1}
+ \nextwave{WRITE/irq\_r15}                \unknown[x]{2} \known{000E}{17} \known{000F}{1}
+ \nextwave{WRITE/fetch\_valid\_o}         \bit{0}{1} \bit{1}{1} \bit{0}{11} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/fetch\_addr\_o}          \unknown[x]{1} \known{0026}{1} \unknown[x]{11} \known{000E}{1} \unknown[x]{4} \known{002E}{1} \unknown[x]{1}
 \end{wave}
 
 \end{document}

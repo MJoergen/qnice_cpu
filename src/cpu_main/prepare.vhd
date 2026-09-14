@@ -147,6 +147,8 @@ begin
             wr_stage_o.dst_imm   <= seq_stage_i.dst_imm;
             wr_stage_o.res_reg   <= seq_stage_i.res_reg;
             wr_stage_o.is_crb    <= seq_stage_i.is_crb;
+            wr_stage_o.is_int    <= seq_stage_i.is_int;
+            wr_stage_o.is_rti    <= seq_stage_i.is_rti;
             wr_stage_o.is_sub    <= seq_stage_i.is_sub;
             wr_stage_o.ptr_sr    <= seq_stage_i.ptr_sr;
             wr_stage_o.early_jmp <= seq_stage_i.early_jmp;

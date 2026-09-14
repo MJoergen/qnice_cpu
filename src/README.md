@@ -23,7 +23,7 @@ models and the test programs are not here; they are in
 | [`memory/`](memory/README.md) | Wishbone data-side arbiter and operand response buffers | [MEMORY](memory/README.md) |
 | [`cpu_main/`](cpu_main/README.md) | DECODE, SEQUENCER, PREPARE, WRITE, the microcode ROM, and the ALU | [the main pipeline](cpu_main/README.md) |
 | [`sub/`](sub) | Reusable valid/ready primitives everything above is built from | [below](#the-building-blocks) |
-| [`interrupt/`](interrupt/README.md) | **No VHDL yet** — a specification and a timing diagram | [interrupts](interrupt/README.md) |
+| [`interrupt/`](interrupt/README.md) | **No VHDL** — the interrupt request port, implemented in `cpu_main/write.vhd`, and its timing diagram | [interrupts](interrupt/README.md) |
 
 The pipeline those pieces form, and the reasoning behind it, is
 [doc/README.md](../doc/README.md); the block diagram is
