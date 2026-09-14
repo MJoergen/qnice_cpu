@@ -18,6 +18,10 @@
 ; it retires one instruction per cycle once the pipeline is full and does not
 ; perturb its neighbours.
 ;
+; ISR1 requests the second interrupt with "MOVE R5, @R1" rather than
+; "MOVE 0x0001, @R1", with R5 loaded in the main program. The immediate would
+; cost a word and a cycle, and the diagram is wide enough without it.
+;
 ; Register Map for Interrupt Generator (copied verbatim from test/interrupt.vhd):
 ; 0xBF00 : Countdown number of idle clock cycles until interrupt is asserted. After count-down,
 ;          interrupt line remains asserted until accepted, and is then released. Counter
@@ -41,6 +45,7 @@ INT_ADDR             .EQU    0xBF01
             MOVE    INT_COUNT, R1
             MOVE    0x0000, R3              ; Counts entries into ISR1
             MOVE    0x0000, R4              ; Counts entries into ISR2
+            MOVE    0x0001, R5              ; Countdown for the second request
             MOVE    ISR1, @R0               ; ISR address of the first request
             MOVE    0x0001, @R1             ; First request, one idle cycle from now
             MOVE    R2, R2                  ; Padding: the first request lands in here
@@ -67,7 +72,7 @@ E1          HALT
 E2          HALT
 
 ISR1        MOVE    ISR2, @R0               ; ISR address of the second request
-            MOVE    0x0001, @R1             ; Second request, inside this routine
+            MOVE    R5, @R1                 ; Second request, inside this routine
             ADD     0x0001, R3              ; The second request is pending, and
             MOVE    R2, R2                  ; refused, at these boundaries
             RTI                             ; ...and at this one

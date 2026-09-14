@@ -9,13 +9,13 @@
 %
 % All values below are taken from a GHDL simulation of
 % test/prog_int_waveform.asm at the default (zero) memory latencies: t=0 is the
-% clock cycle from 270 ns to 280 ns.  Changing that program, or the number of
+% clock cycle from 290 ns to 300 ns.  Changing that program, or the number of
 % cycles any instruction in it takes, invalidates them.  The addresses are:
 %
-%   000C-000E  padding "MOVE R2, R2" in the main program
-%   0026       ISR1, which requests the second interrupt
-%   002A-002D  the last three instructions of ISR1, ending in RTI at 002D
-%   002E       ISR2
+%   000E-0010  padding "MOVE R2, R2" in the main program
+%   0028       ISR1, which requests the second interrupt
+%   002B-002E  the last three instructions of ISR1, ending in RTI at 002E
+%   002F       ISR2
 
 \documentclass{standalone}
 \usepackage{timing}
@@ -38,23 +38,23 @@
 % irq_r14, not drawn), which change on the edge that ends a cycle with a
 % transfer or an RTI.
 %
-% t=1   Request 1 arrives in the cycle 000D retires, and is taken in that same
-%       cycle: accepted, redirected to 0026, and resume_pc (000E) saved.
-% t=11  Request 2 arrives inside ISR1.  It is refused at 002A, 002C, and at the
-%       RTI at 002D (t=13), because irq_active is still high in that cycle.
-% t=18  The first instruction back at the return address, 000E, retires, and
-%       request 2 is taken, saving 000F.
-\begin{wave}{10}{20}
- \nextwave{irq\_valid\_i}                 \bit{0}{1} \bit{1}{1} \bit{0}{9} \bit{1}{8} \bit{0}{1}
- \nextwave{irq\_addr\_i}                  \unknown[x]{1} \known{0026}{1} \unknown[x]{9} \known{002E}{8} \unknown[x]{1}
- \nextwave{irq\_ready\_o}                 \bit{0}{1} \bit{1}{1} \bit{0}{16} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/inst\_done\_o}           \bit{1}{2} \bit{0}{5} \bit{1}{1} \bit{0}{1} \bit{1}{1} \bit{0}{1} \bit{1}{3} \bit{0}{4} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/prep\_stage\_i.addr}     \known{000C}{1} \known{000D}{1} \unknown[x]{5} \known{0026}{1} \unknown[x]{1} \known{0028}{1} \unknown[x]{1} \known{002A}{1} \known{002C}{1} \known{002D}{1} \unknown[x]{4} \known{000E}{1} \unknown[x]{1}
- \nextwave{WRITE/resume\_pc}              \unknown[x]{1} \known{000E}{1} \unknown[x]{16} \known{000F}{1} \unknown[x]{1}
- \nextwave{WRITE/irq\_active}             \bit{0}{2} \bit{1}{12} \bit{0}{5} \bit{1}{1}
- \nextwave{WRITE/irq\_r15}                \unknown[x]{2} \known{000E}{17} \known{000F}{1}
- \nextwave{WRITE/fetch\_valid\_o}         \bit{0}{1} \bit{1}{1} \bit{0}{11} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/fetch\_addr\_o}          \unknown[x]{1} \known{0026}{1} \unknown[x]{11} \known{000E}{1} \unknown[x]{4} \known{002E}{1} \unknown[x]{1}
+% t=1   Request 1 arrives in the cycle 000F retires, and is taken in that same
+%       cycle: accepted, redirected to 0028, and resume_pc (0010) saved.
+% t=10  Request 2 arrives inside ISR1.  It is refused at 002B, 002D, and at the
+%       RTI at 002E (t=12), because irq_active is still high in that cycle.
+% t=17  The first instruction back at the return address, 0010, retires, and
+%       request 2 is taken, saving 0011.
+\begin{wave}{10}{19}
+ \nextwave{irq\_valid\_i}                 \bit{0}{1} \bit{1}{1} \bit{0}{8} \bit{1}{8} \bit{0}{1}
+ \nextwave{irq\_addr\_i}                  \unknown[x]{1} \known{0028}{1} \unknown[x]{8} \known{002F}{8} \unknown[x]{1}
+ \nextwave{irq\_ready\_o}                 \bit{0}{1} \bit{1}{1} \bit{0}{15} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/inst\_done\_o}           \bit{1}{2} \bit{0}{5} \bit{1}{2} \bit{0}{1} \bit{1}{3} \bit{0}{4} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/prep\_stage\_i.addr}     \known{000E}{1} \known{000F}{1} \unknown[x]{5} \known{0028}{1} \known{002A}{1} \unknown[x]{1} \known{002B}{1} \known{002D}{1} \known{002E}{1} \unknown[x]{4} \known{0010}{1} \unknown[x]{1}
+ \nextwave{WRITE/resume\_pc}              \unknown[x]{1} \known{0010}{1} \unknown[x]{15} \known{0011}{1} \unknown[x]{1}
+ \nextwave{WRITE/irq\_active}             \bit{0}{2} \bit{1}{11} \bit{0}{5} \bit{1}{1}
+ \nextwave{WRITE/irq\_r15}                \unknown[x]{2} \known{0010}{16} \known{0011}{1}
+ \nextwave{WRITE/fetch\_valid\_o}         \bit{0}{1} \bit{1}{1} \bit{0}{10} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/fetch\_addr\_o}          \unknown[x]{1} \known{0028}{1} \unknown[x]{10} \known{0010}{1} \unknown[x]{4} \known{002F}{1} \unknown[x]{1}
 \end{wave}
 
 \end{document}

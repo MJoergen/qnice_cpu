@@ -52,33 +52,33 @@ Nothing in the handshake is registered. WRITE looks at `irq_valid_i` and
 cycle. The only state is `irq_active` and the saved `irq_r15` (and `irq_r14`, not
 drawn), which change on the edge that ends a cycle with a transfer or an `RTI`.
 
-* **t=0** The main program is running through padding at `000C`, one instruction
+* **t=0** The main program is running through padding at `000E`, one instruction
   retiring per cycle. No request.
-* **t=1** The device asserts `irq_valid_i` with `irq_addr_i = 0026`, in the cycle
-  `000D` retires. **This is the transfer, the commit, and the redirect, all in
-  one cycle**: `irq_ready_o` is high, `fetch_valid_o` sends FETCH to `0026`, and
+* **t=1** The device asserts `irq_valid_i` with `irq_addr_i = 0028`, in the cycle
+  `000F` retires. **This is the transfer, the commit, and the redirect, all in
+  one cycle**: `irq_ready_o` is high, `fetch_valid_o` sends FETCH to `0028`, and
   `resume_pc` — the address execution would otherwise have continued at, here
-  `000E` — is latched into `irq_r15` on the edge that ends the cycle, together
+  `0010` — is latched into `irq_r15` on the edge that ends the cycle, together
   with `irq_active`. A request that arrives at an instruction boundary costs no
   cycles of its own beyond the redirect.
 * **t=2** The device has dropped `irq_valid_i`, and scrambles `irq_addr_i` so
   that a CPU capturing it late would fail. `irq_active` is high. Nothing retires
-  for five cycles while the pipeline refills from `0026`, the same penalty a
+  for five cycles while the pipeline refills from `0028`, the same penalty a
   taken branch pays.
-* **t=7, t=9** ISR1 retires its first two instructions; the second of them, at
-  `0028`, is the write that asks the device for another interrupt.
-* **t=11** The device asserts `irq_valid_i` again, with `002E`. `002A` retires,
+* **t=7, t=8** ISR1 retires its first two instructions; the second of them, at
+  `002A`, is the write that asks the device for another interrupt.
+* **t=10** The device asserts `irq_valid_i` again, with `002F`. `002B` retires,
   but `irq_active` is high, so `irq_ready_o` stays low: interrupts do not nest.
-* **t=13** The `RTI` at `002D` retires. `fetch_valid_o` returns to `irq_r15`,
-  `000E`, and `irq_active` clears on the edge that ends the cycle. The request is
-  refused **during** t=13, because `irq_active` is still high for the whole of
+* **t=12** The `RTI` at `002E` retires. `fetch_valid_o` returns to `irq_r15`,
+  `0010`, and `irq_active` clears on the edge that ends the cycle. The request is
+  refused **during** t=12, because `irq_active` is still high for the whole of
   it.
-* **t=14 to t=17** `irq_active` is low and the request is still held, but nothing
-  retires while the pipeline refills from `000E`, and a request is only taken at
+* **t=13 to t=16** `irq_active` is low and the request is still held, but nothing
+  retires while the pipeline refills from `0010`, and a request is only taken at
   a boundary.
-* **t=18** `000E`, the first instruction back in the main program, retires, and
-  request 2 is taken exactly as request 1 was: accepted, redirected to `002E`,
-  and `000F` saved.
+* **t=17** `0010`, the first instruction back in the main program, retires, and
+  request 2 is taken exactly as request 1 was: accepted, redirected to `002F`,
+  and `0011` saved.
 
 Two things follow. **One instruction always runs between two service
 routines**, since the request is refused at the `RTI` and the next boundary is
