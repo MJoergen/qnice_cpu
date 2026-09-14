@@ -88,9 +88,7 @@ drawn), which change on the edge that ends a cycle with a transfer or an `RTI`.
 
 Two things follow. t=11 to t=16 are **guarantee 6 of
 [the contract](#the-contract)**: request 2 was pending throughout, yet `0013`, the
-instruction at the return address, retires before it is taken. And **a device
-may withdraw**: a request dropped before the cycle it would be taken in is simply
-never seen, because nothing remembers it.
+instruction at the return address, retires before it is taken.
 
 ## Ports
 
@@ -138,7 +136,9 @@ At the boundary after an instruction retires (`inst_done_o`), when
 
 Otherwise the request is taken **at the first boundary it is present at**, with
 no latency of its own: a request that arrives in the cycle an instruction
-retires is taken in that cycle.
+retires is taken in that cycle.  And **a device may withdraw**: a request
+dropped before the cycle it would be taken in is simply never seen, because
+nothing remembers it.
 
 ### What entry does
 
