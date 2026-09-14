@@ -27,6 +27,11 @@ sby --yosys "yosys -m ghdl" -f memory.sby          # e.g. run just the memory mo
 gtkwave memory_bmc/engine_0/trace.vcd memory.gtkw  # inspect a failing counterexample trace
 ```
 
+`cpu_main` is the slow job: its `bmc` task takes about 16 minutes. While iterating on it, run
+`sby --yosys "yosys -m ghdl" -f cpu_main.sby bmc_quick` instead, the same assertions to depth 16
+in under 3 minutes. It is not tagged `default`, so `make` and CI never run it, and a pass is not a
+substitute for `bmc`; see the comment at the top of `cpu_main.sby`.
+
 Each module has a matching `<name>.psl` (PSL assertions/assumptions, usually embedded as VHDL
 comments inside or alongside the `.vhd` file), a `<name>.sby` (SymbiYosys job config: bmc/cover
 tasks, file list, top-level generics), and a `<name>.gtkw` (GTKWave save file for viewing

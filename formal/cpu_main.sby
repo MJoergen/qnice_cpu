@@ -1,12 +1,25 @@
+# bmc is the check: "make -C formal" and CI run it, and only the tasks tagged
+# default run when sby is given no task name. bmc_quick is for development:
+# the same assertions to a shallower depth, run by name,
+#
+#    sby --yosys "yosys -m ghdl" -f cpu_main.sby bmc_quick
+#
+# Almost all of bmc's time is in its last steps -- at depth 20, step 19 alone
+# takes about 7 of its 16 minutes -- so bmc_quick, at depth 16, takes under 3
+# (2m40s measured). It proves less, and the deepest cover is reached at step 9,
+# so a pass here is not a pass: run bmc before committing.
 [tasks]
-cover
-bmc
+cover : default
+bmc : default
+bmc_quick
 
 [options]
 cover: mode cover
 cover: depth 20
 bmc: mode bmc
 bmc: depth 20
+bmc_quick: mode bmc
+bmc_quick: depth 16
 
 [engines]
 smtbmc
