@@ -4,10 +4,11 @@
 ; test/interrupt.vhd.
 ;
 ; The diagram follows two hardware interrupts. The first is requested from the
-; main program and lands in a run of padding. Its service routine requests the
-; second, which is therefore refused at the boundaries inside that routine once
-; it arrives, including at the RTI, and is taken at the boundary after the
-; first instruction back at the return address.
+; main program and lands in a run of padding, in the cycle before a two-word
+; instruction retires, so it has to wait for that boundary. Its service routine
+; requests the second, which is therefore refused at the boundaries inside that
+; routine once it arrives, including at the RTI, and is taken at the boundary
+; after the first instruction back at the return address.
 ;
 ; CAUTION: changing this file (or anything that shifts the addresses in it, or
 ; the number of cycles an instruction takes) invalidates the cycle numbers and
@@ -51,7 +52,7 @@ INT_ADDR             .EQU    0xBF01
             MOVE    ISR1, @R0               ; ISR address of the first request
             MOVE    0x0001, @R1             ; First request, one idle cycle from now
             MOVE    R2, R2                  ; Padding: the first request lands in here
-            MOVE    R2, R2
+            MOVE    0x0000, R2              ; Two words: the request waits for it to retire
             MOVE    R2, R2
             MOVE    R2, R2
             MOVE    R2, R2

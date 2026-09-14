@@ -37,9 +37,10 @@ Three design rules follow:
 
 ![Interrupt protocol timing](timing.png)
 
-One hardware interrupt taken at the instruction boundary it arrives at, followed
-by a second request that arrives while the service routine is still running and
-is therefore made to wait. Read off a simulation of
+One hardware interrupt that arrives while an instruction is still in progress
+and is taken as that instruction retires, followed by a second request that
+arrives while the service routine is still running and is therefore made to
+wait. The row under each instruction address gives its mnemonic. Read off a simulation of
 `test/prog_int_waveform.asm`, which is in `TESTS` so that a change invalidating
 the diagram fails the golden diff, and rendered from [timing.tex](timing.tex) by
 `make diagrams`.
@@ -52,36 +53,41 @@ Nothing in the handshake is registered. WRITE looks at `irq_valid_i` and
 cycle. The only state is `irq_active` and the saved `irq_r15` (and `irq_r14`, not
 drawn), which change on the edge that ends a cycle with a transfer or an `RTI`.
 
-* **t=0** The main program is running through padding at `0010`, one instruction
-  retiring per cycle. No request.
-* **t=1** The device asserts `irq_valid_i` with `irq_addr_i = 002A`, in the cycle
-  `0011` retires. **This is the transfer, the commit, and the redirect, all in
-  one cycle**: `irq_ready_o` is high, `fetch_valid_o` sends FETCH to `002A`, and
+* **t=0** The main program is running through padding, the one-word `MOVE` at
+  `0010`. No request.
+* **t=1** The device asserts `irq_valid_i` with `irq_addr_i = 002B`, but nothing
+  retires in this cycle: the next instruction, `0011`, is two words long and not
+  finished yet. So `irq_ready_o` stays low. **A request is only ever taken at an
+  instruction boundary**, and the device holds it.
+* **t=2** The two-word `MOVE` at `0011` retires, and the request is taken in that
+  same cycle. **This is the transfer, the commit, and the redirect, all in one
+  cycle**: `irq_ready_o` is high, `fetch_valid_o` sends FETCH to `002B`, and
   `resume_pc` — the address execution would otherwise have continued at, here
-  `0012` — is latched into `irq_r15` on the edge that ends the cycle, together
-  with `irq_active`. A request that arrives at an instruction boundary costs no
-  cycles of its own beyond the redirect.
-* **t=2** The device has dropped `irq_valid_i`, and scrambles `irq_addr_i` so
+  `0013`, after both words — is latched into `irq_r15` on the edge that ends the
+  cycle, together with `irq_active`. The request costs no cycles of its own beyond
+  waiting for the boundary and the redirect.
+* **t=3** The device has dropped `irq_valid_i`, and scrambles `irq_addr_i` so
   that a CPU capturing it late would fail. `irq_active` is high. Nothing retires
-  for four cycles while the pipeline refills from `002A`, the same penalty a
+  for four cycles while the pipeline refills from `002B`, the same penalty a
   taken branch pays.
-* **t=6 to t=8** ISR1 retires its first three instructions; the second of them,
-  at `002B`, is the write that asks the device for another interrupt.
-* **t=9** The device asserts `irq_valid_i` again, with `002F`. `002D` retires,
-  but `irq_active` is high, so `irq_ready_o` stays low: interrupts do not nest.
-* **t=10** The `RTI` at `002E` retires. `fetch_valid_o` returns to `irq_r15`,
-  `0012`, and `irq_active` clears on the edge that ends the cycle. The request is
-  refused **during** t=10, because `irq_active` is still high for the whole of
+* **t=7 to t=9** ISR1 retires its first three instructions; the second of them,
+  the `MOVE` at `002C`, is the write that asks the device for another interrupt.
+* **t=10** The device asserts `irq_valid_i` again, with `0030`. The `MOVE` at
+  `002E` retires, but `irq_active` is high, so `irq_ready_o` stays low:
+  interrupts do not nest.
+* **t=11** The `RTI` at `002F` retires. `fetch_valid_o` returns to `irq_r15`,
+  `0013`, and `irq_active` clears on the edge that ends the cycle. The request is
+  refused **during** t=11, because `irq_active` is still high for the whole of
   it.
-* **t=11 to t=14** `irq_active` is low and the request is still held, but nothing
-  retires while the pipeline refills from `0012`, and a request is only taken at
+* **t=12 to t=15** `irq_active` is low and the request is still held, but nothing
+  retires while the pipeline refills from `0013`, and a request is only taken at
   a boundary.
-* **t=15** `0012`, the first instruction back in the main program, retires, and
-  request 2 is taken exactly as request 1 was: accepted, redirected to `002F`,
-  and `0013` saved.
+* **t=16** The `MOVE` at `0013`, the first instruction back in the main program,
+  retires, and request 2 is taken exactly as request 1 was: accepted, redirected
+  to `0030`, and `0014` saved.
 
-Two things follow. t=10 to t=15 are **guarantee 6 of
-[the contract](#the-contract)**: request 2 was pending throughout, yet `0012`, the
+Two things follow. t=11 to t=16 are **guarantee 6 of
+[the contract](#the-contract)**: request 2 was pending throughout, yet `0013`, the
 instruction at the return address, retires before it is taken. And **a device
 may withdraw**: a request dropped before the cycle it would be taken in is simply
 never seen, because nothing remembers it.

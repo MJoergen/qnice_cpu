@@ -1,7 +1,8 @@
 % Timing diagram of the CPU's interrupt request interface: one hardware
-% interrupt taken at the boundary it arrives at, followed by a second request
-% that arrives while the service routine is still running and is therefore made
-% to wait until the boundary after the RTI.
+% interrupt that arrives while an instruction is still in progress and is taken
+% as that instruction retires, followed by a second request that arrives while
+% the service routine is still running and is therefore made to wait until the
+% boundary after the RTI.
 %
 % The interface is AXI-stream shaped -- irq_valid_i / irq_ready_o / irq_addr_i --
 % and deliberately knows nothing about daisy chaining, which is a matter for the
@@ -12,10 +13,12 @@
 % clock cycle from 310 ns to 320 ns.  Changing that program, or the number of
 % cycles any instruction in it takes, invalidates them.  The addresses are:
 %
-%   0010-0012  padding "MOVE R2, R2" in the main program
-%   002A       ISR1, which requests the second interrupt
-%   002D-002E  the last two instructions of ISR1, ending in RTI at 002E
-%   002F       ISR2
+%   0010       padding "MOVE R2, R2" in the main program
+%   0011       the two-word "MOVE 0x0000, R2", the instruction request 1 waits for
+%   0013       padding again, the return address
+%   002B       ISR1, which requests the second interrupt
+%   002E-002F  the last two instructions of ISR1, ending in RTI at 002F
+%   0030       ISR2
 
 \documentclass{standalone}
 \usepackage{timing}
@@ -23,13 +26,19 @@
 % Four-digit addresses do not fit in a default-width box.
 \renewcommand{\wavescale}{1.15}
 
+% Mnemonics are set smaller than addresses, so that a four-letter one fits the
+% same one-cycle box.
+\newcommand{\mnem}[1]{{\footnotesize #1}}
+
 \begin{document}
 % Drawing convention, the same one src/cpu_main/timing.tex uses: handshake bits
 % are always drawn with their true value; a bus is greyed out ("x") in every
 % cycle in which it carries nothing this diagram is about -- irq_addr_i while
 % irq_valid_i is low (test/interrupt.vhd drives all-ones there on purpose),
-% prep_stage_i.addr and resume_pc except in a cycle an instruction retires in or
-% a request is taken in, and fetch_addr_o except when fetch_valid_o is high.
+% prep_stage_i.addr, prep_stage_i.inst, and resume_pc except in a cycle an
+% instruction retires in or a request is taken in, and fetch_addr_o except when
+% fetch_valid_o is high. prep_stage_i.inst is the instruction word, drawn as its
+% mnemonic without operands.
 %
 % There is no interrupt module between the pins and WRITE, and nothing in the
 % handshake is registered: WRITE reads irq_valid_i and irq_addr_i in the cycle an
@@ -38,23 +47,25 @@
 % irq_r14, not drawn), which change on the edge that ends a cycle with a
 % transfer or an RTI.
 %
-% t=1   Request 1 arrives in the cycle 0011 retires, and is taken in that same
-%       cycle: accepted, redirected to 002A, and resume_pc (0012) saved.
-% t=9   Request 2 arrives inside ISR1.  It is refused at 002D, and at the RTI
-%       at 002E (t=10), because irq_active is still high in that cycle.
-% t=15  The first instruction back at the return address, 0012, retires, and
-%       request 2 is taken, saving 0013.
-\begin{wave}{10}{17}
- \nextwave{irq\_valid\_i}                 \bit{0}{1} \bit{1}{1} \bit{0}{7} \bit{1}{7} \bit{0}{1}
- \nextwave{irq\_addr\_i}                  \unknown[x]{1} \known{002A}{1} \unknown[x]{7} \known{002F}{7} \unknown[x]{1}
- \nextwave{irq\_ready\_o}                 \bit{0}{1} \bit{1}{1} \bit{0}{13} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/inst\_done\_o}           \bit{1}{2} \bit{0}{4} \bit{1}{5} \bit{0}{4} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/prep\_stage\_i.addr}     \known{0010}{1} \known{0011}{1} \unknown[x]{4} \known{002A}{1} \known{002B}{1} \known{002C}{1} \known{002D}{1} \known{002E}{1} \unknown[x]{4} \known{0012}{1} \unknown[x]{1}
- \nextwave{WRITE/resume\_pc}              \unknown[x]{1} \known{0012}{1} \unknown[x]{13} \known{0013}{1} \unknown[x]{1}
- \nextwave{WRITE/irq\_active}             \bit{0}{2} \bit{1}{9} \bit{0}{5} \bit{1}{1}
- \nextwave{WRITE/irq\_r15}                \unknown[x]{2} \known{0012}{14} \known{0013}{1}
- \nextwave{WRITE/fetch\_valid\_o}         \bit{0}{1} \bit{1}{1} \bit{0}{8} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1}
- \nextwave{WRITE/fetch\_addr\_o}          \unknown[x]{1} \known{002A}{1} \unknown[x]{8} \known{0012}{1} \unknown[x]{4} \known{002F}{1} \unknown[x]{1}
+% t=1   Request 1 arrives in a cycle in which nothing retires, so it waits.
+% t=2   The two-word MOVE at 0011 retires, and request 1 is taken in that same
+%       cycle: accepted, redirected to 002B, and resume_pc (0013) saved.
+% t=10  Request 2 arrives inside ISR1.  It is refused at 002E, and at the RTI
+%       at 002F (t=11), because irq_active is still high in that cycle.
+% t=16  The first instruction back at the return address, 0013, retires, and
+%       request 2 is taken, saving 0014.
+\begin{wave}{11}{18}
+ \nextwave{irq\_valid\_i}                 \bit{0}{1} \bit{1}{2} \bit{0}{7} \bit{1}{7} \bit{0}{1}
+ \nextwave{irq\_addr\_i}                  \unknown[x]{1} \known{002B}{2} \unknown[x]{7} \known{0030}{7} \unknown[x]{1}
+ \nextwave{irq\_ready\_o}                 \bit{0}{2} \bit{1}{1} \bit{0}{13} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/inst\_done\_o}           \bit{1}{1} \bit{0}{1} \bit{1}{1} \bit{0}{4} \bit{1}{5} \bit{0}{4} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/prep\_stage\_i.addr}     \known{0010}{1} \unknown[x]{1} \known{0011}{1} \unknown[x]{4} \known{002B}{1} \known{002C}{1} \known{002D}{1} \known{002E}{1} \known{002F}{1} \unknown[x]{4} \known{0013}{1} \unknown[x]{1}
+ \nextwave{WRITE/prep\_stage\_i.inst}     \known{\mnem{MOVE}}{1} \unknown[x]{1} \known{\mnem{MOVE}}{1} \unknown[x]{4} \known{\mnem{MOVE}}{1} \known{\mnem{MOVE}}{1} \known{\mnem{ADD}}{1} \known{\mnem{MOVE}}{1} \known{\mnem{RTI}}{1} \unknown[x]{4} \known{\mnem{MOVE}}{1} \unknown[x]{1}
+ \nextwave{WRITE/resume\_pc}              \unknown[x]{2} \known{0013}{1} \unknown[x]{13} \known{0014}{1} \unknown[x]{1}
+ \nextwave{WRITE/irq\_active}             \bit{0}{3} \bit{1}{9} \bit{0}{5} \bit{1}{1}
+ \nextwave{WRITE/irq\_r15}                \unknown[x]{3} \known{0013}{14} \known{0014}{1}
+ \nextwave{WRITE/fetch\_valid\_o}         \bit{0}{2} \bit{1}{1} \bit{0}{8} \bit{1}{1} \bit{0}{4} \bit{1}{1} \bit{0}{1}
+ \nextwave{WRITE/fetch\_addr\_o}          \unknown[x]{2} \known{002B}{1} \unknown[x]{8} \known{0013}{1} \unknown[x]{4} \known{0030}{1} \unknown[x]{1}
 \end{wave}
 
 \end{document}
