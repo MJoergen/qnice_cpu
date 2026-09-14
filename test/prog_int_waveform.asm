@@ -5,9 +5,9 @@
 ;
 ; The diagram follows two hardware interrupts. The first is requested from the
 ; main program and lands in a run of padding. Its service routine requests the
-; second, which is therefore refused at every instruction boundary inside that
-; routine, including at the RTI, and is taken at the boundary after the first
-; instruction back at the return address.
+; second, which is therefore refused at the boundaries inside that routine once
+; it arrives, including at the RTI, and is taken at the boundary after the
+; first instruction back at the return address.
 ;
 ; CAUTION: changing this file (or anything that shifts the addresses in it, or
 ; the number of cycles an instruction takes) invalidates the cycle numbers and
@@ -18,9 +18,10 @@
 ; it retires one instruction per cycle once the pipeline is full and does not
 ; perturb its neighbours.
 ;
-; ISR1 requests the second interrupt with "MOVE R5, @R1" rather than
-; "MOVE 0x0001, @R1", with R5 loaded in the main program. The immediate would
-; cost a word and a cycle, and the diagram is wide enough without it.
+; Every instruction in ISR1 is one word: the constants it needs -- the second
+; ISR's address, the countdown, and the increment -- are loaded into R5 and R6
+; by the main program. An immediate operand costs a word and, inside the drawn
+; window, a clock cycle, and the diagram is wide enough without them.
 ;
 ; Register Map for Interrupt Generator (copied verbatim from test/interrupt.vhd):
 ; 0xBF00 : Countdown number of idle clock cycles until interrupt is asserted. After count-down,
@@ -45,7 +46,8 @@ INT_ADDR             .EQU    0xBF01
             MOVE    INT_COUNT, R1
             MOVE    0x0000, R3              ; Counts entries into ISR1
             MOVE    0x0000, R4              ; Counts entries into ISR2
-            MOVE    0x0001, R5              ; Countdown for the second request
+            MOVE    0x0001, R5              ; Second request's countdown, and ISR1's increment
+            MOVE    ISR2, R6                ; ISR address of the second request
             MOVE    ISR1, @R0               ; ISR address of the first request
             MOVE    0x0001, @R1             ; First request, one idle cycle from now
             MOVE    R2, R2                  ; Padding: the first request lands in here
@@ -71,11 +73,11 @@ INT_ADDR             .EQU    0xBF01
 E1          HALT
 E2          HALT
 
-ISR1        MOVE    ISR2, @R0               ; ISR address of the second request
+ISR1        MOVE    R6, @R0                 ; ISR address of the second request
             MOVE    R5, @R1                 ; Second request, inside this routine
-            ADD     0x0001, R3              ; The second request is pending, and
-            MOVE    R2, R2                  ; refused, at these boundaries
-            RTI                             ; ...and at this one
+            ADD     R5, R3                  ; Count this entry
+            MOVE    R2, R2                  ; The second request is pending, and refused, here
+            RTI                             ; ...and here
 
 ISR2        ADD     0x0001, R4
             RTI

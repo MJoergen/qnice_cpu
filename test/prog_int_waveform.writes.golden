@@ -3,7 +3,8 @@ Write value 0xBF00 to register 1 bank 0x00
 Write value 0x0000 to register 3 bank 0x00
 Write value 0x0000 to register 4 bank 0x00
 Write value 0x0001 to register 5 bank 0x00
-Write value 0x0028 to memory 0xBF01
+Write value 0x002F to register 6 bank 0x00
+Write value 0x002A to memory 0xBF01
 Write value 0x0001 to memory 0xBF00
 Write value 0x0000 to register 2 bank 0x00
 Write value 0x0000 to register 2 bank 0x00
